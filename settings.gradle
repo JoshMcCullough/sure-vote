@@ -1,0 +1,6 @@
+rootProject.name = 'sure-vote'
+include 'entity'
+include 'resource'
+include 'repository'
+include 'api'
+include 'service'
