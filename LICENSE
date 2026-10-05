@@ -1,0 +1,28 @@
+SureVote Source-Available License
+Version 1.0
+
+This is not an open-source license. It does not let the public run an election on this software.
+
+The copyright holder of this repository is Sure Vote Systems (the Licensor).
+
+1. View and discuss
+
+You may view, download, and read this source code. You may quote it and publish reviews of it.
+
+2. Private verification
+
+You may build this software and run it in private to audit, test, or study how it behaves. That run must not conduct an election, host a public demonstration election, or produce a result anyone is asked to rely on.
+
+Checking a published vote chain does not require this software. The Licensor publishes verification instructions. Anyone may follow them through a public API, a published SDK, or a program they write themselves. Those instructions, and a verifier written from them, are not a use of this software.
+
+3. Rights reserved
+
+The Licensor keeps every right not granted above. Without a separate written agreement from the Licensor, you may not run this software to conduct or host an election, modify it and deploy that modification for an election, or offer it as a product or a service.
+
+4. No warranty
+
+This software is provided as is, without warranty of any kind.
+
+5. End of these rights
+
+If you use the software beyond the rights in sections 1 and 2, the rights in those sections end.
