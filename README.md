@@ -48,9 +48,9 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 
 The in-person path is implemented: seal a ballot, import it, append one chain entry per vote, and look the ballot up with the access code. The plaintext code is not stored. `ballotHash` inside a vote is the SHA-256 of that ballot's payload with `voteHashes` set to `[]`. It is not `Ballot.hash`. See [verification.md](./docs/verification.md).
 
-Also implemented: issuance during an active election, void before a machine session, showcase rejection of `ssn` and `voterId`, and first-past-the-post, referendum, and ranked-choice tallies when the election closes. A write-in name is counted on its own. A tie stays tied. Ranked choice elects one winner by instant runoff. `votesReceived` on that race is the first-choice count.
+Also implemented: issuance during an active election, void before a machine session, showcase rejection of `ssn` and `voterId`, and first-past-the-post, referendum, and ranked-choice tallies when the election closes. A write-in name is counted on its own. A tie stays tied. Ranked choice elects one winner by instant runoff. `votesReceived` on that race is the first-choice count. Close publishes one operator-signed canvass statement.
 
-Not in this slice: mail-in Argon2id and the sealed viewing passphrase, the canvass statement, and PostgreSQL or Flyway. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
+Not in this slice: mail-in Argon2id and the sealed viewing passphrase, and PostgreSQL or Flyway. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
 
 ## Documents
 

@@ -236,12 +236,17 @@ class HttpElectionTest {
         final var raw = Digests.unhex(chain.getHash());
         final var seed = world.operator.seed();
         final var signature = Signatures.sign(seed, raw);
+        final var payload = world.app.canvassPayload(world.electionId);
+        final var canvassHash = Digests.sha256Hex(payload);
+        final var canvassRaw = Digests.unhex(canvassHash);
+        final var canvassSignature = Signatures.sign(seed, canvassRaw);
         final var row = new LinkedHashMap<String, String>();
         final var body = new LinkedHashMap<String, Object>();
         final var rows = List.of(row);
         row.put("raceId", world.raceId.toString());
         row.put("signature", signature);
         body.put("chains", rows);
+        body.put("canvassSignature", canvassSignature);
         return this.json.writeValueAsString(body);
     }
 

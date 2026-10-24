@@ -133,7 +133,16 @@ public final class SureVote {
         return this.lookup.lookup(electionId, code);
     }
 
-    public Election close(final UUID electionId, final Map<UUID, String> signatures, final UUID actor) {
-        return this.tally.close(electionId, signatures, actor);
+    public String canvassPayload(final UUID electionId) {
+        return this.tally.canvassPayload(electionId);
+    }
+
+    public Election close(
+        final UUID electionId,
+        final Map<UUID, String> signatures,
+        final String canvassSignature,
+        final UUID actor
+    ) {
+        return this.tally.close(electionId, signatures, canvassSignature, actor);
     }
 }

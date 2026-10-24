@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.ChainStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionMethod;
@@ -31,13 +32,24 @@ final class TallyService {
         this.stores = stores;
     }
 
-    Election close(final UUID electionId, final Map<UUID, String> signatures, final UUID actor) {
-        return this.repository.transaction(() -> this.closeLocked(electionId, signatures, actor));
+    Election close(
+        final UUID electionId,
+        final Map<UUID, String> signatures,
+        final String canvassSignature,
+        final UUID actor
+    ) {
+        return this.repository.transaction(() -> this.closeLocked(electionId, signatures, canvassSignature, actor));
+    }
+
+    String canvassPayload(final UUID electionId) {
+        final var election = this.stores.require(Election.class, electionId);
+        return this.canvassPayload(election);
     }
 
     private Election closeLocked(
         final UUID electionId,
         final Map<UUID, String> signatures,
+        final String canvassSignature,
         final UUID actor
     ) {
         final var election = this.stores.require(Election.class, electionId);
@@ -45,7 +57,55 @@ final class TallyService {
         this.stores.require(election.getStatus() == ElectionStatus.ACTIVE, "Only an active election can close");
         this.stores.require(signatures != null, "chain signatures are required");
         this.closeRaces(election, races, signatures, actor);
+        this.writeCanvass(election, canvassSignature, actor);
         return this.markHistorical(election, actor);
+    }
+
+    private void writeCanvass(final Election election, final String signature, final UUID actor) {
+        final var payload = this.canvassPayload(election);
+        final var hash = Digests.sha256Hex(payload);
+        final var raw = Digests.unhex(hash);
+        this.requireCanvassSignature(election, signature, raw);
+        this.insertCanvass(election, payload, hash, signature, actor);
+    }
+
+    private void requireCanvassSignature(final Election election, final String signature, final byte[] raw) {
+        final var signed = this.canvassSigned(election, signature, raw);
+        this.stores.require(signature != null, "canvass signature is required");
+        this.stores.require(signed, "Operator signature does not match the canvass statement");
+    }
+
+    private boolean canvassSigned(final Election election, final String signature, final byte[] raw) {
+        if (signature == null) {
+            return false;
+        }
+        else {
+            final var key = election.getOperatorPublicKey();
+            return Signatures.verify(key, raw, signature);
+        }
+    }
+
+    private String canvassPayload(final Election election) {
+        return CanvassStatements.payload(this.repository, election, this);
+    }
+
+    private void insertCanvass(
+        final Election election,
+        final String payload,
+        final String hash,
+        final String signature,
+        final UUID actor
+    ) {
+        final var statement = new CanvassStatement();
+        statement.setId(UUID.randomUUID());
+        statement.setTenantId(election.getTenantId());
+        statement.setCreatedAt(Instant.now());
+        statement.setCreatedBy(actor);
+        statement.setElectionId(election.getId());
+        statement.setPayload(payload);
+        statement.setHash(hash);
+        statement.setSignature(signature);
+        this.stores.insert(statement);
     }
 
     private void closeRaces(
@@ -84,6 +144,63 @@ final class TallyService {
             final var counted = this.counted(race, slots);
             this.applyAll(slots, counted, actor);
         }
+    }
+
+    List<SlotResult> project(final Race race) {
+        final var slots = this.slots(race.getId());
+        if (race.getMethod() == ElectionMethod.RANKED_CHOICE) {
+            return this.projectRanked(slots);
+        }
+        else {
+            return this.projectPlurality(race, slots);
+        }
+    }
+
+    private List<SlotResult> projectPlurality(final Race race, final List<RaceCandidate> slots) {
+        final var counted = this.counted(race, slots);
+        final var results = new ArrayList<SlotResult>();
+        for (final var slot : slots) {
+            results.add(this.pluralityResult(slot, counted));
+        }
+        return results;
+    }
+
+    private SlotResult pluralityResult(final RaceCandidate slot, final Counted counted) {
+        final var votes = this.votesReceived(slot, counted.counts, counted.writeIns);
+        final var outcome = this.pluralityOutcome(slot, votes, counted);
+        final var rank = this.rank(outcome);
+        return new SlotResult(slot.getId(), votes, rank, outcome, slot.isWriteIn());
+    }
+
+    private Outcome pluralityOutcome(final RaceCandidate slot, final int votes, final Counted counted) {
+        if (slot.isWriteIn()) {
+            return null;
+        }
+        else {
+            return this.outcomeFor(votes, counted.options, counted.appointments);
+        }
+    }
+
+    private List<SlotResult> projectRanked(final List<RaceCandidate> slots) {
+        final var firsts = this.firstChoices(slots);
+        final var ballots = this.rankedBallots(slots);
+        final var outcomes = this.instantRunoff(slots, ballots);
+        final var results = new ArrayList<SlotResult>();
+        for (final var slot : slots) {
+            results.add(this.rankedResult(slot, firsts, outcomes));
+        }
+        return results;
+    }
+
+    private SlotResult rankedResult(
+        final RaceCandidate slot,
+        final Map<UUID, Integer> firsts,
+        final Map<UUID, Outcome> outcomes
+    ) {
+        final var votes = this.zero(firsts.get(slot.getId()));
+        final var outcome = outcomes.get(slot.getId());
+        final var rank = this.rank(outcome);
+        return new SlotResult(slot.getId(), votes, rank, outcome, false);
     }
 
     private void tallyRanked(final List<RaceCandidate> slots, final UUID actor) {

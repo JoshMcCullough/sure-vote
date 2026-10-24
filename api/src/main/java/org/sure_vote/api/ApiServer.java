@@ -214,7 +214,7 @@ public final class ApiServer implements HttpHandler {
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, CloseBody.class);
         final var signatures = this.signatures(body);
-        final var saved = this.app.close(id, signatures, actor);
+        final var saved = this.app.close(id, signatures, body.canvassSignature, actor);
         this.writeJson(exchange, 200, this.electionResource(saved));
     }
 
@@ -650,6 +650,7 @@ public final class ApiServer implements HttpHandler {
 
     public static final class CloseBody {
         public List<ChainBody> chains;
+        public String canvassSignature;
     }
 
     public static final class ChainBody {

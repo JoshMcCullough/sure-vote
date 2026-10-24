@@ -183,10 +183,24 @@ final class SampleElection {
     }
 
     void close() {
+        final var signatures = this.chainSignatures();
+        final var canvassSignature = this.canvassSignature();
+        this.app.close(this.electionId, signatures, canvassSignature, this.actor);
+    }
+
+    Map<UUID, String> chainSignatures() {
         final var signatures = new LinkedHashMap<UUID, String>();
         final var races = this.repository.list(Race.class);
         this.signRaces(signatures, races);
-        this.app.close(this.electionId, signatures, this.actor);
+        return signatures;
+    }
+
+    String canvassSignature() {
+        final var payload = this.app.canvassPayload(this.electionId);
+        final var hash = Digests.sha256Hex(payload);
+        final var raw = Digests.unhex(hash);
+        final var seed = this.operator.seed();
+        return Signatures.sign(seed, raw);
     }
 
     Ballot castOne(final UUID slotId, final String value) {

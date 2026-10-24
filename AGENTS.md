@@ -18,7 +18,7 @@
 - Lombok remains only on `resource` (`Resource`). Do not put it back on `entity`. New API resources do not extend `Resource`, so Jackson does not emit audit fields.
 - The repository implementation is `InMemorySureVoteRepository`. It is the store the service and tests use. Do not add an untested SQL or Flyway path and describe it as done.
 - The service is the only writer of ledger rows. `Sealer` builds an import request and does not persist it. The API maps HTTP to the service and back to resources.
-- Mail-in and absentee import throw "mail-in recording is not implemented yet". Ranked-choice close counts instant runoff: a candidate wins when `count * 2 > continuing`, and a tie for last place stops the count. The canvass statement is not written. A new device is rejected once any election for that tenant is not `upcoming`.
+- Mail-in and absentee import throw "mail-in recording is not implemented yet". Ranked-choice close counts instant runoff: a candidate wins when `count * 2 > continuing`, and a tie for last place stops the count. Close writes one operator-signed canvass statement and rolls back when that signature does not match. A new device is rejected once any election for that tenant is not `upcoming`.
 - No Spring, db driver, or Flyway plugin is configured.
 
 ## Build and Test Workflows
