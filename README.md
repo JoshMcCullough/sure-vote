@@ -36,7 +36,7 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 ## Modules
 
 - `entity` — domain records used by business logic and storage.
-- `repository` — storage access. Hides the db. This slice uses an in-memory store.
+- `repository` — storage access. Hides the db. Tests use an in-memory store. PostgreSQL implements the same contract through JDBC and Flyway.
 - `service` — recording, chain append, tallies, and cross-entity rules.
 - `resource` — projections returned to clients.
 - `api` — HTTP. Calls the service and returns resources.
@@ -52,7 +52,7 @@ Also implemented: issuance during an active election, void before a machine sess
 
 Mail-in and absentee recording run on the authority workstation. The viewing passphrase is stored only as a box sealed to the election viewing key. `voterAccessHash` is Argon2id of that passphrase with the raw access code as the salt. The ballot and the accepted issuance commit only after delivery of the code is accepted. A refused handoff rolls both back. The host import checks the sealed ballot and does not receive the code or the passphrase. `POST /elections/{id}/lookup` takes the code and the passphrase in the body. `GET /elections/{id}/ballots?code=` stays the in-person lookup.
 
-Not in this slice: PostgreSQL or Flyway. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
+PostgreSQL stores the same rows. Row-level security, the role split, triggers, and foreign keys from the PostgreSQL strategy are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
 
 ## Documents
 

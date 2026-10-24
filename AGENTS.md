@@ -1,7 +1,7 @@
 # AGENTS
 
 ## Project Snapshot
-- This repository is a multi-module Gradle Java project. The operating model is in `docs/`. In-person and mail-in recording, lookup, issuance, and first-past-the-post, referendum, and ranked-choice tallies run against an in-memory repository.
+- This repository is a multi-module Gradle Java project. The operating model is in `docs/`. In-person and mail-in recording, lookup, issuance, and first-past-the-post, referendum, and ranked-choice tallies run against an in-memory repository. `JdbcSureVoteRepository` implements that same contract on PostgreSQL. HTTP tests still construct the in-memory store.
 - Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`.
 
 ## Module Architecture (important boundaries)
@@ -16,10 +16,10 @@
 ## Current Reality
 - `Entity` is a hand-written administrative base. Ledger rows use `LedgerEntity` and do not use soft-delete or `updatedAt`. See `docs/system.md`.
 - Lombok remains only on `resource` (`Resource`). Do not put it back on `entity`. New API resources do not extend `Resource`, so Jackson does not emit audit fields.
-- The repository implementation is `InMemorySureVoteRepository`. It is the store the service and tests use. Do not add an untested SQL or Flyway path and describe it as done.
+- The repository implementations are `InMemorySureVoteRepository` and `JdbcSureVoteRepository`. Service tests use the in-memory store unless a test opens PostgreSQL. Row-level security, roles, triggers, and foreign keys are not done. Do not add an untested SQL change and describe it as done.
 - The service is the only writer of ledger rows. `Sealer` builds an import request and does not persist it. The API maps HTTP to the service and back to resources.
 - Mail-in and absentee recording seal an Argon2id `voterAccessHash`, store the viewing passphrase as a sealed box, and write the ballot and an accepted issuance in one transaction after the delivery handoff accepts. A refused handoff rolls that transaction back. The host import accepts an already sealed ballot and does not receive the access code or the passphrase. Ranked-choice close counts instant runoff: a candidate wins when `count * 2 > continuing`, and a tie for last place stops the count. Close writes one operator-signed canvass statement and rolls back when that signature does not match. A new device is rejected once any election for that tenant is not `upcoming`.
-- No Spring, db driver, or Flyway plugin is configured.
+- No Spring and no Flyway Gradle plugin. The PostgreSQL driver and Flyway are dependencies of `repository`. Migrations live in `repository/src/main/resources/db/migration`.
 
 ## Build and Test Workflows
 - Use Gradle wrapper from repo root (`./gradlew`), not system Gradle.

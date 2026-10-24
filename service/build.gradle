@@ -18,6 +18,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation project(':api')
     testImplementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+    testImplementation 'org.testcontainers:postgresql:1.21.3'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

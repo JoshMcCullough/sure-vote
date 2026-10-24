@@ -86,7 +86,11 @@ final class SampleElection {
     private final Instant votingEnd = Instant.parse("2026-11-04T00:00:00Z");
 
     private SampleElection() {
-        this.repository = new InMemorySureVoteRepository();
+        this(new InMemorySureVoteRepository());
+    }
+
+    private SampleElection(final SureVoteRepository repository) {
+        this.repository = repository;
         this.app = new SureVote(this.repository);
         this.actor = UUID.randomUUID();
         this.operator = Signatures.generate();
@@ -108,6 +112,13 @@ final class SampleElection {
 
     static SampleElection fptp() {
         final var world = SampleElection.upcomingFptp();
+        world.activate();
+        return world;
+    }
+
+    static SampleElection fptpOn(final SureVoteRepository repository) {
+        final var world = new SampleElection(repository);
+        world.readyFptp();
         world.activate();
         return world;
     }
