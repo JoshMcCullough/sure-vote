@@ -36,10 +36,21 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 ## Modules
 
 - `entity` — domain records used by business logic and storage.
-- `repository` — storage access. Hides the db.
+- `repository` — storage access. Hides the db. This slice uses an in-memory store.
 - `service` — recording, chain append, tallies, and cross-entity rules.
 - `resource` — projections returned to clients.
 - `api` — HTTP. Calls the service and returns resources.
+- `style-checks` — Checkstyle rules from [style.md](./docs/style.md).
+
+## Code
+
+`./gradlew check` compiles the modules, runs Checkstyle, and runs the tests. The HTTP API is the JDK server with Jackson for JSON. Lombok remains only on the administrative `Resource` base. Response types do not extend it.
+
+The in-person path is implemented: seal a ballot, import it, append one chain entry per vote, and look the ballot up with the access code. The plaintext code is not stored. `ballotHash` inside a vote is the SHA-256 of that ballot's payload with `voteHashes` set to `[]`. It is not `Ballot.hash`. See [verification.md](./docs/verification.md).
+
+Also implemented: issuance during an active election, void before a machine session, showcase rejection of `ssn` and `voterId`, and first-past-the-post and referendum tallies when the election closes. A write-in name is counted on its own. A tie stays tied.
+
+Not in this slice: mail-in Argon2id and the sealed viewing passphrase, ranked-choice counting, the canvass statement, and PostgreSQL or Flyway. Importing a ranked-choice ballot works; closing that election does not. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
 
 ## Documents
 

@@ -29,6 +29,8 @@ Ballot keys, in order: `electionId`, `votingPrecinctId`, `type`, `recordingDevic
 
 Vote keys, in order: `ballotHash`, `raceCandidateId`, `value`.
 
+`voteHashes` are the integrity hashes of those vote payloads. `ballotHash` inside each vote is the SHA-256 of this ballot's payload with `voteHashes` set to an empty array. It is not `Ballot.hash`. `Ballot.hash` covers the vote hashes, and the vote hashes cover `ballotHash`, so the two values cannot be equal. A verifier rebuilds that empty-array payload, hashes it, and checks that every vote payload names that hash.
+
 Chain-entry keys, in order: `voteHash`, `previousEntryHash`, `index`, `timestamp`, `nonce`. `previousEntryHash` is `null` on the first entry. `index` is a number. `nonce` is a string of 1 to 64 characters, unique among entries on that chain. Verifiers check that bound and that uniqueness. They do not recompute the nonce.
 
 ## Access-code hash
@@ -98,7 +100,7 @@ A verifier does the following.
 3. Hash the stored `payload` of each vote, ballot, chain entry, validation result, canvass statement, and any restore incident, and confirm it equals the stored integrity hash. Confirm each ballot, vote, chain-entry, and validation-result payload field matches its column. The canvass payload is checked by recomputing it in step 8.
 4. Confirm each entry's `previousEntry` and `index` form one chain per race. Confirm each vote has exactly one entry, on the chain for that vote's race. Confirm a non-empty header `hash` equals the latest entry's hash, and an empty header `hash` equals the hash of the empty-head payload.
 5. Confirm the election-definition signature, each device signature, each import signature, each published head signature, each validator signature, and the canvass signature with the keys in [Signatures](#signatures).
-6. Confirm every vote's race is in the signed ballot style for that ballot's precinct, and that the ballot meets the selection rules in [system.md](./system.md). Confirm `voteHashes` matches that ballot's votes in the sort order above. Confirm `Ballot.timestamp` is inside the election's voting window, inclusive.
+6. Confirm every vote's race is in the signed ballot style for that ballot's precinct, and that the ballot meets the selection rules in [system.md](./system.md). Confirm `voteHashes` matches that ballot's vote hashes in the sort order above. Confirm each vote's `ballotHash` as defined above. Confirm `Ballot.timestamp` is inside the election's voting window, inclusive.
 7. Recompute `votesReceived`, `rank`, and `outcome` from the chain and compare them to the published caches.
 8. When the canvass statement is published, recompute it from the chains and the signed definition and confirm it matches the stored payload.
 9. If a restore incident exists, check its operator signature and report the witnessed heads beside the restored heads.

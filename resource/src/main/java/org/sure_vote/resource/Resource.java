@@ -11,8 +11,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Resource
-{
+public class Resource {
     private UUID id;
     private Date createdAt;
     private Date updatedAt;

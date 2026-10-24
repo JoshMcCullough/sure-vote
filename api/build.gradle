@@ -10,6 +10,12 @@ repositories {
 }
 
 dependencies {
+    implementation project(':entity')
+    implementation project(':repository')
+    implementation project(':resource')
+    implementation project(':service')
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

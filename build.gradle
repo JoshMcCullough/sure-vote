@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco-report-aggregation'
 }
 
 group = 'org.sure_vote'
@@ -13,8 +14,73 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    jacocoAggregation project(':style-checks')
+    jacocoAggregation project(':entity')
+    jacocoAggregation project(':resource')
+    jacocoAggregation project(':repository')
+    jacocoAggregation project(':service')
+    jacocoAggregation project(':api')
 }
 
 test {
     useJUnitPlatform()
+}
+
+tasks.named('testCodeCoverageReport', JacocoReport) {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+def coverageReport = tasks.named('testCodeCoverageReport', JacocoReport)
+
+tasks.register('coverageVerification', JacocoCoverageVerification) {
+    dependsOn coverageReport
+    executionData.setFrom(coverageReport.map { it.executionData })
+    classDirectories.setFrom(coverageReport.map { it.classDirectories })
+    sourceDirectories.setFrom(coverageReport.map { it.sourceDirectories })
+    violationRules {
+        rule {
+            limit {
+                counter = 'INSTRUCTION'
+                value = 'COVEREDRATIO'
+                minimum = 0.85
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn coverageReport
+    dependsOn tasks.named('coverageVerification')
+}
+
+subprojects { sub ->
+    sub.plugins.withId('java') {
+        sub.apply plugin: 'jacoco'
+        sub.tasks.named('test') {
+            finalizedBy 'jacocoTestReport'
+        }
+        sub.tasks.named('jacocoTestReport', JacocoReport) {
+            dependsOn sub.tasks.named('test')
+            reports {
+                xml.required = true
+                html.required = true
+            }
+        }
+    }
+    if (sub.name != 'style-checks') {
+        sub.apply plugin: 'checkstyle'
+        sub.checkstyle {
+            toolVersion = '14.3.0'
+            configFile = rootProject.file('config/checkstyle/checkstyle.xml')
+            maxWarnings = 0
+        }
+        sub.dependencies {
+            checkstyle 'com.puppycrawl.tools:checkstyle:14.3.0'
+            checkstyle project(':style-checks')
+        }
+    }
 }

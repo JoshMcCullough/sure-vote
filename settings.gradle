@@ -1,4 +1,5 @@
 rootProject.name = 'sure-vote'
+include 'style-checks'
 include 'entity'
 include 'resource'
 include 'repository'
