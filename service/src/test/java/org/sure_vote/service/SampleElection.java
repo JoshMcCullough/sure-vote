@@ -118,13 +118,18 @@ final class SampleElection {
         return world;
     }
 
-    static SampleElection ranked() {
+    static SampleElection upcomingRanked() {
         final var world = new SampleElection();
         world.base();
         world.raceId = world.addRace(ElectionMethod.RANKED_CHOICE, RaceType.GENERAL, "Mayor");
         world.slotA = world.slot(world.raceId, "Ada", "One", false, null, null);
         world.slotB = world.slot(world.raceId, "Bea", "Two", false, null, null);
         world.style(world.raceId);
+        return world;
+    }
+
+    static SampleElection ranked() {
+        final var world = SampleElection.upcomingRanked();
         world.activate();
         return world;
     }
@@ -187,6 +192,22 @@ final class SampleElection {
     Ballot castOne(final UUID slotId, final String value) {
         final var selection = new SealSelection(slotId, value, this.nextNonce());
         return this.cast(List.of(selection));
+    }
+
+    Ballot castRanked(final List<UUID> slots) {
+        final var selections = new ArrayList<SealSelection>();
+        this.addRanks(selections, slots);
+        return this.cast(selections);
+    }
+
+    private void addRanks(final List<SealSelection> selections, final List<UUID> slots) {
+        var rank = 1;
+        for (final var slot : slots) {
+            final var value = Integer.toString(rank);
+            final var nonce = this.nextNonce();
+            selections.add(new SealSelection(slot, value, nonce));
+            rank = rank + 1;
+        }
     }
 
     Ballot cast(final List<SealSelection> selections) {

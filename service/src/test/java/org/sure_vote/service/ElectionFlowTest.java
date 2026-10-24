@@ -165,11 +165,15 @@ class ElectionFlowTest {
     }
 
     @Test
-    void rankedChoiceCloseIsNotImplemented() {
+    void rankedChoiceElectsAFirstRoundMajority() {
         final var world = SampleElection.ranked();
-        world.castOne(world.slotA, "1");
-        this.assertMessage(world::close, "ranked-choice tally is not implemented yet");
-        world.assertStillActive();
+        world.castRanked(List.of(world.slotA, world.slotB));
+        world.castRanked(List.of(world.slotA, world.slotB));
+        world.castRanked(List.of(world.slotB, world.slotA));
+        world.close();
+        world.assertOutcome(world.slotA, Outcome.WON, 1, 2);
+        world.assertOutcome(world.slotB, Outcome.LOST, null, 1);
+        world.assertClosed();
     }
 
     @Test

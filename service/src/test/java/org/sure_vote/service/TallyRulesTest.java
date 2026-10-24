@@ -1,6 +1,7 @@
 package org.sure_vote.service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,6 +41,37 @@ class TallyRulesTest {
         world.assertOutcome(world.slotA, Outcome.WON, 1, 3);
         world.assertOutcome(world.slotB, Outcome.TIED, null, 1);
         world.assertOutcome(world.writeIn, null, null, 1);
+    }
+
+    @Test
+    void rankedChoiceEliminatesTheLowestCandidate() {
+        final var world = SampleElection.upcomingRanked();
+        final var slotC = world.slot(world.raceId, "Cy", "Three", false, null, null);
+        world.activate();
+        world.castRanked(List.of(world.slotA, world.slotB, slotC));
+        world.castRanked(List.of(world.slotA, world.slotB, slotC));
+        world.castRanked(List.of(world.slotB, world.slotA, slotC));
+        world.castRanked(List.of(world.slotB, world.slotA, slotC));
+        world.castRanked(List.of(slotC, world.slotA, world.slotB));
+        world.close();
+        world.assertOutcome(world.slotA, Outcome.WON, 1, 2);
+        world.assertOutcome(world.slotB, Outcome.LOST, null, 2);
+        world.assertOutcome(slotC, Outcome.ELIMINATED, null, 1);
+    }
+
+    @Test
+    void aRankedChoiceTieForLastPlaceStopsTheCount() {
+        final var world = SampleElection.upcomingRanked();
+        final var slotC = world.slot(world.raceId, "Cy", "Three", false, null, null);
+        world.activate();
+        world.castRanked(List.of(world.slotA, world.slotB, slotC));
+        world.castRanked(List.of(world.slotA, slotC, world.slotB));
+        world.castRanked(List.of(world.slotB, world.slotA, slotC));
+        world.castRanked(List.of(slotC, world.slotA, world.slotB));
+        world.close();
+        world.assertOutcome(world.slotA, Outcome.LOST, null, 2);
+        world.assertOutcome(world.slotB, Outcome.TIED, null, 1);
+        world.assertOutcome(slotC, Outcome.TIED, null, 1);
     }
 
     @Test

@@ -3,8 +3,10 @@ package org.sure_vote.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.sure_vote.entity.ChainStatus;
@@ -42,21 +44,8 @@ final class TallyService {
         final var races = this.races(electionId);
         this.stores.require(election.getStatus() == ElectionStatus.ACTIVE, "Only an active election can close");
         this.stores.require(signatures != null, "chain signatures are required");
-        this.rejectRanked(races);
         this.closeRaces(election, races, signatures, actor);
         return this.markHistorical(election, actor);
-    }
-
-    private void rejectRanked(final List<Race> races) {
-        for (final var race : races) {
-            this.rejectRankedRace(race);
-        }
-    }
-
-    private void rejectRankedRace(final Race race) {
-        if (race.getMethod() == ElectionMethod.RANKED_CHOICE) {
-            throw new ConstraintException("ranked-choice tally is not implemented yet");
-        }
     }
 
     private void closeRaces(
@@ -88,8 +77,352 @@ final class TallyService {
 
     private void tally(final Race race, final UUID actor) {
         final var slots = this.slots(race.getId());
-        final var counted = this.counted(race, slots);
-        this.applyAll(slots, counted, actor);
+        if (race.getMethod() == ElectionMethod.RANKED_CHOICE) {
+            this.tallyRanked(slots, actor);
+        }
+        else {
+            final var counted = this.counted(race, slots);
+            this.applyAll(slots, counted, actor);
+        }
+    }
+
+    private void tallyRanked(final List<RaceCandidate> slots, final UUID actor) {
+        final var firsts = this.firstChoices(slots);
+        final var ballots = this.rankedBallots(slots);
+        final var outcomes = this.instantRunoff(slots, ballots);
+        this.applyRanked(slots, firsts, outcomes, actor);
+    }
+
+    private Map<UUID, Integer> firstChoices(final List<RaceCandidate> slots) {
+        final var slotMap = this.slotMap(slots);
+        final var votes = this.votesFor(slotMap);
+        final var counts = new LinkedHashMap<UUID, Integer>();
+        for (final var vote : votes) {
+            this.addFirst(counts, vote);
+        }
+        return counts;
+    }
+
+    private void addFirst(final Map<UUID, Integer> counts, final Vote vote) {
+        if ("1".equals(vote.getValue())) {
+            final var id = vote.getRaceCandidateId();
+            final var current = counts.get(id);
+            counts.put(id, this.increment(current));
+        }
+    }
+
+    private Map<UUID, List<Preference>> rankedBallots(final List<RaceCandidate> slots) {
+        final var slotMap = this.slotMap(slots);
+        final var votes = this.votesFor(slotMap);
+        final var ballots = new LinkedHashMap<UUID, List<Preference>>();
+        for (final var vote : votes) {
+            this.addPreference(ballots, vote);
+        }
+        return ballots;
+    }
+
+    private void addPreference(final Map<UUID, List<Preference>> ballots, final Vote vote) {
+        final var rank = VoteOrder.rank(vote.getValue());
+        if (rank >= 1) {
+            final var list = this.preferences(ballots, vote.getBallotId());
+            list.add(new Preference(vote.getRaceCandidateId(), rank));
+        }
+    }
+
+    private List<Preference> preferences(final Map<UUID, List<Preference>> ballots, final UUID ballotId) {
+        final var existing = ballots.get(ballotId);
+        if (existing != null) {
+            return existing;
+        }
+        else {
+            final var created = new ArrayList<Preference>();
+            ballots.put(ballotId, created);
+            return created;
+        }
+    }
+
+    private Map<UUID, Outcome> instantRunoff(
+        final List<RaceCandidate> slots,
+        final Map<UUID, List<Preference>> ballots
+    ) {
+        final var continuing = this.ids(slots);
+        final var eliminated = new LinkedHashSet<UUID>();
+        return this.rounds(continuing, eliminated, ballots);
+    }
+
+    private LinkedHashSet<UUID> ids(final List<RaceCandidate> slots) {
+        final var ids = new LinkedHashSet<UUID>();
+        for (final var slot : slots) {
+            ids.add(slot.getId());
+        }
+        return ids;
+    }
+
+    private Map<UUID, Outcome> rounds(
+        final Set<UUID> continuing,
+        final Set<UUID> eliminated,
+        final Map<UUID, List<Preference>> ballots
+    ) {
+        var outcomes = this.oneRound(continuing, eliminated, ballots);
+        while (outcomes == null) {
+            outcomes = this.oneRound(continuing, eliminated, ballots);
+        }
+        return outcomes;
+    }
+
+    private Map<UUID, Outcome> oneRound(
+        final Set<UUID> continuing,
+        final Set<UUID> eliminated,
+        final Map<UUID, List<Preference>> ballots
+    ) {
+        if (continuing.isEmpty()) {
+            return this.finish(continuing, eliminated, null, List.of());
+        }
+        else {
+            final var counts = this.roundCounts(ballots, continuing);
+            final var total = this.total(counts);
+            final var winner = this.winner(counts, total);
+            return this.afterCount(continuing, eliminated, counts, winner);
+        }
+    }
+
+    private Map<UUID, Integer> roundCounts(
+        final Map<UUID, List<Preference>> ballots,
+        final Set<UUID> continuing
+    ) {
+        final var counts = new LinkedHashMap<UUID, Integer>();
+        for (final var id : continuing) {
+            counts.put(id, 0);
+        }
+        this.addChoices(counts, ballots, continuing);
+        return counts;
+    }
+
+    private void addChoices(
+        final Map<UUID, Integer> counts,
+        final Map<UUID, List<Preference>> ballots,
+        final Set<UUID> continuing
+    ) {
+        final var lists = ballots.values();
+        for (final var preferences : lists) {
+            this.addChoice(counts, preferences, continuing);
+        }
+    }
+
+    private void addChoice(
+        final Map<UUID, Integer> counts,
+        final List<Preference> preferences,
+        final Set<UUID> continuing
+    ) {
+        final var choice = this.currentChoice(preferences, continuing);
+        if (choice != null) {
+            final var current = counts.get(choice);
+            counts.put(choice, this.increment(current));
+        }
+    }
+
+    private UUID currentChoice(final List<Preference> preferences, final Set<UUID> continuing) {
+        var best = (Preference) null;
+        for (final var preference : preferences) {
+            best = this.better(best, preference, continuing);
+        }
+        return this.candidateOf(best);
+    }
+
+    private Preference better(
+        final Preference best,
+        final Preference preference,
+        final Set<UUID> continuing
+    ) {
+        if (!continuing.contains(preference.candidateId)) {
+            return best;
+        }
+        else if (best == null || preference.rank < best.rank) {
+            return preference;
+        }
+        else {
+            return best;
+        }
+    }
+
+    private UUID candidateOf(final Preference preference) {
+        if (preference == null) {
+            return null;
+        }
+        else {
+            return preference.candidateId;
+        }
+    }
+
+    private int total(final Map<UUID, Integer> counts) {
+        var sum = 0;
+        final var values = counts.values();
+        for (final var count : values) {
+            sum = sum + count;
+        }
+        return sum;
+    }
+
+    private UUID winner(final Map<UUID, Integer> counts, final int total) {
+        var found = (UUID) null;
+        final var entries = counts.entrySet();
+        for (final var entry : entries) {
+            final var id = entry.getKey();
+            final var count = entry.getValue();
+            found = this.pickWinner(found, id, count, total);
+        }
+        return found;
+    }
+
+    private UUID pickWinner(final UUID found, final UUID id, final int count, final int total) {
+        final var majority = (long) count * 2 > total;
+        if (majority) {
+            return id;
+        }
+        else {
+            return found;
+        }
+    }
+
+    private Map<UUID, Outcome> afterCount(
+        final Set<UUID> continuing,
+        final Set<UUID> eliminated,
+        final Map<UUID, Integer> counts,
+        final UUID winner
+    ) {
+        if (winner != null) {
+            return this.finish(continuing, eliminated, winner, List.of());
+        }
+        else {
+            final var lowest = this.lowest(counts);
+            return this.afterLowest(continuing, eliminated, lowest);
+        }
+    }
+
+    private List<UUID> lowest(final Map<UUID, Integer> counts) {
+        final var min = this.minimum(counts);
+        final var tied = new ArrayList<UUID>();
+        final var entries = counts.entrySet();
+        for (final var entry : entries) {
+            this.collectLowest(tied, entry.getKey(), entry.getValue(), min);
+        }
+        return tied;
+    }
+
+    private int minimum(final Map<UUID, Integer> counts) {
+        var min = Integer.MAX_VALUE;
+        final var values = counts.values();
+        for (final var count : values) {
+            min = this.lower(min, count);
+        }
+        return min;
+    }
+
+    private int lower(final int min, final int count) {
+        if (count < min) {
+            return count;
+        }
+        else {
+            return min;
+        }
+    }
+
+    private void collectLowest(final List<UUID> tied, final UUID id, final int count, final int min) {
+        if (count == min) {
+            tied.add(id);
+        }
+    }
+
+    private Map<UUID, Outcome> afterLowest(
+        final Set<UUID> continuing,
+        final Set<UUID> eliminated,
+        final List<UUID> lowest
+    ) {
+        if (lowest.size() != 1 || continuing.size() == 1) {
+            return this.finish(continuing, eliminated, null, lowest);
+        }
+        else {
+            final var id = lowest.getFirst();
+            continuing.remove(id);
+            eliminated.add(id);
+            return null;
+        }
+    }
+
+    private Map<UUID, Outcome> finish(
+        final Set<UUID> continuing,
+        final Set<UUID> eliminated,
+        final UUID winner,
+        final List<UUID> tied
+    ) {
+        final var outcomes = new LinkedHashMap<UUID, Outcome>();
+        this.markEliminated(outcomes, eliminated);
+        this.markContinuing(outcomes, continuing, winner, tied);
+        return outcomes;
+    }
+
+    private void markEliminated(final Map<UUID, Outcome> outcomes, final Set<UUID> eliminated) {
+        for (final var id : eliminated) {
+            outcomes.put(id, Outcome.ELIMINATED);
+        }
+    }
+
+    private void markContinuing(
+        final Map<UUID, Outcome> outcomes,
+        final Set<UUID> continuing,
+        final UUID winner,
+        final List<UUID> tied
+    ) {
+        for (final var id : continuing) {
+            this.markOne(outcomes, id, winner, tied);
+        }
+    }
+
+    private void markOne(
+        final Map<UUID, Outcome> outcomes,
+        final UUID id,
+        final UUID winner,
+        final List<UUID> tied
+    ) {
+        if (id.equals(winner)) {
+            outcomes.put(id, Outcome.WON);
+        }
+        else if (tied.contains(id)) {
+            outcomes.put(id, Outcome.TIED);
+        }
+        else {
+            outcomes.put(id, Outcome.LOST);
+        }
+    }
+
+    private void applyRanked(
+        final List<RaceCandidate> slots,
+        final Map<UUID, Integer> firsts,
+        final Map<UUID, Outcome> outcomes,
+        final UUID actor
+    ) {
+        for (final var slot : slots) {
+            this.applyRankedSlot(slot, firsts, outcomes, actor);
+        }
+    }
+
+    private void applyRankedSlot(
+        final RaceCandidate slot,
+        final Map<UUID, Integer> firsts,
+        final Map<UUID, Outcome> outcomes,
+        final UUID actor
+    ) {
+        final var votes = this.zero(firsts.get(slot.getId()));
+        final var outcome = outcomes.get(slot.getId());
+        final var next = Copies.raceCandidate(slot);
+        next.setVotesReceived(votes);
+        next.setVotePercentage(null);
+        next.setOutcome(outcome);
+        next.setRank(this.rank(outcome));
+        next.setUpdatedAt(Instant.now());
+        next.setUpdatedBy(actor);
+        next.setVersion(this.stores.nextVersion(slot.getVersion()));
+        this.stores.replace(next);
     }
 
     private Counted counted(final Race race, final List<RaceCandidate> slots) {
@@ -466,6 +799,16 @@ final class TallyService {
         final var rowRace = row.getRaceId();
         if (raceId.equals(rowRace)) {
             matched.add(row);
+        }
+    }
+
+    private static final class Preference {
+        private final UUID candidateId;
+        private final int rank;
+
+        private Preference(final UUID candidateId, final int rank) {
+            this.candidateId = candidateId;
+            this.rank = rank;
         }
     }
 
