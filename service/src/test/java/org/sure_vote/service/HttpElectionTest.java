@@ -4,6 +4,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
@@ -65,6 +67,7 @@ class HttpElectionTest {
         final var name = this.text(shownBody, "name");
         final var start = this.text(shownBody, "votingStart");
         final var shownHash = this.text(shownBody, "hash");
+        final var demonstration = this.text(shownBody, "demonstration");
         assertEquals(200, defined.statusCode());
         assertEquals(64, hash.length());
         assertEquals(200, activated.statusCode());
@@ -75,6 +78,260 @@ class HttpElectionTest {
         assertEquals("General", name);
         assertEquals("2026-11-03T00:00:00.000Z", start);
         assertEquals(hash, shownHash);
+        assertEquals("false", demonstration);
+    }
+
+    @Test
+    void aProductionTenantRejectsHostKeys() throws Exception {
+        final var world = SampleElection.fptp();
+        this.use(world, () -> this.rejectHostKeys(world));
+    }
+
+    @Test
+    void workspaceListsALocality() throws Exception {
+        final var world = SampleElection.showcase();
+        this.use(world, () -> this.listLocality(world));
+    }
+
+    private void rejectHostKeys(final SampleElection world) throws Exception {
+        final var body = "{\"tenantId\":\"" + world.tenantId
+            + "\",\"name\":\"Nope\",\"votingStart\":\"2026-11-03T00:00:00Z\""
+            + ",\"votingEnd\":\"2026-11-04T00:00:00Z\"}";
+        final var created = this.send("POST", "/showcase/elections", body);
+        final var createdBody = created.body();
+        final var message = this.text(createdBody, "error");
+        assertEquals(400, created.statusCode());
+        assertEquals("only a showcase tenant keeps host keys", message);
+    }
+
+    private void listLocality(final SampleElection world) throws Exception {
+        final var body = "{\"tenantId\":\"" + world.tenantId + "\",\"name\":\"Town\",\"type\":\"city\"}";
+        final var created = this.send("POST", "/localities", body);
+        final var path = "/tenants/" + world.tenantId + "/workspace";
+        final var listed = this.send("GET", path, null);
+        final var createdBody = created.body();
+        final var listedBody = listed.body();
+        final var name = this.text(createdBody, "name");
+        assertEquals(201, created.statusCode());
+        assertEquals("Town", name);
+        assertEquals(200, listed.statusCode());
+        assertTrue(listedBody.contains("\"name\":\"Town\""));
+    }
+
+    @Test
+    void aShowcaseWorkspaceCastsAndCloses() throws Exception {
+        final var world = SampleElection.showcase();
+        this.use(world, () -> this.castShowcase(world));
+    }
+
+    private void castShowcase(final SampleElection world) throws Exception {
+        final var locality = this.idFrom("/localities", this.localityJson(world));
+        final var address = this.idFrom("/addresses", this.addressJson(world, locality));
+        final var precinct = this.idFrom("/precincts", this.precinctJson(world, address));
+        final var district = this.idFrom("/districts", this.districtJson(world, locality));
+        final var linked = this.idFrom("/precinct-districts", this.linkJson(world, precinct, district));
+        final var seat = this.idFrom("/seats", this.seatJson(world, locality));
+        final var term = this.idFrom("/terms", this.termJson(world, seat));
+        final var election = this.idFrom("/showcase/elections", this.showcaseElectionJson(world, locality));
+        final var race = this.idFrom("/races", this.raceJson(world, election, term));
+        final var ada = this.idFrom("/persons", this.personJson(world, "Ada", "One"));
+        final var voter = this.idFrom("/persons", this.personJson(world, "Cam", "Voter"));
+        final var candidate = this.idFrom("/candidates", this.candidateJson(world, ada));
+        final var slot = this.idFrom("/race-candidates", this.slotJson(world, race, candidate));
+        final var style = this.idFrom("/ballot-styles", this.styleJson(world, election, precinct, race));
+        final var place = this.idFrom("/places", this.placeJson(world, locality, address));
+        final var device = this.idFrom("/showcase/devices", this.showcaseDeviceJson(world));
+        final var owned = this.idFrom("/devices", this.deviceJson(world));
+        final var assignment = this.idFrom("/precinct-assignments", this.assignmentJson(world, election, precinct));
+        final var active = this.saved("/showcase/elections/" + election + "/activate", "{}");
+        final var cast = this.demoCast(election, precinct, device, place, voter, slot);
+        final var closed = this.saved("/showcase/elections/" + election + "/close", "{}");
+        final var listed = this.workspaceBody(world);
+        final var code = this.text(cast, "code");
+        final var payload = this.nested(cast, "ballot", "payload");
+        final var value = this.voteValue(cast);
+        assertEquals(43, code.length());
+        assertEquals("Y", value);
+        assertFalse(payload.contains(code));
+        assertFalse(listed.contains(code));
+        assertTrue(active.contains("\"demonstration\":true"));
+        assertTrue(active.contains("\"status\":\"active\""));
+        assertTrue(closed.contains("\"status\":\"historical\""));
+        assertTrue(listed.contains("\"name\":\"Town\""));
+        assertTrue(listed.contains("\"name\":\"Mayor\""));
+        assertTrue(listed.contains("\"name\":\"Machine 1\""));
+        assertTrue(listed.contains("\"name\":\"Machine 2\""));
+        assertTrue(listed.contains("Ward 1"));
+        assertFalse(linked.isBlank());
+        assertFalse(style.isBlank());
+        assertFalse(owned.isBlank());
+        assertFalse(assignment.isBlank());
+    }
+
+    private String demoCast(
+        final String election,
+        final String precinct,
+        final String device,
+        final String place,
+        final String voter,
+        final String slot
+    ) throws Exception {
+        final var body = "{\"votingPrecinctId\":\"" + precinct
+            + "\",\"recordingDeviceId\":\"" + device
+            + "\",\"recordingPlaceId\":\"" + place
+            + "\",\"personId\":\"" + voter
+            + "\",\"selections\":[{\"raceCandidateId\":\"" + slot + "\",\"value\":\"Y\"}]}";
+        return this.saved("/showcase/elections/" + election + "/cast", body);
+    }
+
+    private String workspaceBody(final SampleElection world) throws Exception {
+        final var path = "/tenants/" + world.tenantId + "/workspace";
+        final var response = this.send("GET", path, null);
+        final var body = response.body();
+        final var status = response.statusCode();
+        if (status == 200) {
+            return body;
+        }
+        else {
+            throw new IllegalStateException(body);
+        }
+    }
+
+    private String idFrom(final String path, final String body) throws Exception {
+        final var saved = this.saved(path, body);
+        return this.text(saved, "id");
+    }
+
+    private String saved(final String path, final String body) throws Exception {
+        final var response = this.send("POST", path, body);
+        final var responseBody = response.body();
+        final var status = response.statusCode();
+        if (status == 200 || status == 201) {
+            return responseBody;
+        }
+        else {
+            throw new IllegalStateException(status + " " + responseBody);
+        }
+    }
+
+    private String localityJson(final SampleElection world) {
+        return "{\"tenantId\":\"" + world.tenantId + "\",\"name\":\"Town\",\"type\":\"city\"}";
+    }
+
+    private String addressJson(final SampleElection world, final String locality) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"localityId\":\"" + locality
+            + "\",\"street1\":\"1 Main\",\"postalCode\":\"00000\"}";
+    }
+
+    private String precinctJson(final SampleElection world, final String address) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"name\":\"Precinct 1\",\"addressId\":\"" + address + "\"}";
+    }
+
+    private String districtJson(final SampleElection world, final String locality) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"localityId\":\"" + locality
+            + "\",\"name\":\"Ward 1\",\"type\":\"city-council\"}";
+    }
+
+    private String linkJson(final SampleElection world, final String precinct, final String district) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"votingPrecinctId\":\"" + precinct
+            + "\",\"votingDistrictId\":\"" + district
+            + "\",\"districtType\":\"city-council\"}";
+    }
+
+    private String seatJson(final SampleElection world, final String locality) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"localityId\":\"" + locality
+            + "\",\"name\":\"Mayor\",\"jurisdiction\":\"local\",\"type\":\"mayor\""
+            + ",\"appointments\":1,\"termLength\":4}";
+    }
+
+    private String termJson(final SampleElection world, final String seat) {
+        return "{\"tenantId\":\"" + world.tenantId + "\",\"seatId\":\"" + seat + "\"}";
+    }
+
+    private String showcaseElectionJson(final SampleElection world, final String locality) {
+        final var now = Instant.now();
+        final var start = now.minus(Duration.ofHours(1));
+        final var end = now.plus(Duration.ofDays(1));
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"localityId\":\"" + locality
+            + "\",\"name\":\"General\",\"votingStart\":\"" + start
+            + "\",\"votingEnd\":\"" + end + "\"}";
+    }
+
+    private String raceJson(final SampleElection world, final String election, final String term) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"electionId\":\"" + election
+            + "\",\"termId\":\"" + term
+            + "\",\"name\":\"Mayor\",\"type\":\"general\",\"method\":\"first-past-the-post\"}";
+    }
+
+    private String personJson(final SampleElection world, final String first, final String last) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"firstName\":\"" + first
+            + "\",\"lastName\":\"" + last + "\"}";
+    }
+
+    private String candidateJson(final SampleElection world, final String person) {
+        return "{\"tenantId\":\"" + world.tenantId + "\",\"personId\":\"" + person + "\"}";
+    }
+
+    private String slotJson(final SampleElection world, final String race, final String candidate) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"raceId\":\"" + race
+            + "\",\"candidateId\":\"" + candidate
+            + "\",\"writeIn\":false}";
+    }
+
+    private String styleJson(
+        final SampleElection world,
+        final String election,
+        final String precinct,
+        final String race
+    ) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"electionId\":\"" + election
+            + "\",\"votingPrecinctId\":\"" + precinct
+            + "\",\"raceId\":\"" + race + "\"}";
+    }
+
+    private String placeJson(final SampleElection world, final String locality, final String address) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"localityId\":\"" + locality
+            + "\",\"addressId\":\"" + address
+            + "\",\"name\":\"Town Hall\",\"kind\":\"polling-place\"}";
+    }
+
+    private String showcaseDeviceJson(final SampleElection world) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"name\":\"Machine 1\",\"kind\":\"polling-place-machine\"}";
+    }
+
+    private String deviceJson(final SampleElection world) {
+        final var key = Signatures.generate();
+        final var publicKey = key.publicKey();
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"name\":\"Machine 2\",\"kind\":\"polling-place-machine\""
+            + ",\"publicKey\":\"" + publicKey
+            + "\",\"status\":\"active\"}";
+    }
+
+    private String assignmentJson(final SampleElection world, final String election, final String precinct) {
+        return "{\"tenantId\":\"" + world.tenantId
+            + "\",\"electionId\":\"" + election
+            + "\",\"votingPrecinctId\":\"" + precinct
+            + "\",\"assignmentStatus\":\"current\"}";
+    }
+
+    private String nested(final String body, final String object, final String field) throws Exception {
+        final var tree = this.json.readTree(body);
+        final var parent = tree.get(object);
+        final var node = parent.get(field);
+        return node.asText();
     }
 
     private void voidIssuance(final SampleElection world) throws Exception {

@@ -11,6 +11,7 @@ public final class ElectionResource {
     private String votingEnd;
     private String hash;
     private String signature;
+    private boolean demonstration;
 
     public UUID getId() {
         return this.id;
@@ -74,5 +75,13 @@ public final class ElectionResource {
 
     public void setSignature(final String signature) {
         this.signature = signature;
+    }
+
+    public boolean getDemonstration() {
+        return this.demonstration;
+    }
+
+    public void setDemonstration(final boolean demonstration) {
+        this.demonstration = demonstration;
     }
 }

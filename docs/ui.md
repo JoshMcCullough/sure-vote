@@ -1,51 +1,80 @@
-# Lookup page
+# Election app
 
-Plan for the first React UI. It is not built yet. The page is the public lookup described in [system.md](./system.md). It is the same page on every deployment, including a showcase tenant.
+One React app serves two areas. The public area is the lookup in [system.md](./system.md). The workspace configures an election and, on a showcase tenant, runs a demonstration. The app is not built as a second service. It is a client of the HTTP API.
 
-The app is a client of the HTTP API. It does not record ballots, hold keys, or reimplement the chain rules. Checking a published chain still does not require this app. [verification.md](./verification.md) stays sufficient on its own.
+Checking a published chain still does not require this app. [verification.md](./verification.md) stays sufficient on its own.
 
-## Who uses it
+The app is served at `/app` on the same origin as the API. Routes live under that prefix so they do not collide with `GET /elections/{id}`. Fetch calls use the unprefixed API paths.
 
-A voter, or a person the voter asked to type the code, opens one ballot. A mail-in ballot also needs the viewing passphrase. The official does not see the code or the passphrase. The page does not print the selections and does not put the code in the address bar.
+## Public area
 
-An official console is a later app. This one has no recording, close, or dispute-review screens.
+A voter, or a person the voter asked to type the code, opens one ballot. A mail-in ballot also needs the viewing passphrase. Staff do not see the code or the passphrase. The page does not put the code in the address bar.
 
-## Screens
+Routes:
 
-One route, `/elections/:electionId`.
+- `/` explains the two areas and opens a lookup by election id.
+- `/elections/:electionId` is the lookup.
+
+The lookup page:
 
 - The election name and status come from `GET /elections/{id}`.
-- A showcase election shows a demonstration label and says the election has no legal effect. The public election response does not carry that label yet. Add a public `demonstration` boolean when this page is built, from `Tenant.kind`, and add nothing else from the tenant.
+- `demonstration` on that response is true when `Tenant.kind` is `showcase`. The page then says the election is a demonstration and has no legal effect. Nothing else from the tenant is on the response.
 - The dispute count comes from `GET /elections/{id}/disputes/count`. The page shows the number. It does not show statements, ballot ids, or who filed.
-- The voter types or pastes the access code. The passphrase field is there for mail-in. Both go in a POST body.
-- `POST /elections/{id}/lookup` with `{code, passphrase}` shows the recorded ballot and its votes. There is no edit control.
-- From that result, the voter may file a claim. `POST /elections/{id}/disputes` with `{code, passphrase, statement}` stores an open `BallotDispute`. The statement may be empty. The response shows status and statement to the person who just filed.
-- `POST /elections/{id}/disputes/lookup` with the same code reads that voter's claims, including the statement. A wrong code uses the same miss as ballot lookup.
+- The voter types or pastes the access code. The passphrase field is there for mail-in. Both go in `POST /elections/{id}/lookup` with `{code, passphrase}`.
+- The recorded ballot and its votes are shown. There is no edit control.
+- From that result, the voter may file a claim. `POST /elections/{id}/disputes` with `{code, passphrase, statement}` stores an open `BallotDispute`. The statement may be empty.
+- `POST /elections/{id}/disputes/lookup` reads that voter's claims, including the statement. A wrong code uses the same miss as ballot lookup.
 - After a successful lookup the code stays in page memory until the voter leaves or clears it. It is not written to the URL, `localStorage`, or a log the app controls.
 
-QR scanning can wait. The first page accepts the text code.
-
-## API the page calls
-
-- `GET /elections/{id}`
-- `POST /elections/{id}/lookup`
-- `POST /elections/{id}/disputes`
-- `POST /elections/{id}/disputes/lookup`
-- `GET /elections/{id}/disputes/count`
-
-These official routes stay off this page:
+These official routes stay off the public page:
 
 - `GET /elections/{id}/disputes`
 - `POST /disputes/{id}/status`
-- ballot import, issuance, activate, and close
+
+## Workspace
+
+`/workspace` edits the parts of an election: tenant, locality, address, precinct, district, precinct district, seat, term, election, race, person, candidate, race slot, ballot style, recording place, recording device, and precinct assignment.
+
+The same screens are used for a production tenant and a showcase tenant. The browser does not hold a production operator, import, viewing, or device private key. On a production tenant, activate and close take a signature made outside the app. The workspace only submits that signature.
+
+On a showcase tenant the host holds the operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. The workspace can activate, cast one in-person demonstration ballot, and close without a hardware token. The cast response returns the access code once. The page shows it and tells the voter to copy it before leaving. Refreshing or clearing the page drops it. The code is not stored.
+
+A demonstration cast is refused for a production tenant. Production recording stays on the air-gapped machine and the authority workstation.
+
+`X-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The tenant id may be stored under `surevote.tenant`. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
+
+Voter rolls, mail-in from the browser, dispute review, outside validators, restore incidents, and row-level security stay out of this app for now.
+
+## API the workspace calls
+
+Official creates require `X-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
+
+- `POST /tenants`, `POST /persons`
+- `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`
+- `POST /seats`, `/terms`, `/races`, `/candidates`, `/race-candidates`, `/ballot-styles`
+- `POST /places`, `/devices`, `/precinct-assignments`
+- `GET /tenants/{id}/workspace` lists the tenant's rows. It does not include `HeldKey` or person secrets.
+- `POST /elections` when the caller brings operator, import, and viewing public keys
+- `POST /elections/{id}/activate` and `POST /elections/{id}/close` with signatures made outside the app
+- `POST /showcase/elections` and `POST /showcase/devices` when the host generates the keys
+- `POST /showcase/elections/{id}/activate`, `/cast`, and `/close`
+
+`POST /showcase/elections/{id}/cast` takes `{votingPrecinctId, recordingDeviceId, recordingPlaceId, personId, selections: [{raceCandidateId, value}]}`. The response is `{code, ballot, votes}`. `value` for a first-past-the-post choice is `Y`.
+
+Create a recording device before activate. Devices lock once any election of the tenant is not upcoming.
 
 ## Stack
 
-React with Vite and TypeScript. No second state library. The dev server proxies to the JDK API so the browser stays on one origin. Production serves the built files from that same origin. Do not add a separate public host that needs a new CORS policy until a deployment requires it.
+Vite, React, and TypeScript. No second state library. The dev server proxies the API prefixes to `http://127.0.0.1:8080`. Production serves `ui/dist` from the JDK API at `/app`. Do not add CORS until a separate host requires it.
 
-## Out of this page
+`./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_STATIC` overrides the static root. The default root is `ui/dist`, and it is mounted only when `index.html` is there.
 
-- Casting a ballot, in person or by mail.
-- An official workspace for noting or dismissing a dispute.
-- A browser program that recomputes the chain. A short link to the published verification instructions is enough.
-- Accounts, voter login, and a voter roll.
+From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run build` writes `ui/dist`.
+
+## Out of this app
+
+- A browser program that recomputes the chain.
+- Accounts and a voter login.
+- Mail-in recording from the browser.
+- Noting or dismissing a dispute.
+- Outside validators, restore incidents, and row-level security.

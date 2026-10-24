@@ -9,6 +9,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.HeldKey;
+import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
@@ -26,6 +28,7 @@ final class RowRules {
         org.sure_vote.entity.Vote.class,
         VoteChainEntry.class,
         CanvassStatement.class,
+        HeldKey.class,
         RestoreIncident.class,
         VoteChainValidationResult.class
     );
@@ -95,6 +98,9 @@ final class RowRules {
         }
         else if (row instanceof TenantValidator link) {
             requireValidator(connection, link, ignoredId);
+        }
+        else if (row instanceof HeldKey key) {
+            requireHeld(connection, key, ignoredId);
         }
     }
 
@@ -257,6 +263,29 @@ final class RowRules {
     private static String styleSql(final UUID ignoredId) {
         final var sql = "select 1 from ballot_style where \"election_id\" = ? and \"voting_precinct_id\" = ?"
             + " and \"race_id\" = ?";
+        return sql + except(ignoredId);
+    }
+
+    private static void requireHeld(final Connection connection, final HeldKey key, final UUID ignoredId) {
+        final var values = new ArrayList<Object>();
+        final var purpose = key.getPurpose();
+        requirePresent(key.getSubjectId(), "subjectId");
+        requireText(key.getSeed(), "seed");
+        requirePurpose(purpose);
+        values.add(purpose.wire());
+        values.add(key.getSubjectId());
+        addIgnored(values, ignoredId);
+        rejectDuplicate(connection, heldSql(ignoredId), values, "Duplicate showcase key");
+    }
+
+    private static void requirePurpose(final HeldKeyPurpose purpose) {
+        if (purpose == null) {
+            throw new IllegalArgumentException("purpose is required");
+        }
+    }
+
+    private static String heldSql(final UUID ignoredId) {
+        final var sql = "select 1 from held_key where \"purpose\" = ? and \"subject_id\" = ?";
         return sql + except(ignoredId);
     }
 

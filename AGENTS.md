@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 - This repository is a multi-module Gradle Java project. The operating model is in `docs/`. In-person and mail-in recording, lookup, issuance, and first-past-the-post, referendum, and ranked-choice tallies run against an in-memory repository. `JdbcSureVoteRepository` implements that same contract on PostgreSQL. HTTP tests still construct the in-memory store.
-- Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`. `docs/ui.md` is the plan for the React lookup page. That page is not built.
+- Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`. `docs/ui.md` describes the React app in `ui/`: the public lookup and the workspace that configures an election and runs a showcase demonstration. Outside validators, restore incidents, and row-level security are not implemented.
 
 ## Module Architecture (important boundaries)
 - `entity/`: domain records used by the service and repository.

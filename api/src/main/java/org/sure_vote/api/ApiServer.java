@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -56,10 +57,12 @@ public final class ApiServer implements HttpHandler {
     private final SureVote app;
     private final HttpServer server;
     private final ObjectMapper json = new ObjectMapper();
+    private final WorkspaceHttp workspace;
 
     private ApiServer(final SureVote app, final HttpServer server) {
         this.app = app;
         this.server = server;
+        this.workspace = new WorkspaceHttp(app, this.json);
     }
 
     public static ApiServer start(final SureVote app) {
@@ -67,15 +70,47 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static ApiServer start(final SureVote app, final int port) {
+        return start(app, port, null);
+    }
+
+    public static ApiServer start(final SureVote app, final int port, final Path staticRoot) {
         try {
-            final var server = HttpServer.create(new InetSocketAddress(port), 0);
-            final var api = new ApiServer(app, server);
-            server.createContext("/", api::handle);
-            server.start();
-            return api;
+            return listen(app, port, staticRoot);
         }
         catch (final IOException failure) {
             throw new IllegalStateException("HTTP server failed to start", failure);
+        }
+    }
+
+    private static ApiServer listen(
+        final SureVote app,
+        final int port,
+        final Path staticRoot
+    ) throws IOException {
+        final var server = HttpServer.create(new InetSocketAddress(port), 0);
+        final var api = new ApiServer(app, server);
+        final var pages = files(staticRoot);
+        server.createContext("/", api::handle);
+        mount(server, pages);
+        server.start();
+        return api;
+    }
+
+    private static AppFiles files(final Path staticRoot) {
+        if (staticRoot == null) {
+            return null;
+        }
+        else {
+            return new AppFiles(staticRoot);
+        }
+    }
+
+    private static void mount(final HttpServer server, final AppFiles pages) {
+        if (pages == null) {
+            return;
+        }
+        else {
+            server.createContext("/app", pages);
         }
     }
 
@@ -162,6 +197,9 @@ public final class ApiServer implements HttpHandler {
         }
         else if ("POST".equals(method) && this.disputeStatus(parts)) {
             this.reviewDispute(exchange, parts);
+        }
+        else if (this.workspace.handles(method, parts)) {
+            this.workspace.handle(exchange, method, parts);
         }
         else {
             this.writeJson(exchange, 404, new ErrorResource("not found"));
@@ -509,6 +547,7 @@ public final class ApiServer implements HttpHandler {
     private ElectionResource electionResource(final Election election) {
         final var resource = new ElectionResource();
         final var status = election.getStatus();
+        final var demonstration = this.app.demonstration(election.getId());
         resource.setId(election.getId());
         resource.setTenantId(election.getTenantId());
         resource.setName(election.getName());
@@ -517,6 +556,7 @@ public final class ApiServer implements HttpHandler {
         resource.setVotingEnd(CanonicalJson.timestampText(election.getVotingEnd()));
         resource.setHash(election.getHash());
         resource.setSignature(election.getSignature());
+        resource.setDemonstration(demonstration);
         return resource;
     }
 
@@ -655,7 +695,7 @@ public final class ApiServer implements HttpHandler {
         try {
             return Instant.parse(text);
         }
-        catch (final DateTimeParseException failure) {
+        catch (final DateTimeParseException | NullPointerException failure) {
             throw new ConstraintException("invalid timestamp");
         }
     }

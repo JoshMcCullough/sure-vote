@@ -47,7 +47,7 @@ A host administrator who uses the migration role can read every tenant. That use
 
 ### Showcase
 
-Showcase tenants live on the hosted service. Anyone can create a virtual election, record demo ballots, receive a QR code and a text code, open those ballots on the lookup page, and inspect the chain. Virtual elections are labeled as demonstrations. They have no legal effect. Sure Vote Systems is the operator for those elections and may hold their operator keys. A production tenant's officials and keys are not used there.
+Showcase tenants live on the hosted service. Anyone can create a virtual election, record one demonstration ballot, and open it on the lookup page. The access code is shown once and is not stored. Virtual elections are labeled as demonstrations and have no legal effect. Sure Vote Systems is the operator for those elections. The host stores that tenant's operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. A production tenant's officials and keys are not used there, and production recording stays on the air-gapped machine and the authority workstation. See [ui.md](./ui.md).
 
 ### Self-hosted instance
 
@@ -223,6 +223,8 @@ Signatures are Ed25519. The rules are in [verification.md](./verification.md).
 - **Import key.** Generated on the authority's central import workstation. Its public key is inside the signed election definition. It signs chain entries and nothing else. The private key stays on that workstation. The hosted service checks the signature and does not hold the key.
 - **Viewing key.** One X25519 key pair for the tenant, generated on the hardware token. Each election definition copies the public key, and the operator signature freezes that copy. Registration seals the voter's passphrase to it. The private key is used only by the mail-in recording component on the authority's workstation, under the same two-officer rule. It can unseal every viewing passphrase for that tenant. It is not in the db, the mail export, a voting machine, or the host. Replacing it means unsealing and resealing on the token. An election cannot name a different viewing public key unless the stored passphrases were sealed to that key.
 - **Validator key.** The validator generates it. The authority records only the public key. The authority cannot produce that validator's signature.
+
+A showcase tenant is the exception to the production custody rules above: the host stores that tenant's operator, import, viewing, and device seeds in `HeldKey`, the API never returns them, and a demonstration can be activated, cast, and closed without a hardware token.
 
 A validator's result does not change a tally and does not stop certification. The operator-signed head is the published result. A dissent stays on the public ledger next to that head.
 

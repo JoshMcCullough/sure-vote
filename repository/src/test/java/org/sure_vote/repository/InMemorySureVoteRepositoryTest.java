@@ -11,6 +11,8 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.ChainStatus;
+import org.sure_vote.entity.HeldKey;
+import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.TenantValidator;
@@ -135,6 +137,13 @@ class InMemorySureVoteRepositoryTest {
         this.assertInsertOnly(this::replaceCanvass, "CanvassStatement is insert-only");
         this.assertInsertOnly(this::replaceIncident, "RestoreIncident is insert-only");
         this.assertInsertOnly(this::replaceValidation, "VoteChainValidationResult is insert-only");
+        this.assertInsertOnly(this::replaceKey, "HeldKey is insert-only");
+    }
+
+    @Test
+    void aShowcaseKeyIsUnique() {
+        final var failure = assertThrows(IllegalArgumentException.class, this::twoKeys);
+        assertEquals("Duplicate showcase key", failure.getMessage());
     }
 
     @Test
@@ -411,6 +420,30 @@ class InMemorySureVoteRepositoryTest {
         final var incident = new RestoreIncident();
         incident.setId(UUID.randomUUID());
         this.repository.replace(incident);
+    }
+
+    private void replaceKey() {
+        final var key = new HeldKey();
+        key.setId(UUID.randomUUID());
+        this.repository.replace(key);
+    }
+
+    private void twoKeys() {
+        final var subject = UUID.randomUUID();
+        final var first = this.held(subject);
+        final var second = this.held(subject);
+        this.repository.insert(first);
+        this.repository.insert(second);
+    }
+
+    private HeldKey held(final UUID subject) {
+        final var key = new HeldKey();
+        key.setId(UUID.randomUUID());
+        key.setTenantId(UUID.randomUUID());
+        key.setPurpose(HeldKeyPurpose.OPERATOR);
+        key.setSubjectId(subject);
+        key.setSeed("ab".repeat(32));
+        return key;
     }
 
     private void replaceValidation() {

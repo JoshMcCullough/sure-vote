@@ -1,9 +1,12 @@
 package org.sure_vote.api;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +18,7 @@ import org.sure_vote.service.SureVote;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApiServerTest {
     private ApiServer server;
@@ -194,6 +198,30 @@ class ApiServerTest {
     }
 
     @Test
+    void aShowcaseElectionWithoutAWindowIsRejected() throws Exception {
+        final var response = this.send("POST", "/showcase/elections", "{\"name\":\"Nope\"}");
+        final var message = this.error(response.body());
+        assertEquals(400, response.statusCode());
+        assertEquals("invalid timestamp", message);
+    }
+
+    @Test
+    void staticFilesStayUnderTheAppRoot() throws Exception {
+        final var root = Files.createTempDirectory("sure-vote-app");
+        final var page = this.pageFile(root);
+        final var script = this.scriptFile(root);
+        final var secret = this.secretFile(root);
+        final var extra = this.staticServer(root);
+        try {
+            this.assertStatic(extra, secret);
+        }
+        finally {
+            extra.close();
+            this.deleteStatic(script, page, secret, root);
+        }
+    }
+
+    @Test
     void theWrongMethodIsNotFound() throws Exception {
         final var health = this.send("POST", "/health", "{}");
         final var tenants = this.send("GET", "/tenants", null);
@@ -203,6 +231,111 @@ class ApiServerTest {
         assertEquals("not found", healthMessage);
         assertEquals(404, tenants.statusCode());
         assertEquals("not found", tenantsMessage);
+    }
+
+    private Path pageFile(final Path root) throws IOException {
+        final var page = root.resolve("index.html");
+        Files.writeString(page, "<p>SureVote page</p>");
+        return page;
+    }
+
+    private Path scriptFile(final Path root) throws IOException {
+        final var assets = root.resolve("assets");
+        final var script = assets.resolve("app.js");
+        Files.createDirectories(assets);
+        Files.writeString(script, "console.log(1)");
+        return script;
+    }
+
+    private Path secretFile(final Path root) throws IOException {
+        final var parent = root.getParent();
+        final var fileName = root.getFileName();
+        final var name = fileName.toString();
+        final var secret = parent.resolve(name + "-secret.txt");
+        Files.writeString(secret, "hidden-secret");
+        return secret;
+    }
+
+    private ApiServer staticServer(final Path root) {
+        final var repository = new InMemorySureVoteRepository();
+        final var app = new SureVote(repository);
+        return ApiServer.start(app, 0, root);
+    }
+
+    private void assertStatic(final ApiServer extra, final Path secret) throws Exception {
+        final var origin = "http://127.0.0.1:" + extra.port();
+        final var fileName = secret.getFileName();
+        final var name = fileName.toString();
+        final var page = this.get(origin, "/app");
+        final var slash = this.get(origin, "/app/");
+        final var workspace = this.get(origin, "/app/workspace");
+        final var script = this.get(origin, "/app/assets/app.js");
+        final var missing = this.get(origin, "/app/assets/missing.js");
+        final var escaped = this.get(origin, "/app/%2e%2e/" + name);
+        final var posted = this.getPost(origin);
+        final var health = this.get(origin, "/health");
+        final var pageBody = page.body();
+        final var slashBody = slash.body();
+        final var workspaceBody = workspace.body();
+        final var headers = page.headers();
+        final var header = headers.firstValue("content-type");
+        final var type = header.orElse("");
+        final var escapedBody = escaped.body();
+        assertEquals(200, page.statusCode());
+        assertEquals("<p>SureVote page</p>", pageBody);
+        assertTrue(type.startsWith("text/html"));
+        assertEquals(200, slash.statusCode());
+        assertEquals(pageBody, slashBody);
+        assertEquals(200, workspace.statusCode());
+        assertEquals(pageBody, workspaceBody);
+        assertEquals(200, script.statusCode());
+        assertEquals("console.log(1)", script.body());
+        assertEquals(404, missing.statusCode());
+        assertEquals(404, escaped.statusCode());
+        assertFalse(escapedBody.contains("hidden-secret"));
+        assertEquals(405, posted.statusCode());
+        assertEquals(200, health.statusCode());
+    }
+
+    private HttpResponse<String> get(final String origin, final String path) throws Exception {
+        final var request = this.getRequest(origin, path);
+        return this.client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpRequest getRequest(final String origin, final String path) {
+        final var builder = HttpRequest.newBuilder();
+        final var uri = URI.create(origin + path);
+        builder.uri(uri);
+        builder.GET();
+        return builder.build();
+    }
+
+    private HttpResponse<String> getPost(final String origin) throws Exception {
+        final var request = this.postApp(origin);
+        return this.client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpRequest postApp(final String origin) {
+        final var builder = HttpRequest.newBuilder();
+        final var uri = URI.create(origin + "/app");
+        final var publisher = HttpRequest.BodyPublishers.ofString("");
+        builder.uri(uri);
+        builder.POST(publisher);
+        return builder.build();
+    }
+
+    private void deleteStatic(
+        final Path script,
+        final Path page,
+        final Path secret,
+        final Path root
+    ) throws IOException {
+        final var assets = script.getParent();
+        Files.deleteIfExists(script);
+        Files.deleteIfExists(assets);
+        Files.deleteIfExists(page);
+        Files.deleteIfExists(secret);
+        Files.deleteIfExists(root);
     }
 
     private HttpResponse<String> send(final String method, final String path, final String body) throws Exception {

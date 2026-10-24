@@ -23,6 +23,7 @@ import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.ContentFile;
 import org.sure_vote.entity.ElectedOfficial;
 import org.sure_vote.entity.Election;
+import org.sure_vote.entity.HeldKey;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.Locality;
@@ -63,6 +64,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         ElectedOfficial.class,
         Election.class,
         ElectionVotingPrecinctAssignment.class,
+        HeldKey.class,
         Locality.class,
         Person.class,
         PrecinctDistrict.class,

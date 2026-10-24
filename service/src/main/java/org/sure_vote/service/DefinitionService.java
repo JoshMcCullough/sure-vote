@@ -25,6 +25,7 @@ import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.VoteChain;
+import org.sure_vote.entity.VotingDistrict;
 import org.sure_vote.entity.VotingPrecinct;
 import org.sure_vote.repository.SureVoteRepository;
 
@@ -62,6 +63,12 @@ final class DefinitionService {
         final var locality = this.stores.require(Locality.class, address.getLocalityId());
         this.stores.sameTenant(address.getTenantId(), locality.getTenantId(), "Locality");
         return this.stores.add(address, actor);
+    }
+
+    VotingDistrict createVotingDistrict(final VotingDistrict district, final UUID actor) {
+        final var locality = this.stores.require(Locality.class, district.getLocalityId());
+        this.stores.sameTenant(district.getTenantId(), locality.getTenantId(), "Locality");
+        return this.stores.add(district, actor);
     }
 
     VotingPrecinct createPrecinct(final VotingPrecinct precinct, final UUID actor) {
@@ -215,6 +222,12 @@ final class DefinitionService {
 
     Election election(final UUID id) {
         return this.stores.require(Election.class, id);
+    }
+
+    boolean demonstration(final UUID electionId) {
+        final var election = this.stores.require(Election.class, electionId);
+        final var tenant = this.stores.require(Tenant.class, election.getTenantId());
+        return tenant.getKind() == TenantKind.SHOWCASE;
     }
 
     /**

@@ -10,6 +10,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.HeldKey;
+import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
@@ -32,6 +34,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         Vote.class,
         VoteChainEntry.class,
         CanvassStatement.class,
+        HeldKey.class,
         RestoreIncident.class,
         VoteChainValidationResult.class
     );
@@ -217,6 +220,9 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         else if (row instanceof TenantValidator link) {
             this.requireValidator(link, ignoredId);
         }
+        else if (row instanceof HeldKey key) {
+            this.requireHeld(key, ignoredId);
+        }
     }
 
     private void requireBallot(final Ballot ballot, final UUID ignoredId) {
@@ -389,6 +395,33 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
             final var sameId = this.sameId(existing.getId(), ignoredId);
             if (!sameId && sameTenant && sameValidator) {
                 throw new IllegalArgumentException("Duplicate tenant validator");
+            }
+        }
+    }
+
+    private void requireHeld(final HeldKey key, final UUID ignoredId) {
+        this.requirePresent(key.getSubjectId(), "subjectId");
+        this.requireText(key.getSeed(), "seed");
+        this.requirePurpose(key.getPurpose());
+        this.scanHeld(key, ignoredId);
+    }
+
+    private void requirePurpose(final HeldKeyPurpose purpose) {
+        if (purpose == null) {
+            throw new IllegalArgumentException("purpose is required");
+        }
+    }
+
+    private void scanHeld(final HeldKey key, final UUID ignoredId) {
+        final var rows = this.listLocked(HeldKey.class);
+        for (final var existing : rows) {
+            final var purpose = existing.getPurpose();
+            final var samePurpose = purpose == key.getPurpose();
+            final var subjectId = existing.getSubjectId();
+            final var sameSubject = subjectId.equals(key.getSubjectId());
+            final var sameId = this.sameId(existing.getId(), ignoredId);
+            if (!sameId && samePurpose && sameSubject) {
+                throw new IllegalArgumentException("Duplicate showcase key");
             }
         }
     }

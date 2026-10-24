@@ -41,6 +41,7 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 - `resource` — projections returned to clients.
 - `api` — HTTP. Calls the service and returns resources.
 - `style-checks` — Checkstyle rules from [style.md](./docs/style.md).
+- `ui` — React workspace and public lookup, served at `/app`.
 
 ## Code
 
@@ -52,9 +53,17 @@ Also implemented: issuance during an active election, void before a machine sess
 
 Mail-in and absentee recording run on the authority workstation. The viewing passphrase is stored only as a box sealed to the election viewing key. `voterAccessHash` is Argon2id of that passphrase with the raw access code as the salt. The ballot and the accepted issuance commit only after delivery of the code is accepted. A refused handoff rolls both back. The host import checks the sealed ballot and does not receive the code or the passphrase. `POST /elections/{id}/lookup` takes the code and the passphrase in the body. `GET /elections/{id}/ballots?code=` stays the in-person lookup.
 
-A voter files a `BallotDispute` with the same code. The claim is private. The voter can read it back with that code. `GET /elections/{id}/disputes/count` publishes the count and not the statement. An official with `X-Actor-Id` may mark a claim `noted` or `dismissed`. None of those steps change the ballot, the chain, or the tally. The React lookup page is planned in [ui.md](./docs/ui.md) and is not built.
+A voter files a `BallotDispute` with the same code. The claim is private. The voter can read it back with that code. `GET /elections/{id}/disputes/count` publishes the count and not the statement. An official with `X-Actor-Id` may mark a claim `noted` or `dismissed`. None of those steps change the ballot, the chain, or the tally.
+
+The React app in `ui/` is the public lookup and the election workspace. On a showcase tenant it configures an election, casts one demonstration ballot, shows the access code once, and closes. On a production tenant the same configuration screens apply, and activate and close still take a signature made outside the app. The browser does not hold a production private key. See [ui.md](./docs/ui.md).
 
 PostgreSQL stores the same rows. Row-level security, the role split, triggers, and foreign keys from the PostgreSQL strategy are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
+
+## Run
+
+`./gradlew :api:run` starts the API on port 8080 with an in-memory store. `SUREVOTE_JDBC_URL`, `SUREVOTE_JDBC_USER`, and `SUREVOTE_JDBC_PASSWORD` select PostgreSQL and run migrations first. `SUREVOTE_PORT` changes the port. When `ui/dist/index.html` exists, the API serves the built app at `/app`. `SUREVOTE_STATIC` overrides that directory.
+
+From `ui/`, `npm install` then `npm run dev` starts the dev server and proxies the API at `http://127.0.0.1:8080`. `npm run build` writes `ui/dist`.
 
 ## Documents
 
@@ -65,4 +74,4 @@ PostgreSQL stores the same rows. Row-level security, the role split, triggers, a
 - [Constraints](./docs/constraints.md)
 - [PostgreSQL strategy](./docs/postgres-strategy.md)
 - [Code style](./docs/style.md)
-- [Lookup page plan](./docs/ui.md)
+- [Election app](./docs/ui.md)

@@ -275,6 +275,17 @@ A machine or workstation that records ballots and signs them. An in-person machi
 - `publicKey` (String): The key that verifies ballots and votes this device signs.
 - `status` (Enum): `active` or `retired`.
 
+### HeldKey
+A private seed the host holds for a showcase tenant. The API does not return this table. A production tenant does not use it. Insert-only.
+
+- Administrative audit fields
+- `tenant` (Reference to Tenant)
+- `purpose` (Enum): `operator`, `import`, `device`, or `viewing`.
+- `subject` (UUID): The election, for `operator`, `import`, and `viewing`. The recording device, for `device`.
+- `seed` (String): Lowercase hex of the 32-byte private seed.
+
+Unique on (`purpose`, `subject`).
+
 ### Ballot
 A recorded ballot. The row has no reference to `Person`. The voter holds an access code, delivered as a QR code and as text. The row stores the lookup hash from [verification.md](./verification.md), not the code. Insert-only. A recorded ballot is final. There is no replacement pointer. See [system.md](./system.md).
 

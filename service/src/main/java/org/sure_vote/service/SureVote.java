@@ -23,6 +23,7 @@ import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.Term;
+import org.sure_vote.entity.VotingDistrict;
 import org.sure_vote.entity.VotingPrecinct;
 import org.sure_vote.repository.SureVoteRepository;
 
@@ -32,6 +33,8 @@ public final class SureVote {
     private final LookupService lookup;
     private final TallyService tally;
     private final DisputeService disputes;
+    private final ShowcaseService showcase;
+    private final WorkspaceCatalog catalog;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -41,6 +44,8 @@ public final class SureVote {
         this.lookup = new LookupService(repository, stores);
         this.tally = new TallyService(repository, stores);
         this.disputes = new DisputeService(repository, stores, this.lookup);
+        this.showcase = new ShowcaseService(repository, stores, this);
+        this.catalog = new WorkspaceCatalog(repository, stores);
     }
 
     public Tenant createTenant(final Tenant tenant, final UUID actor) {
@@ -57,6 +62,10 @@ public final class SureVote {
 
     public Address createAddress(final Address address, final UUID actor) {
         return this.definitions.createAddress(address, actor);
+    }
+
+    public VotingDistrict createVotingDistrict(final VotingDistrict district, final UUID actor) {
+        return this.definitions.createVotingDistrict(district, actor);
     }
 
     public VotingPrecinct createPrecinct(final VotingPrecinct precinct, final UUID actor) {
@@ -128,6 +137,42 @@ public final class SureVote {
 
     public Election election(final UUID id) {
         return this.definitions.election(id);
+    }
+
+    public boolean demonstration(final UUID electionId) {
+        return this.definitions.demonstration(electionId);
+    }
+
+    public WorkspaceView workspace(final UUID tenantId, final UUID actor) {
+        return this.catalog.load(tenantId, actor);
+    }
+
+    public Election createShowcaseElection(final Election election, final UUID actor) {
+        return this.showcase.createElection(election, actor);
+    }
+
+    public RecordingDevice createShowcaseDevice(final RecordingDevice device, final UUID actor) {
+        return this.showcase.createDevice(device, actor);
+    }
+
+    public Election activateShowcase(final UUID electionId, final UUID actor) {
+        return this.showcase.activate(electionId, actor);
+    }
+
+    public DemoCast castShowcase(
+        final UUID electionId,
+        final UUID precinctId,
+        final UUID deviceId,
+        final UUID placeId,
+        final UUID personId,
+        final List<DemoSelection> selections,
+        final UUID actor
+    ) {
+        return this.showcase.cast(electionId, precinctId, deviceId, placeId, personId, selections, actor);
+    }
+
+    public Election closeShowcase(final UUID electionId, final UUID actor) {
+        return this.showcase.close(electionId, actor);
     }
 
     public Ballot importBallot(final ImportBallot request) {
