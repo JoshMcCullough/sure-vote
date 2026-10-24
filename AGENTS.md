@@ -2,7 +2,7 @@
 
 ## Project Snapshot
 - This repository is a multi-module Gradle Java project. The operating model is in `docs/`. In-person and mail-in recording, lookup, issuance, and first-past-the-post, referendum, and ranked-choice tallies run against an in-memory repository. `JdbcSureVoteRepository` implements that same contract on PostgreSQL. HTTP tests still construct the in-memory store.
-- Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`.
+- Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`. `docs/ui.md` is the plan for the React lookup page. That page is not built.
 
 ## Module Architecture (important boundaries)
 - `entity/`: domain records used by the service and repository.
@@ -41,7 +41,7 @@
 - A pollbook may void a `BallotIssuance` only before the voter starts a machine session. Do not store a session ticket on the ballot. The sealed ballot is the ballot of record. `absentee` uses the same path as `mail-in`.
 - The showcase deployment must not collect real voter rolls or SSNs. Product goals are in `README.md` and `docs/system.md`.
 - The hosted service is multi-tenant. Sure Vote Systems is the copyright holder and the normal host. A small locality is a tenant, not its own deployment. Every tenant-owned row carries `tenant_id`. On a production tenant the host does not hold operator, import, viewing, or device private keys. Hosting rules are in `docs/system.md`.
-- A recorded ballot is final. Do not add a replacement pointer or a superseding ballot. A `BallotDispute` does not change ledger rows.
+- A recorded ballot is final. Do not add a replacement pointer or a superseding ballot. A voter files a `BallotDispute` with the access code. The public response is a count. An official may mark the claim `noted` or `dismissed`. The dispute does not change the ballot, the chain, or the tally, and the access code is not stored on it.
 - The repository is source-available under `LICENSE`, not an open-source license. Chain verification is specified in `docs/verification.md` and must not require running this codebase.
 - If you introduce a framework (e.g., Spring), document it in `README.md` and update only relevant module `build.gradle` files.
 - Prefer the smallest change that keeps the in-person path and its tests working.
@@ -59,6 +59,7 @@
 - `docs/constraints.md`
 - `docs/postgres-strategy.md`
 - `docs/style.md`
+- `docs/ui.md`
 - `settings.gradle`
 - `build.gradle`
 - `api/build.gradle`

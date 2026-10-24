@@ -20,8 +20,10 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotType;
+import org.sure_vote.entity.DisputeStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Tenant;
@@ -31,6 +33,9 @@ import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.WireValue;
 import org.sure_vote.entity.Wires;
 import org.sure_vote.resource.BallotResource;
+import org.sure_vote.resource.DisputeCountResource;
+import org.sure_vote.resource.DisputeListResource;
+import org.sure_vote.resource.DisputeResource;
 import org.sure_vote.resource.ElectionResource;
 import org.sure_vote.resource.ErrorResource;
 import org.sure_vote.resource.HashResource;
@@ -143,6 +148,21 @@ public final class ApiServer implements HttpHandler {
         else if ("POST".equals(method) && this.electionAction(parts, "lookup")) {
             this.lookupPosted(exchange, parts);
         }
+        else if ("GET".equals(method) && this.electionNested(parts, "disputes", "count")) {
+            this.disputeCount(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionNested(parts, "disputes", "lookup")) {
+            this.disputeLookup(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionAction(parts, "disputes")) {
+            this.fileDispute(exchange, parts);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "disputes")) {
+            this.listDisputes(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.disputeStatus(parts)) {
+            this.reviewDispute(exchange, parts);
+        }
         else {
             this.writeJson(exchange, 404, new ErrorResource("not found"));
         }
@@ -243,6 +263,44 @@ public final class ApiServer implements HttpHandler {
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 
+    private void fileDispute(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, DisputeBody.class);
+        final var saved = this.app.fileDispute(id, body.code, body.passphrase, body.statement);
+        this.writeJson(exchange, 201, this.disputeResource(saved));
+    }
+
+    private void disputeLookup(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, DisputeBody.class);
+        final var rows = this.app.disputesForCode(id, body.code, body.passphrase);
+        this.writeJson(exchange, 200, this.disputeList(rows));
+    }
+
+    private void disputeCount(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var count = this.app.disputeCount(id);
+        final var resource = new DisputeCountResource();
+        resource.setCount(count);
+        this.writeJson(exchange, 200, resource);
+    }
+
+    private void listDisputes(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.actor(exchange);
+        final var id = this.id(parts.get(1));
+        final var rows = this.app.listDisputes(id, actor);
+        this.writeJson(exchange, 200, this.disputeList(rows));
+    }
+
+    private void reviewDispute(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.actor(exchange);
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, DisputeStatusBody.class);
+        final var status = this.wire(DisputeStatus.values(), body.status, "dispute status");
+        final var saved = this.app.setDisputeStatus(id, status, actor);
+        this.writeJson(exchange, 200, this.disputeResource(saved));
+    }
+
     private boolean named(final List<String> parts, final String name) {
         if (parts.size() != 1) {
             return false;
@@ -258,6 +316,33 @@ public final class ApiServer implements HttpHandler {
         }
         else {
             return "elections".equals(parts.getFirst());
+        }
+    }
+
+    private boolean electionNested(final List<String> parts, final String action, final String leaf) {
+        if (parts.size() != 4) {
+            return false;
+        }
+        else {
+            return this.nestedMatch(parts, action, leaf);
+        }
+    }
+
+    private boolean nestedMatch(final List<String> parts, final String action, final String leaf) {
+        final var root = parts.get(0);
+        final var name = parts.get(2);
+        final var child = parts.get(3);
+        return "elections".equals(root) && action.equals(name) && leaf.equals(child);
+    }
+
+    private boolean disputeStatus(final List<String> parts) {
+        if (parts.size() != 3) {
+            return false;
+        }
+        else {
+            final var root = parts.get(0);
+            final var action = parts.get(2);
+            return "disputes".equals(root) && "status".equals(action);
         }
     }
 
@@ -463,6 +548,31 @@ public final class ApiServer implements HttpHandler {
         return resource;
     }
 
+    private DisputeResource disputeResource(final BallotDispute dispute) {
+        final var resource = new DisputeResource();
+        final var status = dispute.getStatus();
+        resource.setId(dispute.getId());
+        resource.setBallotId(dispute.getBallotId());
+        resource.setStatus(status.wire());
+        resource.setStatement(dispute.getStatement());
+        resource.setFiledAt(CanonicalJson.timestampText(dispute.getFiledAt()));
+        return resource;
+    }
+
+    private DisputeListResource disputeList(final List<BallotDispute> rows) {
+        final var resources = new ArrayList<DisputeResource>();
+        final var resource = new DisputeListResource();
+        this.addDisputes(resources, rows);
+        resource.setDisputes(resources);
+        return resource;
+    }
+
+    private void addDisputes(final List<DisputeResource> resources, final List<BallotDispute> rows) {
+        for (final var dispute : rows) {
+            resources.add(this.disputeResource(dispute));
+        }
+    }
+
     private LookupResource lookupResource(final LookupResult result) {
         final var resource = new LookupResource();
         final var votes = new ArrayList<VoteResource>();
@@ -646,6 +756,16 @@ public final class ApiServer implements HttpHandler {
     public static final class LookupBody {
         public String code;
         public String passphrase;
+    }
+
+    public static final class DisputeBody {
+        public String code;
+        public String passphrase;
+        public String statement;
+    }
+
+    public static final class DisputeStatusBody {
+        public String status;
     }
 
     public static final class VoteBody {

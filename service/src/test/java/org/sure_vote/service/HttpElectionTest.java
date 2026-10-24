@@ -16,6 +16,7 @@ import org.sure_vote.entity.IssuanceStatus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpElectionTest {
     private HttpClient client;
@@ -39,6 +40,12 @@ class HttpElectionTest {
     void importLookupAndClose() throws Exception {
         final var world = SampleElection.fptp();
         this.use(world, () -> this.record(world));
+    }
+
+    @Test
+    void disputeCountOmitsTheStatement() throws Exception {
+        final var world = SampleElection.fptp();
+        this.use(world, () -> this.dispute(world));
     }
 
     private void activate(final SampleElection world) throws Exception {
@@ -122,6 +129,71 @@ class HttpElectionTest {
         assertEquals(200, closed.statusCode());
         assertEquals("historical", status);
         assertEquals(ElectionStatus.HISTORICAL, election.getStatus());
+    }
+
+    private void dispute(final SampleElection world) throws Exception {
+        final var ballot = world.castOne(world.slotA, "Y");
+        final var code = world.codes.get(ballot.getId());
+        final var filed = this.fileDispute(world, code);
+        this.assertDisputeHttp(world, code, filed);
+    }
+
+    private HttpResponse<String> fileDispute(final SampleElection world, final String code) throws Exception {
+        final var path = "/elections/" + world.electionId + "/disputes";
+        final var body = "{\"code\":\"" + code + "\",\"statement\":\"the receipt shows a different choice\"}";
+        return this.send("POST", path, body);
+    }
+
+    private void assertDisputeHttp(
+        final SampleElection world,
+        final String code,
+        final HttpResponse<String> filed
+    ) throws Exception {
+        final var filedBody = filed.body();
+        final var id = this.text(filedBody, "id");
+        final var electionPath = "/elections/" + world.electionId + "/disputes";
+        final var countPath = electionPath + "/count";
+        final var counted = this.sendUnsigned("GET", countPath, null);
+        final var countedBody = counted.body();
+        final var lookupPath = electionPath + "/lookup";
+        final var lookupBody = "{\"code\":\"" + code + "\"}";
+        final var looked = this.send("POST", lookupPath, lookupBody);
+        final var lookedBody = looked.body();
+        final var hidden = this.sendUnsigned("GET", electionPath, null);
+        final var hiddenBody = hidden.body();
+        final var statusPath = "/disputes/" + id + "/status";
+        final var denied = this.sendUnsigned("POST", statusPath, "{\"status\":\"noted\"}");
+        final var noted = this.send("POST", statusPath, "{\"status\":\"noted\"}");
+        final var notedBody = noted.body();
+        assertEquals(201, filed.statusCode());
+        assertEquals("open", this.text(filedBody, "status"));
+        assertEquals("the receipt shows a different choice", this.text(filedBody, "statement"));
+        assertFalse(filedBody.contains(code));
+        assertEquals(200, counted.statusCode());
+        assertEquals("1", this.text(countedBody, "count"));
+        assertFalse(countedBody.contains("receipt"));
+        assertEquals(200, looked.statusCode());
+        assertTrue(lookedBody.contains("the receipt shows a different choice"));
+        assertEquals(400, hidden.statusCode());
+        assertEquals("X-Actor-Id is required", this.text(hiddenBody, "error"));
+        assertEquals(400, denied.statusCode());
+        assertEquals(200, noted.statusCode());
+        assertEquals("noted", this.text(notedBody, "status"));
+    }
+
+    private HttpResponse<String> sendUnsigned(final String method, final String path, final String body)
+        throws Exception {
+        final var request = this.unsigned(method, path, body);
+        return this.client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpRequest unsigned(final String method, final String path, final String body) {
+        final var builder = HttpRequest.newBuilder();
+        final var uri = URI.create(this.base + path);
+        builder.uri(uri);
+        builder.header("Content-Type", "application/json");
+        this.addBody(builder, method, body);
+        return builder.build();
     }
 
     private void use(final SampleElection world, final Work work) throws Exception {

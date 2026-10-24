@@ -1,5 +1,6 @@
 package org.sure_vote.service;
 
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Entity;
@@ -77,6 +78,16 @@ final class Copies {
         copy.setCitizenshipId(source.getCitizenshipId());
         copy.setSsn(source.getSsn());
         copy.setVoterId(source.getVoterId());
+        return copy;
+    }
+
+    static BallotDispute dispute(final BallotDispute source) {
+        final var copy = new BallotDispute();
+        audit(source, copy);
+        copy.setBallotId(source.getBallotId());
+        copy.setStatement(source.getStatement());
+        copy.setStatus(source.getStatus());
+        copy.setFiledAt(source.getFiledAt());
         return copy;
     }
 

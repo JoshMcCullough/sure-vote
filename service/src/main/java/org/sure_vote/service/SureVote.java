@@ -1,13 +1,16 @@
 package org.sure_vote.service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import org.sure_vote.entity.Address;
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.Candidate;
+import org.sure_vote.entity.DisputeStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
@@ -28,6 +31,7 @@ public final class SureVote {
     private final RecordingService recording;
     private final LookupService lookup;
     private final TallyService tally;
+    private final DisputeService disputes;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -36,6 +40,7 @@ public final class SureVote {
         this.recording = new RecordingService(repository, stores, electionDefinitions);
         this.lookup = new LookupService(repository, stores);
         this.tally = new TallyService(repository, stores);
+        this.disputes = new DisputeService(repository, stores, this.lookup);
     }
 
     public Tenant createTenant(final Tenant tenant, final UUID actor) {
@@ -148,6 +153,35 @@ public final class SureVote {
 
     public String canvassPayload(final UUID electionId) {
         return this.tally.canvassPayload(electionId);
+    }
+
+    public BallotDispute fileDispute(
+        final UUID electionId,
+        final String code,
+        final String passphrase,
+        final String statement
+    ) {
+        return this.disputes.file(electionId, code, passphrase, statement);
+    }
+
+    public List<BallotDispute> disputesForCode(
+        final UUID electionId,
+        final String code,
+        final String passphrase
+    ) {
+        return this.disputes.forCode(electionId, code, passphrase);
+    }
+
+    public int disputeCount(final UUID electionId) {
+        return this.disputes.count(electionId);
+    }
+
+    public List<BallotDispute> listDisputes(final UUID electionId, final UUID actor) {
+        return this.disputes.list(electionId, actor);
+    }
+
+    public BallotDispute setDisputeStatus(final UUID id, final DisputeStatus status, final UUID actor) {
+        return this.disputes.setStatus(id, status, actor);
     }
 
     public Election close(

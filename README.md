@@ -52,6 +52,8 @@ Also implemented: issuance during an active election, void before a machine sess
 
 Mail-in and absentee recording run on the authority workstation. The viewing passphrase is stored only as a box sealed to the election viewing key. `voterAccessHash` is Argon2id of that passphrase with the raw access code as the salt. The ballot and the accepted issuance commit only after delivery of the code is accepted. A refused handoff rolls both back. The host import checks the sealed ballot and does not receive the code or the passphrase. `POST /elections/{id}/lookup` takes the code and the passphrase in the body. `GET /elections/{id}/ballots?code=` stays the in-person lookup.
 
+A voter files a `BallotDispute` with the same code. The claim is private. The voter can read it back with that code. `GET /elections/{id}/disputes/count` publishes the count and not the statement. An official with `X-Actor-Id` may mark a claim `noted` or `dismissed`. None of those steps change the ballot, the chain, or the tally. The React lookup page is planned in [ui.md](./docs/ui.md) and is not built.
+
 PostgreSQL stores the same rows. Row-level security, the role split, triggers, and foreign keys from the PostgreSQL strategy are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
 
 ## Documents
@@ -63,3 +65,4 @@ PostgreSQL stores the same rows. Row-level security, the role split, triggers, a
 - [Constraints](./docs/constraints.md)
 - [PostgreSQL strategy](./docs/postgres-strategy.md)
 - [Code style](./docs/style.md)
+- [Lookup page plan](./docs/ui.md)
