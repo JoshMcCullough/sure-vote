@@ -58,6 +58,9 @@ final class SampleElection {
     final SigningKey operator;
     final SigningKey importKey;
     final SigningKey deviceKey;
+    SigningKey workstationKey;
+    byte[] viewingSeed;
+    String viewingPublic = VIEWING_KEY;
     final Map<UUID, String> codes = new LinkedHashMap<>();
     Instant ballotTimestamp = Instant.parse("2026-11-03T12:00:00Z");
     Instant entryTimestamp = Instant.parse("2026-11-05T14:05:01.123Z");
@@ -67,6 +70,8 @@ final class SampleElection {
     UUID precinctId;
     UUID placeId;
     UUID deviceId;
+    UUID officeId;
+    UUID workstationId;
     UUID electionId;
     UUID seatId;
     UUID termId;
@@ -103,6 +108,25 @@ final class SampleElection {
 
     static SampleElection fptp() {
         final var world = SampleElection.upcomingFptp();
+        world.activate();
+        return world;
+    }
+
+    static SampleElection mailOffice() {
+        final var world = new SampleElection();
+        final var seed = AccessCodes.generate();
+        final var publicKey = ViewingBoxes.publicKey(seed);
+        world.viewingSeed = seed;
+        world.viewingPublic = Digests.hex(publicKey);
+        world.readyFptp();
+        world.addOffice();
+        world.activate();
+        return world;
+    }
+
+    static SampleElection hostedMail() {
+        final var world = SampleElection.upcomingFptp();
+        world.addOffice();
         world.activate();
         return world;
     }
@@ -266,8 +290,42 @@ final class SampleElection {
             sealed.timestamp(),
             sealed.voterAccessHash(),
             signature,
-            sealed.votes()
+            sealed.votes(),
+            sealed.personId()
         );
+    }
+
+    void addOffice() {
+        final var key = Signatures.generate();
+        final var place = this.office();
+        final var device = this.workstation(key);
+        this.workstationKey = key;
+        this.officeId = this.savedPlace(place);
+        this.workstationId = this.savedDevice(device);
+    }
+
+    ImportBallot sealedMail(final BallotType type, final UUID personId, final UUID recordedBy) {
+        final var raw = AccessCodes.generate();
+        final var hash = AccessCodes.inPersonHash(raw);
+        final var nonce = this.nextNonce();
+        final var selection = new SealSelection(this.slotA, "Y", nonce);
+        final var selections = List.of(selection);
+        final var request = new SealRequest(
+            this.tenantId,
+            this.actor,
+            this.electionId,
+            this.precinctId,
+            type,
+            this.workstationId,
+            this.officeId,
+            recordedBy,
+            this.ballotTimestamp,
+            hash,
+            this.entryTimestamp,
+            selections
+        );
+        final var sealed = Sealer.seal(this.repository, request, this.workstationKey, this.importKey);
+        return sealed.withPerson(personId);
     }
 
     RecordingDevice device() {
@@ -503,8 +561,28 @@ final class SampleElection {
         election.setVotingEnd(this.votingEnd);
         election.setOperatorPublicKey(operatorKey);
         election.setImportPublicKey(importKeyHex);
-        election.setViewingPublicKey(VIEWING_KEY);
+        election.setViewingPublicKey(this.viewingPublic);
         return election;
+    }
+
+    private RecordingPlace office() {
+        final var place = new RecordingPlace();
+        place.setTenantId(this.tenantId);
+        place.setLocalityId(this.localityId);
+        place.setName("Central office");
+        place.setKind(RecordingPlaceKind.CENTRAL_OFFICE);
+        return place;
+    }
+
+    private RecordingDevice workstation(final SigningKey key) {
+        final var device = new RecordingDevice();
+        final var publicKey = key.publicKey();
+        device.setTenantId(this.tenantId);
+        device.setName("Workstation 1");
+        device.setKind(RecordingDeviceKind.CENTRAL_WORKSTATION);
+        device.setStatus(RecordingDeviceStatus.ACTIVE);
+        device.setPublicKey(publicKey);
+        return device;
     }
 
     private Seat seat() {

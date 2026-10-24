@@ -17,12 +17,16 @@ final class LookupService {
         this.stores = stores;
     }
 
-    LookupResult lookup(final UUID electionId, final String code) {
+    LookupResult lookup(final UUID electionId, final String code, final String passphrase) {
         final var raw = this.decode(code);
         final var hash = AccessCodes.inPersonHash(raw);
-        final var ballot = this.find(electionId, hash);
-        final var votes = this.votesFor(ballot.getId());
-        return new LookupResult(ballot, votes);
+        final var ballot = this.findOrNull(electionId, hash);
+        if (ballot != null) {
+            return this.result(ballot);
+        }
+        else {
+            return this.byPassphrase(electionId, raw, passphrase);
+        }
     }
 
     private byte[] decode(final String code) {
@@ -45,14 +49,49 @@ final class LookupService {
         }
     }
 
+    private LookupResult result(final Ballot ballot) {
+        final var votes = this.votesFor(ballot.getId());
+        return new LookupResult(ballot, votes);
+    }
+
+    private LookupResult byPassphrase(final UUID electionId, final byte[] raw, final String passphrase) {
+        final var normalized = Passphrases.normalize(passphrase);
+        if (normalized.isEmpty()) {
+            throw new ConstraintException("no ballot for that code");
+        }
+        else {
+            return this.byMailHash(electionId, raw, normalized);
+        }
+    }
+
+    private LookupResult byMailHash(final UUID electionId, final byte[] raw, final String normalized) {
+        final var hash = AccessCodes.mailHash(normalized, raw);
+        final var ballot = this.find(electionId, hash);
+        return this.result(ballot);
+    }
+
     private Ballot find(final UUID electionId, final String hash) {
+        final var ballot = this.findOrNull(electionId, hash);
+        if (ballot == null) {
+            throw new ConstraintException("no ballot for that code");
+        }
+        else {
+            return ballot;
+        }
+    }
+
+    private Ballot findOrNull(final UUID electionId, final String hash) {
         final var matched = new ArrayList<Ballot>();
         final var ballots = this.repository.list(Ballot.class);
         for (final var ballot : ballots) {
             this.collectBallot(matched, ballot, electionId, hash);
         }
-        this.stores.require(!matched.isEmpty(), "no ballot for that code");
-        return matched.getFirst();
+        if (matched.isEmpty()) {
+            return null;
+        }
+        else {
+            return matched.getFirst();
+        }
     }
 
     private void collectBallot(

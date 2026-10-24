@@ -95,8 +95,14 @@ class ElectionFlowTest {
         final var mail = world.typed(BallotType.MAIL_IN);
         final var absentee = world.typed(BallotType.ABSENTEE);
         final var online = world.typed(BallotType.ONLINE);
-        this.assertMessage(() -> world.app.importBallot(mail), "mail-in recording is not implemented yet");
-        this.assertMessage(() -> world.app.importBallot(absentee), "mail-in recording is not implemented yet");
+        this.assertMessage(
+            () -> world.app.importBallot(mail),
+            "recording device kind does not match the ballot type"
+        );
+        this.assertMessage(
+            () -> world.app.importBallot(absentee),
+            "recording device kind does not match the ballot type"
+        );
         this.assertMessage(() -> world.app.importBallot(online), "online ballots are not accepted");
     }
 

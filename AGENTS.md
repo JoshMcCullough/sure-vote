@@ -1,7 +1,7 @@
 # AGENTS
 
 ## Project Snapshot
-- This repository is a multi-module Gradle Java project. The operating model is in `docs/`. The in-person recording path, lookup, issuance, and first-past-the-post and referendum tallies run against an in-memory repository.
+- This repository is a multi-module Gradle Java project. The operating model is in `docs/`. In-person and mail-in recording, lookup, issuance, and first-past-the-post, referendum, and ranked-choice tallies run against an in-memory repository.
 - Source of truth for behavior is `docs/system.md`, then `docs/schema.md`, `docs/constraints.md`, and `docs/postgres-strategy.md`. `README.md` is the short entry point. Java layout is `docs/style.md`. `docs/verification.md` is the byte layout, including the rule that a vote's `ballotHash` is the ballot payload hashed with `voteHashes` set to `[]`.
 
 ## Module Architecture (important boundaries)
@@ -18,7 +18,7 @@
 - Lombok remains only on `resource` (`Resource`). Do not put it back on `entity`. New API resources do not extend `Resource`, so Jackson does not emit audit fields.
 - The repository implementation is `InMemorySureVoteRepository`. It is the store the service and tests use. Do not add an untested SQL or Flyway path and describe it as done.
 - The service is the only writer of ledger rows. `Sealer` builds an import request and does not persist it. The API maps HTTP to the service and back to resources.
-- Mail-in and absentee import throw "mail-in recording is not implemented yet". Ranked-choice close counts instant runoff: a candidate wins when `count * 2 > continuing`, and a tie for last place stops the count. Close writes one operator-signed canvass statement and rolls back when that signature does not match. A new device is rejected once any election for that tenant is not `upcoming`.
+- Mail-in and absentee recording seal an Argon2id `voterAccessHash`, store the viewing passphrase as a sealed box, and write the ballot and an accepted issuance in one transaction after the delivery handoff accepts. A refused handoff rolls that transaction back. The host import accepts an already sealed ballot and does not receive the access code or the passphrase. Ranked-choice close counts instant runoff: a candidate wins when `count * 2 > continuing`, and a tie for last place stops the count. Close writes one operator-signed canvass statement and rolls back when that signature does not match. A new device is rejected once any election for that tenant is not `upcoming`.
 - No Spring, db driver, or Flyway plugin is configured.
 
 ## Build and Test Workflows

@@ -140,6 +140,9 @@ public final class ApiServer implements HttpHandler {
         else if ("GET".equals(method) && this.electionAction(parts, "ballots")) {
             this.lookup(exchange, parts, uri);
         }
+        else if ("POST".equals(method) && this.electionAction(parts, "lookup")) {
+            this.lookupPosted(exchange, parts);
+        }
         else {
             this.writeJson(exchange, 404, new ErrorResource("not found"));
         }
@@ -230,6 +233,13 @@ public final class ApiServer implements HttpHandler {
         final var id = this.id(parts.get(1));
         final var code = this.query(uri, "code");
         final var result = this.app.lookup(id, code);
+        this.writeJson(exchange, 200, this.lookupResource(result));
+    }
+
+    private void lookupPosted(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, LookupBody.class);
+        final var result = this.app.lookup(id, body.code, body.passphrase);
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 
@@ -344,7 +354,8 @@ public final class ApiServer implements HttpHandler {
             this.instant(body.timestamp),
             body.voterAccessHash,
             body.signature,
-            votes
+            votes,
+            body.personId
         );
     }
 
@@ -629,6 +640,12 @@ public final class ApiServer implements HttpHandler {
         public String voterAccessHash;
         public String signature;
         public List<VoteBody> votes;
+        public UUID personId;
+    }
+
+    public static final class LookupBody {
+        public String code;
+        public String passphrase;
     }
 
     public static final class VoteBody {

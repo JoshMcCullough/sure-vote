@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.sure_vote.entity.AssignmentStatus;
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.Candidate;
@@ -14,11 +15,15 @@ import org.sure_vote.entity.ChainStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
+import org.sure_vote.entity.IssuanceStatus;
+import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.RecordingDevice;
+import org.sure_vote.entity.RecordingDeviceKind;
 import org.sure_vote.entity.RecordingDeviceStatus;
 import org.sure_vote.entity.RecordingPlace;
+import org.sure_vote.entity.RecordingPlaceKind;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.Vote;
@@ -49,7 +54,9 @@ final class RecordingService {
     private Ballot importLocked(final ImportBallot request) {
         final var context = this.checked(request);
         final var prepared = this.prepare(context.election, request);
-        return this.storeBallot(context, request, prepared);
+        final var ballot = this.storeBallot(context, request, prepared);
+        this.issueMail(request);
+        return ballot;
     }
 
     private ImportContext checked(final ImportBallot request) {
@@ -68,6 +75,7 @@ final class RecordingService {
         final var deviceTenant = device.getTenantId();
         final var placeTenant = place.getTenantId();
         this.requireType(request.type());
+        this.requireKind(request.type(), device, place);
         this.stores.sameTenant(request.tenantId(), electionTenant, "Election");
         this.stores.sameTenant(electionTenant, deviceTenant, "Recording device");
         this.stores.sameTenant(electionTenant, placeTenant, "Recording place");
@@ -83,17 +91,94 @@ final class RecordingService {
         this.stores.require(hash.equals(stored), "Election definition does not match the signed hash");
         this.stores.require(request.votes() != null, "votes are required");
         this.stores.require(request.recordedBy() != null, "recordedBy is required");
+        this.requireMailActor(request);
         this.requireAssignment(request.electionId(), request.votingPrecinctId());
         return new ImportContext(election, device);
     }
 
     private void requireType(final BallotType type) {
-        if (type == BallotType.MAIL_IN || type == BallotType.ABSENTEE) {
-            throw new ConstraintException("mail-in recording is not implemented yet");
-        }
-        else if (type != BallotType.IN_PERSON) {
+        final var allowed = type == BallotType.IN_PERSON
+            || type == BallotType.MAIL_IN
+            || type == BallotType.ABSENTEE;
+        if (!allowed) {
             throw new ConstraintException("online ballots are not accepted");
         }
+    }
+
+    private void requireKind(
+        final BallotType type,
+        final RecordingDevice device,
+        final RecordingPlace place
+    ) {
+        if (type == BallotType.IN_PERSON) {
+            this.requireInPerson(device, place);
+        }
+        else {
+            this.requireMailPlace(device, place);
+        }
+    }
+
+    private void requireInPerson(final RecordingDevice device, final RecordingPlace place) {
+        final var machine = device.getKind() == RecordingDeviceKind.POLLING_PLACE_MACHINE;
+        final var pollingPlace = place.getKind() == RecordingPlaceKind.POLLING_PLACE;
+        this.stores.require(machine, "recording device kind does not match the ballot type");
+        this.stores.require(pollingPlace, "recording place kind does not match the ballot type");
+    }
+
+    private void requireMailPlace(final RecordingDevice device, final RecordingPlace place) {
+        final var workstation = device.getKind() == RecordingDeviceKind.CENTRAL_WORKSTATION;
+        final var office = place.getKind() == RecordingPlaceKind.CENTRAL_OFFICE;
+        this.stores.require(workstation, "recording device kind does not match the ballot type");
+        this.stores.require(office, "recording place kind does not match the ballot type");
+    }
+
+    private void requireMailActor(final ImportBallot request) {
+        if (request.type() == BallotType.IN_PERSON) {
+            this.requireNoVoter(request);
+        }
+        else {
+            this.requireMailVoter(request);
+        }
+    }
+
+    private void requireNoVoter(final ImportBallot request) {
+        if (request.personId() != null) {
+            throw new ConstraintException("an in-person ballot has no voter");
+        }
+    }
+
+    private void requireMailVoter(final ImportBallot request) {
+        final var personId = request.personId();
+        final var recordedBy = request.recordedBy();
+        final var actorId = request.actorId();
+        if (personId == null) {
+            throw new ConstraintException("a mail-in ballot requires the voter");
+        }
+        else if (!recordedBy.equals(actorId)) {
+            throw new ConstraintException("mail-in recordedBy is the staff principal");
+        }
+    }
+
+    private void issueMail(final ImportBallot request) {
+        if (request.type() == BallotType.MAIL_IN || request.type() == BallotType.ABSENTEE) {
+            this.insertIssuance(request);
+        }
+    }
+
+    private void insertIssuance(final ImportBallot request) {
+        final var person = this.stores.require(Person.class, request.personId());
+        final var personTenant = person.getTenantId();
+        final var issuance = new BallotIssuance();
+        this.stores.sameTenant(request.tenantId(), personTenant, "Person");
+        this.stores.require(person.getDeletedAt() == null, "Person is deleted");
+        issuance.setId(UUID.randomUUID());
+        issuance.setTenantId(request.tenantId());
+        issuance.setPersonId(request.personId());
+        issuance.setElectionId(request.electionId());
+        issuance.setRecordingPlaceId(request.recordingPlaceId());
+        issuance.setStatus(IssuanceStatus.ACCEPTED);
+        issuance.setAcceptedAt(Instant.now());
+        this.stores.add(issuance, request.actorId());
     }
 
     private void requireAssignment(final UUID electionId, final UUID precinctId) {

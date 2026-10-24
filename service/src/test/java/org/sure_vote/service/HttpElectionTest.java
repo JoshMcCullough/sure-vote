@@ -106,11 +106,18 @@ class HttpElectionTest {
         final var value = this.voteValue(lookedUpBody);
         final var status = this.text(closedBody, "status");
         final var election = world.app.election(world.electionId);
+        final var postedPath = "/elections/" + world.electionId + "/lookup";
+        final var postedJson = "{\"code\":\"" + code + "\",\"passphrase\":\"correct horse battery\"}";
+        final var posted = this.send("POST", postedPath, postedJson);
+        final var postedBody = posted.body();
+        final var postedValue = this.voteValue(postedBody);
         assertEquals(201, imported.statusCode());
         assertEquals("in-person", type);
         assertFalse(payload.contains(code));
         assertEquals(200, lookedUp.statusCode());
         assertEquals("Y", value);
+        assertEquals(200, posted.statusCode());
+        assertEquals("Y", postedValue);
         assertFalse(lookedUpBody.contains(code));
         assertEquals(200, closed.statusCode());
         assertEquals("historical", status);

@@ -143,7 +143,7 @@ Recording then does this:
 
 The code is generated in that same step, when the returned ballot is written. The hash is part of the ballot payload before the payload is stored. A later mail merge cannot add it. The chain entry is immutable, and the ballot hash covers `voterAccessHash`. The blank ballot mailed to the voter does not carry a code.
 
-For USPS, acceptance is the printer accepting the job. For email or phone, acceptance is the outbound channel accepting the message. If the handoff is refused, the transaction rolls back. No ballot and no issuance are kept, and the code is wiped. If the channel accepts the message and later bounces, or the process dies after commit, the code is gone. The ballot still counts. Officials cannot reconstruct the code. The voter may be unable to open that ballot.
+For USPS, acceptance is the printer accepting the job. For email or phone, acceptance is the outbound channel accepting the message. If the handoff is refused, the transaction rolls back. No ballot and no issuance are kept, and the code is wiped. If the handoff accepts and the process dies before the commit returns, the code was sent and the ballot is not stored. The code is not kept for a retry. If the channel accepts the message and later bounces, or the process dies after commit, the code is gone. The ballot still counts. Officials cannot reconstruct the code. The voter may be unable to open that ballot.
 
 The outer envelope's checkbox selects email, phone, or USPS. The destination must already match `Person.email`, `Person.phoneNumber`, or the registration address. The message contains the code and lookup instructions, not the selections and not the passphrase.
 

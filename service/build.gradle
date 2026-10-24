@@ -12,6 +12,7 @@ repositories {
 dependencies {
     implementation project(':entity')
     implementation project(':repository')
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.81'
 
     testImplementation platform('org.junit:junit-bom:6.0.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'

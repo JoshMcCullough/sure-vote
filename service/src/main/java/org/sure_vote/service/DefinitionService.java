@@ -1,5 +1,6 @@
 package org.sure_vote.service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -49,6 +50,7 @@ final class DefinitionService {
     Person createPerson(final Person person, final UUID actor) {
         final var tenant = this.stores.require(Tenant.class, person.getTenantId());
         this.rejectShowcase(tenant, person);
+        this.rejectPlaintext(person);
         return this.stores.add(person, actor);
     }
 
@@ -215,6 +217,23 @@ final class DefinitionService {
         return this.stores.require(Election.class, id);
     }
 
+    /**
+     * Workstation registration. The host API does not call this.
+     * The stored value is the sealed ciphertext, never the plaintext.
+     */
+    Person sealViewingPassphrase(
+        final UUID personId,
+        final String plaintext,
+        final String viewingPublicKey,
+        final UUID actor
+    ) {
+        final var person = this.stores.require(Person.class, personId);
+        this.stores.require(actor != null, "actor is required");
+        this.stores.require(Digests.isLowerHex(viewingPublicKey, 64), "viewing public key");
+        this.stores.require(person.getViewingPassphrase() == null, "viewing passphrase is already sealed");
+        return this.storePassphrase(person, plaintext, viewingPublicKey, actor);
+    }
+
     private Race createRaceLocked(final Race race, final UUID actor) {
         final var election = this.stores.require(Election.class, race.getElectionId());
         this.stores.sameTenant(race.getTenantId(), election.getTenantId(), "Race");
@@ -255,6 +274,45 @@ final class DefinitionService {
         next.setUpdatedBy(actor);
         next.setVersion(this.stores.nextVersion(existing.getVersion()));
         return this.stores.replace(next);
+    }
+
+    private Person storePassphrase(
+        final Person person,
+        final String plaintext,
+        final String viewingPublicKey,
+        final UUID actor
+    ) {
+        final var normalized = Passphrases.require(plaintext, person);
+        final var password = normalized.getBytes(StandardCharsets.UTF_8);
+        try {
+            return this.replacePassphrase(person, password, viewingPublicKey, actor);
+        }
+        finally {
+            ViewingBoxes.wipe(password);
+        }
+    }
+
+    private Person replacePassphrase(
+        final Person person,
+        final byte[] password,
+        final String viewingPublicKey,
+        final UUID actor
+    ) {
+        final var sealed = ViewingBoxes.seal(password, Digests.unhex(viewingPublicKey));
+        final var stored = Digests.hex(sealed);
+        final var next = Copies.person(person);
+        final var version = this.stores.nextVersion(person.getVersion());
+        next.setViewingPassphrase(stored);
+        next.setUpdatedAt(Instant.now());
+        next.setUpdatedBy(actor);
+        next.setVersion(version);
+        return this.stores.replace(next);
+    }
+
+    private void rejectPlaintext(final Person person) {
+        if (person.getViewingPassphrase() != null) {
+            throw new ConstraintException("viewing passphrase is stored only as a sealed box");
+        }
     }
 
     private void rejectShowcase(final Tenant tenant, final Person person) {

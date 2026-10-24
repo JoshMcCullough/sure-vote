@@ -129,8 +129,21 @@ public final class SureVote {
         return this.recording.importBallot(request);
     }
 
+    public Person sealViewingPassphrase(
+        final UUID personId,
+        final String plaintext,
+        final String viewingPublicKey,
+        final UUID actor
+    ) {
+        return this.definitions.sealViewingPassphrase(personId, plaintext, viewingPublicKey, actor);
+    }
+
     public LookupResult lookup(final UUID electionId, final String code) {
-        return this.lookup.lookup(electionId, code);
+        return this.lookup(electionId, code, null);
+    }
+
+    public LookupResult lookup(final UUID electionId, final String code, final String passphrase) {
+        return this.lookup.lookup(electionId, code, passphrase);
     }
 
     public String canvassPayload(final UUID electionId) {

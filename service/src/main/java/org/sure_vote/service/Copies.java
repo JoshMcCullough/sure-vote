@@ -3,6 +3,7 @@ package org.sure_vote.service;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Entity;
+import org.sure_vote.entity.Person;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.TenantEntity;
 import org.sure_vote.entity.VoteChain;
@@ -58,6 +59,24 @@ final class Copies {
         copy.setVotePercentage(source.getVotePercentage());
         copy.setRank(source.getRank());
         copy.setOutcome(source.getOutcome());
+        return copy;
+    }
+
+    static Person person(final Person source) {
+        final var copy = new Person();
+        audit(source, copy);
+        copy.setFirstName(source.getFirstName());
+        copy.setMiddleName(source.getMiddleName());
+        copy.setLastName(source.getLastName());
+        copy.setFullName(source.getFullName());
+        copy.setEmail(source.getEmail());
+        copy.setPhoneNumber(source.getPhoneNumber());
+        copy.setViewingPassphrase(source.getViewingPassphrase());
+        copy.setDateOfBirth(source.getDateOfBirth());
+        copy.setAddressId(source.getAddressId());
+        copy.setCitizenshipId(source.getCitizenshipId());
+        copy.setSsn(source.getSsn());
+        copy.setVoterId(source.getVoterId());
         return copy;
     }
 
