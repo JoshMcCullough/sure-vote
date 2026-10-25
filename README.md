@@ -41,6 +41,7 @@ The chain lives in PostgreSQL. A copy of the chain head, its latest entry, held 
 - `service` — recording, chain append, tallies, and cross-entity rules.
 - `resource` — projections returned to clients.
 - `api` — HTTP. Calls the service and returns resources.
+- `.github/workflows/ci.yml` — GitHub Actions: `./gradlew check` on JDK 25, the `infra/` tests and synth (no AWS credentials, no deploy), and the UI build and browser smoke.
 - `infra` — AWS CDK definitions for CloudFront, WAF, the published bucket, and the received queue. Synth and tests only (`npm test`, `npm run synth`); nothing deploys. See [infra/README.md](./infra/README.md).
 - `style-checks` — Checkstyle rules from [style.md](./docs/style.md).
 - `ui` — React workspace and public lookup, served at `/app`.

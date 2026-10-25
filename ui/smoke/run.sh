@@ -19,9 +19,13 @@ SUREVOTE_DEMO_TENANT_ID="${SUREVOTE_DEMO_TENANT_ID:-6f1d2b8e-0c4a-4e7b-9a52-3d8f
 server=$!
 trap 'kill "$server" 2> /dev/null || true; pkill -f "org.sure_vote.api.Main" 2> /dev/null || true' EXIT
 
-for _ in $(seq 1 90); do
+for _ in $(seq 1 "${SUREVOTE_SMOKE_WAIT:-240}"); do
   if curl -fs "$base/health" > /dev/null; then
     break
+  fi
+  if ! kill -0 "$server" 2> /dev/null; then
+    cat "$log"
+    exit 1
   fi
   sleep 1
 done
