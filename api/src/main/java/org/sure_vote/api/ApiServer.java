@@ -76,11 +76,13 @@ public final class ApiServer implements HttpHandler {
     private final HttpServer server;
     private final ObjectMapper json = new ObjectMapper();
     private final WorkspaceHttp workspace;
+    private final SystemHttp system;
 
     private ApiServer(final SureVote app, final HttpServer server) {
         this.app = app;
         this.server = server;
         this.workspace = new WorkspaceHttp(app, this.json);
+        this.system = new SystemHttp(app, this.json);
     }
 
     public static ApiServer start(final SureVote app) {
@@ -242,6 +244,9 @@ public final class ApiServer implements HttpHandler {
         }
         else if ("GET".equals(method) && this.electionAction(parts, "restore-incidents")) {
             this.listRestoreIncidents(exchange, parts);
+        }
+        else if (this.system.handles(parts)) {
+            this.system.handle(exchange, method, parts);
         }
         else if (this.workspace.handles(method, parts)) {
             this.workspace.handle(exchange, method, parts);

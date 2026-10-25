@@ -23,7 +23,10 @@ import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.Seat;
+import org.sure_vote.entity.SystemAdmin;
+import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.VoteChainValidationResult;
@@ -42,6 +45,7 @@ public final class SureVote {
     private final WorkspaceCatalog catalog;
     private final ValidatorService validators;
     private final RestoreService restores;
+    private final SystemAdminService system;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -55,6 +59,35 @@ public final class SureVote {
         this.catalog = new WorkspaceCatalog(repository, stores);
         this.validators = new ValidatorService(repository, stores);
         this.restores = new RestoreService(repository, stores, this.validators);
+        this.system = new SystemAdminService(repository, stores);
+    }
+
+    public SystemAdmin bootstrapSystemAdmin(final SystemAdmin admin) {
+        return this.system.bootstrap(admin);
+    }
+
+    public SystemAdmin createSystemAdmin(final SystemAdmin admin, final UUID actor) {
+        return this.system.createAdmin(admin, actor);
+    }
+
+    public List<SystemAdmin> systemAdmins(final UUID actor) {
+        return this.system.admins(actor);
+    }
+
+    public SystemAdmin setSystemAdminStatus(final UUID id, final SystemAdminStatus status, final UUID actor) {
+        return this.system.setAdminStatus(id, status, actor);
+    }
+
+    public Tenant createSystemTenant(final Tenant tenant, final UUID actor) {
+        return this.system.createTenant(tenant, actor);
+    }
+
+    public List<Tenant> systemTenants(final UUID actor) {
+        return this.system.tenants(actor);
+    }
+
+    public Tenant updateSystemTenant(final UUID id, final String name, final TenantStatus status, final UUID actor) {
+        return this.system.updateTenant(id, name, status, actor);
     }
 
     public Tenant createTenant(final Tenant tenant, final UUID actor) {

@@ -4,7 +4,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -35,6 +37,7 @@ import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.Seat;
+import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
@@ -74,6 +77,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         RecordingPlace.class,
         RestoreIncident.class,
         Seat.class,
+        SystemAdmin.class,
         Tenant.class,
         TenantValidator.class,
         Term.class,
@@ -86,6 +90,12 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         VotingDistrict.class,
         VotingPrecinct.class
     );
+
+    private static final String TENANT = "app.tenant_id";
+
+    private static final String SYSTEM_ADMIN = "app.system_admin_id";
+
+    private static final Map<String, String> LABELS = Map.of(TENANT, "tenant", SYSTEM_ADMIN, "system admin");
 
     private final DataSource source;
     private final ThreadLocal<Work> work = new ThreadLocal<>();
@@ -163,13 +173,14 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
     }
 
+    @Override
     public <T> T inTenant(final UUID tenantId, final Supplier<T> body) {
-        if (tenantId == null) {
-            throw new IllegalArgumentException("tenantId is required");
-        }
-        else {
-            return this.transaction(() -> this.scoped(tenantId, body));
-        }
+        return this.scope(TENANT, tenantId, body);
+    }
+
+    @Override
+    public <T> T asSystemAdmin(final UUID adminId, final Supplier<T> body) {
+        return this.scope(SYSTEM_ADMIN, adminId, body);
     }
 
     void clear() {
@@ -189,60 +200,77 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
     }
 
-    private <T> T scoped(final UUID tenantId, final Supplier<T> body) {
-        final var session = this.work.get();
-        if (session.tenantId != null && !session.tenantId.equals(tenantId)) {
-            throw new IllegalArgumentException("A transaction serves one tenant");
+    private <T> T scope(final String setting, final UUID value, final Supplier<T> body) {
+        if (value == null) {
+            throw new IllegalArgumentException(LABELS.get(setting) + " is required");
         }
         else {
-            return this.within(session, tenantId, body);
+            return this.transaction(() -> this.scoped(setting, value, body));
         }
     }
 
-    private <T> T within(final Work session, final UUID tenantId, final Supplier<T> body) {
-        final var previous = session.tenantId;
-        this.setTenant(session, tenantId);
+    private <T> T scoped(final String setting, final UUID value, final Supplier<T> body) {
+        final var session = this.work.get();
+        final var current = session.scopes.get(setting);
+        if (current != null && !current.equals(value)) {
+            throw new IllegalArgumentException("A transaction serves one " + LABELS.get(setting));
+        }
+        else {
+            return this.within(session, setting, value, body);
+        }
+    }
+
+    private <T> T within(final Work session, final String setting, final UUID value, final Supplier<T> body) {
+        final var previous = session.scopes.get(setting);
+        this.setScope(session, setting, value.toString());
         try {
             final var result = body.get();
-            this.restoreTenant(session, previous);
+            this.restoreScope(session, setting, previous);
             return result;
         }
         catch (final RuntimeException failure) {
-            session.tenantId = previous;
+            this.forget(session, setting, previous);
             throw failure;
         }
     }
 
-    private void restoreTenant(final Work session, final UUID previous) {
+    private void restoreScope(final Work session, final String setting, final UUID previous) {
         if (previous == null) {
-            this.clearTenant(session);
+            this.setScope(session, setting, "");
         }
     }
 
-    private void clearTenant(final Work session) {
+    private void forget(final Work session, final String setting, final UUID previous) {
+        if (previous == null) {
+            session.scopes.remove(setting);
+        }
+    }
+
+    private void setScope(final Work session, final String setting, final String value) {
         try {
-            this.selectTenant(session.connection, "");
-            session.tenantId = null;
+            this.selectSetting(session.connection, setting, value);
+            this.remember(session, setting, value);
         }
         catch (final SQLException failure) {
             throw new IllegalStateException(failure.getMessage(), failure);
         }
     }
 
-    private void setTenant(final Work session, final UUID tenantId) {
-        try {
-            this.selectTenant(session.connection, tenantId.toString());
-            session.tenantId = tenantId;
+    private void remember(final Work session, final String setting, final String value) {
+        if (value.isEmpty()) {
+            session.scopes.remove(setting);
         }
-        catch (final SQLException failure) {
-            throw new IllegalStateException(failure.getMessage(), failure);
+        else {
+            session.scopes.put(setting, UUID.fromString(value));
         }
     }
 
-    private void selectTenant(final Connection connection, final String tenantId) throws SQLException {
-        final var statement = connection.prepareStatement("select set_config('app.tenant_id', ?, true)");
+    private void selectSetting(final Connection connection, final String setting, final String value)
+        throws SQLException {
+        final var statement = connection.prepareStatement("select set_config(?, ?, true)");
         try {
-            statement.setString(1, tenantId);
+            statement.setString(1, setting);
+            statement.setString(2, value);
             statement.execute();
         }
         finally {
@@ -549,8 +577,8 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
 
     private static final class Work {
         private final Connection connection;
+        private final Map<String, UUID> scopes = new HashMap<>();
         private int depth;
-        private UUID tenantId;
 
         private Work(final Connection connection) {
             this.connection = connection;

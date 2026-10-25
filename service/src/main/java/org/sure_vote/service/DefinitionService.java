@@ -48,6 +48,8 @@ final class DefinitionService {
     }
 
     Tenant createTenant(final Tenant tenant, final UUID actor) {
+        final var production = tenant.getKind() == TenantKind.PRODUCTION;
+        this.stores.require(!production, "only a system admin creates a production tenant");
         return this.stores.add(tenant, actor);
     }
 

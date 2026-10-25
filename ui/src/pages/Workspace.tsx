@@ -184,7 +184,7 @@ export function Workspace() {
         title="Tenant"
         detail={ids.tenantId
           ? 'This browser already has tenant ' + ids.tenantId + '. Create another, or continue with the locality.'
-          : 'A showcase tenant can run a demonstration. A production tenant rejects host-held keys.'}
+          : 'A showcase tenant can run a demonstration. A system admin creates production tenants.'}
         path="/tenants"
         submitLabel="Create tenant"
         fields={tenantFields()}
@@ -486,7 +486,7 @@ export function Workspace() {
 function tenantFields(): Field[] {
   return [
     { name: 'name', label: 'Name', value: 'Town' },
-    { name: 'kind', label: 'Kind', value: 'showcase', options: ['showcase', 'production'] },
+    { name: 'kind', label: 'Kind', value: 'showcase', options: ['showcase'] },
     { name: 'residencyRegion', label: 'Residency region', value: 'us-east' },
     { name: 'status', label: 'Status', value: 'active', options: ['active', 'suspended'] },
   ]

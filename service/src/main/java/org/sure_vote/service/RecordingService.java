@@ -25,6 +25,8 @@ import org.sure_vote.entity.RecordingDeviceStatus;
 import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.RecordingPlaceKind;
 import org.sure_vote.entity.Seat;
+import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChain;
@@ -59,6 +61,11 @@ final class RecordingService {
         return ballot;
     }
 
+    private void requireActiveTenant(final UUID tenantId) {
+        final var tenant = this.stores.require(Tenant.class, tenantId);
+        this.stores.require(tenant.getStatus() != TenantStatus.SUSPENDED, "tenant is suspended");
+    }
+
     private ImportContext checked(final ImportBallot request) {
         final var election = this.stores.require(Election.class, request.electionId());
         final var device = this.stores.require(RecordingDevice.class, request.recordingDeviceId());
@@ -77,6 +84,7 @@ final class RecordingService {
         this.requireType(request.type());
         this.requireKind(request.type(), device, place);
         this.stores.sameTenant(request.tenantId(), electionTenant, "Election");
+        this.requireActiveTenant(electionTenant);
         this.stores.sameTenant(electionTenant, deviceTenant, "Recording device");
         this.stores.sameTenant(electionTenant, placeTenant, "Recording place");
         this.stores.require(election.getStatus() == ElectionStatus.ACTIVE, "Election is not active");

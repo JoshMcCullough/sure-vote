@@ -24,6 +24,7 @@ Eligibility and the one-ballot rule are applied before recording, against the pr
 - **Voter.** Is authenticated against the private roll. Receives an access code when the ballot is recorded. Uses that code to open the ballot later.
 - **Verifier.** Recomputes the chain. A named verifier is a `VoteChainValidator` and publishes a signed `VoteChainValidationResult`. Anyone else may verify without an account.
 - **Sure Vote Systems.** The copyright holder. Publishes the source-available repository and runs the multi-tenant hosted service, including the free showcase tenants.
+- **System admin.** A host operator, global rather than in a tenant. Creates production tenants, renames and suspends tenants, and adds or disables other system admins. Reads no tenant's roll, definition, or ledger through the application. The first one is set in the host configuration.
 
 A voter-controlled device submitting a binding ballot is outside this design. That path needs an eligibility proof, a coercion story, and a client the voter can trust. None of those are specified. The showcase site lets someone record a non-binding demo ballot. That form is not the production casting path.
 
@@ -42,6 +43,8 @@ People, rolls, devices, places, and elections belong to one tenant. The same hum
 The db enforces the boundary with row-level security on `tenant_id`. The recording service uses a writer role that cannot see another tenant. The public lookup service is a separate process and uses a read-only role. That role can read published definitions and, on the schedule below, public ledger rows. It cannot read the private roll, issuances, disputes, or sealed passphrases. Officials of one tenant cannot record into another tenant's election.
 
 A host administrator who uses the migration role can read every tenant. That use is logged and is not the application path. Tenant isolation stops a neighboring official, and an ordinary application request, from reading another tenant. It does not hide the private roll from the host. Outside copies of the chain heads, below, are what make a host rewrite of the ledger detectable.
+
+Only a system admin creates a production tenant. Anyone may create a showcase tenant. A system admin also suspends and reinstates tenants. Until request identity is chosen, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
 
 `Tenant.kind` is `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`. Officials must not load a real voter roll into it. The software cannot tell a fictional name from a real one. Suspending a tenant stops new recording. It does not delete the ledger.
 

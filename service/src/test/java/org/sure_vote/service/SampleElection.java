@@ -33,6 +33,7 @@ import org.sure_vote.entity.ReferendumChoice;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.SeatJurisdiction;
 import org.sure_vote.entity.SeatType;
+import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
@@ -53,9 +54,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 final class SampleElection {
     private static final String VIEWING_KEY = "ab".repeat(32);
 
+    static final UUID HOST_ADMIN = UUID.fromString("00000000-0000-4000-8000-00000000a001");
+
     final SureVoteRepository repository;
     final SureVote app;
     final UUID actor;
+    final UUID systemAdmin;
     final SigningKey operator;
     final SigningKey importKey;
     final SigningKey deviceKey;
@@ -96,6 +100,7 @@ final class SampleElection {
         this.repository = repository;
         this.app = new SureVote(this.repository);
         this.actor = UUID.randomUUID();
+        this.systemAdmin = HOST_ADMIN;
         this.operator = Signatures.generate();
         this.importKey = Signatures.generate();
         this.deviceKey = Signatures.generate();
@@ -819,8 +824,17 @@ final class SampleElection {
     }
 
     private UUID savedTenant(final Tenant tenant) {
-        final var saved = this.app.createTenant(tenant, this.actor);
+        final var admin = this.admin();
+        final var saved = this.app.createSystemTenant(tenant, admin);
         return saved.getId();
+    }
+
+    UUID admin() {
+        final var admin = new SystemAdmin();
+        admin.setId(this.systemAdmin);
+        admin.setName("Host");
+        this.app.bootstrapSystemAdmin(admin);
+        return this.systemAdmin;
     }
 
     private UUID savedLocality(final Locality locality) {

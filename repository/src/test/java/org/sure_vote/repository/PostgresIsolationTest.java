@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.Locality;
+import org.sure_vote.entity.SystemAdmin;
+import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantKind;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -151,6 +154,88 @@ class PostgresIsolationTest {
     void theScopeEndsWithItsTransaction() {
         final var during = writer.transaction(() -> this.scopedThenUnset());
         assertEquals(List.of(1, 0), during);
+    }
+
+    @Test
+    void theFirstSystemAdminCanBeInsertedWithoutAScope() {
+        final var admin = this.admin(SystemAdminStatus.ACTIVE);
+        final var second = this.admin(SystemAdminStatus.ACTIVE);
+        final var saved = writer.asSystemAdmin(admin.getId(), () -> writer.insert(admin));
+        final var failure = assertThrows(
+            IllegalStateException.class,
+            () -> writer.asSystemAdmin(second.getId(), () -> writer.insert(second))
+        );
+        final var text = failure.getMessage();
+        final var unscoped = writer.list(SystemAdmin.class);
+        assertEquals(admin.getId(), saved.getId());
+        assertTrue(text.contains("row-level security"), text);
+        assertEquals(List.of(), unscoped);
+    }
+
+    @Test
+    void aSystemAdminManagesEveryTenantButNoTenantRows() {
+        final var admin = owner.insert(this.admin(SystemAdminStatus.ACTIVE));
+        final var tenant = writer.asSystemAdmin(admin.getId(), () -> writer.insert(this.tenant()));
+        final var stored = owner.find(Tenant.class, tenant.getId());
+        final var tenants = writer.asSystemAdmin(admin.getId(), () -> writer.list(Tenant.class));
+        final var elections = writer.asSystemAdmin(admin.getId(), () -> writer.list(Election.class));
+        final var admins = writer.asSystemAdmin(admin.getId(), () -> writer.list(SystemAdmin.class));
+        assertEquals(3, tenants.size());
+        assertEquals(List.of(), elections);
+        assertEquals(List.of(admin.getId()), PostgresIsolationTest.ids(admins));
+        assertTrue(stored.isPresent());
+    }
+
+    @Test
+    void onlyAnActiveSystemAdminHasTheScope() {
+        final var active = owner.insert(this.admin(SystemAdminStatus.ACTIVE));
+        final var disabled = owner.insert(this.admin(SystemAdminStatus.DISABLED));
+        final var stranger = UUID.randomUUID();
+        final var tenant = this.tenant();
+        final var hidden = writer.asSystemAdmin(disabled.getId(), () -> writer.list(Tenant.class));
+        final var strange = writer.asSystemAdmin(stranger, () -> writer.list(Tenant.class));
+        final var failure = assertThrows(
+            IllegalStateException.class,
+            () -> writer.asSystemAdmin(stranger, () -> writer.insert(tenant))
+        );
+        final var unscoped = assertThrows(IllegalStateException.class, () -> writer.insert(this.tenant()));
+        final var scopedText = failure.getMessage();
+        final var unscopedText = unscoped.getMessage();
+        final var visible = writer.asSystemAdmin(active.getId(), () -> writer.list(Tenant.class));
+        assertEquals(List.of(), hidden);
+        assertEquals(List.of(), strange);
+        assertEquals(2, visible.size());
+        assertTrue(scopedText.contains("row-level security"), scopedText);
+        assertTrue(unscopedText.contains("row-level security"), unscopedText);
+    }
+
+    @Test
+    void aTransactionServesOneSystemAdmin() {
+        final var failure = assertThrows(
+            IllegalArgumentException.class,
+            () -> writer.asSystemAdmin(
+                UUID.randomUUID(),
+                () -> writer.asSystemAdmin(UUID.randomUUID(), () -> writer.list(Tenant.class))
+            )
+        );
+        assertEquals("A transaction serves one system admin", failure.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> writer.asSystemAdmin(null, () -> writer.list(Tenant.class)));
+    }
+
+    private SystemAdmin admin(final SystemAdminStatus status) {
+        final var admin = new SystemAdmin();
+        admin.setId(UUID.randomUUID());
+        admin.setName("Host");
+        admin.setStatus(status);
+        return admin;
+    }
+
+    private Tenant tenant() {
+        final var tenant = new Tenant();
+        tenant.setId(UUID.randomUUID());
+        tenant.setName("County");
+        tenant.setKind(TenantKind.PRODUCTION);
+        return tenant;
     }
 
     private List<Integer> scopedThenUnset() {

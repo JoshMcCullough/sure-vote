@@ -49,7 +49,8 @@ Voter rolls, mail-in from the browser, dispute review, restore incidents, and ro
 
 Official creates require `SureVote-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
 
-- `POST /tenants`, `POST /persons`
+- `POST /tenants` creates a showcase tenant. A production tenant is created by a system admin through `POST /system/tenants`. The app has no system-admin screens.
+- `POST /persons`
 - `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`
 - `POST /seats`, `/terms`, `/races`, `/candidates`, `/race-candidates`, `/ballot-styles`
 - `POST /places`, `/devices`, `/precinct-assignments`

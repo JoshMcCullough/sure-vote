@@ -84,6 +84,25 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         }
     }
 
+    @Override
+    public <T> T inTenant(final UUID tenantId, final Supplier<T> work) {
+        return this.scoped(tenantId, "tenantId", work);
+    }
+
+    @Override
+    public <T> T asSystemAdmin(final UUID adminId, final Supplier<T> work) {
+        return this.scoped(adminId, "adminId", work);
+    }
+
+    private <T> T scoped(final UUID value, final String label, final Supplier<T> work) {
+        if (value == null) {
+            throw new IllegalArgumentException(label + " is required");
+        }
+        else {
+            return this.transaction(work);
+        }
+    }
+
     private <T extends Identifiable> T insertLocked(final T row) {
         this.requireRow(row);
         return this.insertChecked(row);

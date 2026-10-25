@@ -355,7 +355,7 @@ class DefinitionRulesTest {
 
     private UUID otherTenant(final SampleElection world) {
         final var tenant = this.otherTenantRow();
-        final var saved = world.app.createTenant(tenant, world.actor);
+        final var saved = world.app.createSystemTenant(tenant, world.admin());
         return saved.getId();
     }
 

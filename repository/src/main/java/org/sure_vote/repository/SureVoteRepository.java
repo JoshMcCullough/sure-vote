@@ -17,4 +17,8 @@ public interface SureVoteRepository {
     <T extends Identifiable> List<T> list(final Class<T> type);
 
     <T> T transaction(final Supplier<T> work);
+
+    <T> T inTenant(final UUID tenantId, final Supplier<T> work);
+
+    <T> T asSystemAdmin(final UUID adminId, final Supplier<T> work);
 }

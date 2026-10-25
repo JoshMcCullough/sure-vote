@@ -20,7 +20,7 @@ Mutable records include these fields. `createdBy` and `updatedBy` are stored as 
 `VoteChain` uses the administrative audit fields except soft delete. Updates are limited to the tip and to `status`. See that entity.
 
 ## Tenant column
-Every table except `VoteChainValidator` has `tenant` (reference to `Tenant`). The value is copied from the parent row and does not change. `VoteChainValidator` is a global public key. A validation result, a canvass statement, and a restore incident take the tenant of the election they refer to. See [system.md](./system.md).
+Every table except `VoteChainValidator` and `SystemAdmin` has `tenant` (reference to `Tenant`). The value is copied from the parent row and does not change. `VoteChainValidator` is a global public key. A validation result, a canvass statement, and a restore incident take the tenant of the election they refer to. See [system.md](./system.md).
 
 ## Entities
 Administrative entities include the administrative audit fields. Ledger entities include the ledger fields. The chain header is called out below.
@@ -33,6 +33,13 @@ One election authority on a host. A small locality that does not run its own ele
 - `kind` (Enum): `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`.
 - `residencyRegion` (String): The cloud region named in the agreement. Private rows and backups stay there. It changes only through the region-move procedure.
 - `status` (Enum): `active` or `suspended`. Suspended stops new recording and does not delete the ledger.
+
+### SystemAdmin
+A host operator who creates and suspends tenants. Global: it has no `tenant` and is not linked to any `Person`. A system admin reads and writes `Tenant` rows and other system admins. It does not read a tenant's roll, definition, or ledger through the application. See [system.md](./system.md).
+
+- Administrative audit fields
+- `name` (String)
+- `status` (Enum): `active` or `disabled`. A disabled admin is refused. The last active admin cannot be disabled.
 
 ### TenantValidator
 A validator the tenant has registered. A production election cannot become `active` until the tenant has at least one validator that the agreement identifies as outside the host.

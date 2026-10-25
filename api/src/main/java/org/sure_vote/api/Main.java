@@ -2,7 +2,9 @@ package org.sure_vote.api;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
 
+import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.repository.InMemorySureVoteRepository;
 import org.sure_vote.repository.JdbcSureVoteRepository;
 import org.sure_vote.service.SureVote;
@@ -32,14 +34,28 @@ public final class Main {
 
     private static SureVote memory() {
         final var repository = new InMemorySureVoteRepository();
-        return new SureVote(repository);
+        return bootstrapped(new SureVote(repository));
     }
 
     private static SureVote database(final String url) {
         final var user = text("SUREVOTE_JDBC_USER");
         final var password = text("SUREVOTE_JDBC_PASSWORD");
         final var repository = open(url, user, password);
-        return new SureVote(repository);
+        return bootstrapped(new SureVote(repository));
+    }
+
+    private static SureVote bootstrapped(final SureVote app) {
+        final var id = text("SUREVOTE_SYSTEM_ADMIN_ID");
+        if (id.isBlank()) {
+            return app;
+        }
+        else {
+            final var admin = new SystemAdmin();
+            admin.setId(UUID.fromString(id));
+            admin.setName(text("SUREVOTE_SYSTEM_ADMIN_NAME"));
+            app.bootstrapSystemAdmin(admin);
+            return app;
+        }
     }
 
     private static JdbcSureVoteRepository open(final String url, final String user, final String password) {

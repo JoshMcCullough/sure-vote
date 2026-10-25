@@ -6,6 +6,8 @@ import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Entity;
 import org.sure_vote.entity.Person;
 import org.sure_vote.entity.RaceCandidate;
+import org.sure_vote.entity.SystemAdmin;
+import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantEntity;
 import org.sure_vote.entity.VoteChain;
 
@@ -31,6 +33,24 @@ final class Copies {
         copy.setViewingPublicKey(source.getViewingPublicKey());
         copy.setHash(source.getHash());
         copy.setSignature(source.getSignature());
+        return copy;
+    }
+
+    static Tenant tenant(final Tenant source) {
+        final var copy = new Tenant();
+        audit(source, copy);
+        copy.setName(source.getName());
+        copy.setKind(source.getKind());
+        copy.setResidencyRegion(source.getResidencyRegion());
+        copy.setStatus(source.getStatus());
+        return copy;
+    }
+
+    static SystemAdmin systemAdmin(final SystemAdmin source) {
+        final var copy = new SystemAdmin();
+        audit(source, copy);
+        copy.setName(source.getName());
+        copy.setStatus(source.getStatus());
         return copy;
     }
 
