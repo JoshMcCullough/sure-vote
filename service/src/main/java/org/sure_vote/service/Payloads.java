@@ -5,6 +5,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.CanvassStatement;
+import org.sure_vote.entity.Election;
+import org.sure_vote.entity.RestoreIncident;
+import org.sure_vote.entity.Vote;
+import org.sure_vote.entity.VoteChain;
+import org.sure_vote.entity.VoteChainEntry;
+
 /**
  * Canonical payloads from docs/verification.md.
  * ballotHash in a vote is the ballot payload hashed with voteHashes empty, not Ballot.hash.
@@ -144,5 +152,79 @@ public final class Payloads {
         fields.add(CanonicalJson.field("length", CanonicalJson.number(head.length())));
         fields.add(CanonicalJson.field("headHash", CanonicalJson.quote(head.headHash())));
         return CanonicalJson.object(fields);
+    }
+
+    public static String closeBundle(
+        final Election election,
+        final List<VoteChain> chains,
+        final List<VoteChainEntry> entries,
+        final List<Ballot> ballots,
+        final List<Vote> votes,
+        final CanvassStatement canvass,
+        final RestoreIncident incident
+    ) {
+        final var fields = new ArrayList<String>();
+        final var chainItems = new ArrayList<String>();
+        final var entryItems = new ArrayList<String>();
+        final var ballotItems = new ArrayList<String>();
+        final var voteItems = new ArrayList<String>();
+        chains.forEach(chain -> chainItems.add(chainHeader(chain)));
+        entries.forEach(entry -> entryItems.add(entryBody(entry)));
+        ballots.forEach(ballot -> ballotItems.add(ballotBody(ballot)));
+        votes.forEach(vote -> voteItems.add(signedBody(vote.getPayload(), vote.getHash(), vote.getSignature())));
+        fields.add(CanonicalJson.field("electionId", CanonicalJson.uuid(election.getId())));
+        fields.add(CanonicalJson.field("definitionHash", CanonicalJson.quote(election.getHash())));
+        fields.add(CanonicalJson.field("definitionSignature", CanonicalJson.quote(election.getSignature())));
+        fields.add(CanonicalJson.field("chains", CanonicalJson.array(chainItems)));
+        fields.add(CanonicalJson.field("entries", CanonicalJson.array(entryItems)));
+        fields.add(CanonicalJson.field("ballots", CanonicalJson.array(ballotItems)));
+        fields.add(CanonicalJson.field("votes", CanonicalJson.array(voteItems)));
+        fields.add(CanonicalJson.field("canvass", canvassBody(canvass)));
+        fields.add(CanonicalJson.field("restoreIncident", restoreBody(incident)));
+        return CanonicalJson.object(fields);
+    }
+
+    private static String ballotBody(final Ballot ballot) {
+        return signedBody(ballot.getPayload(), ballot.getHash(), ballot.getSignature());
+    }
+
+    private static String canvassBody(final CanvassStatement canvass) {
+        return signedBody(canvass.getPayload(), canvass.getHash(), canvass.getSignature());
+    }
+
+    private static String chainHeader(final VoteChain chain) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("raceId", CanonicalJson.uuid(chain.getRaceId())));
+        fields.add(CanonicalJson.field("voteChainId", CanonicalJson.uuid(chain.getId())));
+        fields.add(CanonicalJson.field("length", CanonicalJson.number(chain.getLength())));
+        fields.add(CanonicalJson.field("hash", CanonicalJson.nullableString(chain.getHash())));
+        fields.add(CanonicalJson.field("signature", CanonicalJson.nullableString(chain.getSignature())));
+        return CanonicalJson.object(fields);
+    }
+
+    private static String entryBody(final VoteChainEntry entry) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("voteChainId", CanonicalJson.uuid(entry.getVoteChainId())));
+        fields.add(CanonicalJson.field("payload", CanonicalJson.quote(entry.getPayload())));
+        fields.add(CanonicalJson.field("hash", CanonicalJson.quote(entry.getHash())));
+        fields.add(CanonicalJson.field("signature", CanonicalJson.nullableString(entry.getSignature())));
+        return CanonicalJson.object(fields);
+    }
+
+    private static String signedBody(final String payload, final String hash, final String signature) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("payload", CanonicalJson.quote(payload)));
+        fields.add(CanonicalJson.field("hash", CanonicalJson.quote(hash)));
+        fields.add(CanonicalJson.field("signature", CanonicalJson.nullableString(signature)));
+        return CanonicalJson.object(fields);
+    }
+
+    private static String restoreBody(final RestoreIncident incident) {
+        if (incident == null) {
+            return "null";
+        }
+        else {
+            return signedBody(incident.getPayload(), incident.getHash(), incident.getSignature());
+        }
     }
 }

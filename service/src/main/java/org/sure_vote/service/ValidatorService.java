@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.sure_vote.entity.CanvassStatement;
+import org.sure_vote.entity.CloseBundle;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.Race;
@@ -70,10 +71,10 @@ final class ValidatorService {
     List<HeadNotice> heads(final UUID electionId) {
         final var election = this.publicElection(electionId);
         final var races = this.races(electionId);
-        final var canvassHash = this.canvassHash(electionId);
+        final var closing = new ClosingHashes(this.canvassHash(electionId), this.bundleHash(electionId));
         final var now = Instant.now();
         final var notices = new ArrayList<HeadNotice>();
-        this.addHeads(notices, election, races, canvassHash, now);
+        this.addHeads(notices, election, races, closing, now);
         return notices;
     }
 
@@ -258,19 +259,19 @@ final class ValidatorService {
         final List<HeadNotice> notices,
         final Election election,
         final List<Race> races,
-        final String canvassHash,
+        final ClosingHashes closing,
         final Instant now
     ) {
         for (final var race : races) {
             final var chain = this.chainFor(race.getId());
-            notices.add(this.notice(election, chain, canvassHash, now));
+            notices.add(this.notice(election, chain, closing, now));
         }
     }
 
     private HeadNotice notice(
         final Election election,
         final VoteChain chain,
-        final String canvassHash,
+        final ClosingHashes closing,
         final Instant now
     ) {
         final var gap = this.gap(election, chain, now);
@@ -281,7 +282,8 @@ final class ValidatorService {
             chain.getHash(),
             chain.getUpdatedAt(),
             chain.getSignature(),
-            canvassHash,
+            closing.canvassHash(),
+            closing.bundleHash(),
             gap
         );
     }
@@ -365,6 +367,19 @@ final class ValidatorService {
         if (kept && same) {
             matched.add(row);
         }
+    }
+
+    private String bundleHash(final UUID electionId) {
+        final var rows = this.repository.list(CloseBundle.class);
+        final var stream = rows.stream();
+        final var found = stream
+            .filter(row -> electionId.equals(row.getElectionId()))
+            .findFirst();
+        final var hash = found.map(CloseBundle::getHash);
+        return hash.orElse(null);
+    }
+
+    private record ClosingHashes(String canvassHash, String bundleHash) {
     }
 
     private String canvassHash(final UUID electionId) {

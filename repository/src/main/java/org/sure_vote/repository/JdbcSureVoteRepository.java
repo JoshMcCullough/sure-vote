@@ -30,6 +30,7 @@ import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.ContentFile;
 import org.sure_vote.entity.Credential;
 import org.sure_vote.entity.ElectedOfficial;
+import org.sure_vote.entity.CloseBundle;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Enrollment;
@@ -77,6 +78,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         ContentFile.class,
         Credential.class,
         ElectedOfficial.class,
+        CloseBundle.class,
         Election.class,
         Enrollment.class,
         ElectionVotingPrecinctAssignment.class,
@@ -126,7 +128,8 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         "tenant_validator",
         "vote_chain_validation_result",
         "restore_incident",
-        "canvass_statement"
+        "canvass_statement",
+        "close_bundle"
     );
 
     private final DataSource source;

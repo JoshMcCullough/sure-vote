@@ -91,6 +91,18 @@ A locality object uses `localityId`, `ballots`, `undervotes`, `candidates`, sort
 
 A restore incident, when present, uses the payload in [schema.md](./schema.md). Its hash is SHA-256 of that JSON, and the operator signature covers the raw hash bytes. The restored heads in the incident are the chain heads the verifier is checking. The witnessed heads are the latest outside validator heads from before the restore. The incident does not remove entries. It records that the promoted chain and the last outside witness differ.
 
+## Close bundle
+
+After close, the operator signs one bundle per election, and `GET /elections/{id}/close-bundle` serves its exact bytes. The `SureVote-Bundle-Hash` header is SHA-256 of the body, and `SureVote-Bundle-Signature` is the operator signature over the raw hash bytes. The closing head notice carries the same value as `bundleHash`. The bundle is canonical JSON. Its keys, in order, are `electionId`, `definitionHash`, `definitionSignature`, `chains`, `entries`, `ballots`, `votes`, `canvass`, `restoreIncident`.
+
+- `chains` is sorted by `raceId`. Each uses `raceId`, `voteChainId`, `length`, `hash`, `signature`.
+- `entries` is sorted by `raceId`, then `index`. Each uses `voteChainId`, `payload`, `hash`, `signature`.
+- `ballots` and `votes` are each sorted by `hash`, so their order does not show recording order. Each uses `payload`, `hash`, `signature`.
+- `canvass` uses `payload`, `hash`, `signature`.
+- `restoreIncident` is `null` or uses `payload`, `hash`, `signature`.
+
+Each `payload` is the stored canonical text as a JSON string, so a verifier hashes the decoded string, not the escaped form. A signature that is absent is `null`. The bundle has no access codes, viewing passphrases, voter rows, or issuance rows. A verifier can run every check below from the bundle and the signed definition.
+
 ## Request signatures
 
 A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is Ed25519 over those 32 raw bytes, in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.

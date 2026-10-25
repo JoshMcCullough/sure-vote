@@ -10,6 +10,7 @@ public final class HeadResource {
     private String observedAt;
     private String signature;
     private String canvassHash;
+    private String bundleHash;
     private boolean witnessGap;
 
     public UUID getElectionId() {
@@ -74,5 +75,13 @@ public final class HeadResource {
 
     public void setWitnessGap(final boolean witnessGap) {
         this.witnessGap = witnessGap;
+    }
+
+    public String getBundleHash() {
+        return this.bundleHash;
+    }
+
+    public void setBundleHash(final String bundleHash) {
+        this.bundleHash = bundleHash;
     }
 }

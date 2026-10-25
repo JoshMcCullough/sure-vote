@@ -73,8 +73,12 @@ final class ShowcaseService {
         final var seed = this.seed(HeldKeyPurpose.OPERATOR, election.getId());
         final var signatures = this.signatures(election.getId(), seed);
         final var canvassSignature = this.canvassSignature(election.getId(), seed);
+        final var closed = this.app.close(election.getId(), signatures, canvassSignature, actor);
+        final var bundleHash = this.app.closeBundleHash(election.getId());
+        final var bundleSignature = Signatures.sign(seed, Digests.unhex(bundleHash));
         ViewingBoxes.wipe(seed);
-        return this.app.close(election.getId(), signatures, canvassSignature, actor);
+        this.app.fileCloseBundle(election.getId(), bundleSignature, actor);
+        return closed;
     }
 
     private Election createElectionLocked(final Election draft, final UUID actor) {

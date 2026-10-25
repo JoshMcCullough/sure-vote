@@ -60,6 +60,9 @@ class ShowcaseRulesTest {
         final var stored = world.repository.find(Election.class, world.electionId);
         final var election = stored.orElseThrow();
         final var closed = world.app.closeShowcase(world.electionId, world.actor);
+        final var bundle = world.app.closeBundle(world.electionId);
+        final var heads = world.app.heads(world.electionId);
+        final var head = heads.getFirst();
         final var slots = world.repository.list(RaceCandidate.class);
         final var winner = this.winner(slots, world.slotId);
         assertEquals(castBallot.getId(), foundBallot.getId());
@@ -68,6 +71,7 @@ class ShowcaseRulesTest {
         assertTrue(Signatures.verify(election.getOperatorPublicKey(), hashRaw, signature));
         assertTrue(world.app.demonstration(world.electionId));
         assertEquals(ElectionStatus.HISTORICAL, closed.getStatus());
+        assertEquals(bundle.hash(), head.bundleHash());
         assertEquals(Outcome.WON, winner.getOutcome());
         assertEquals(Integer.valueOf(1), winner.getRank());
         assertEquals(1, winner.getVotesReceived());

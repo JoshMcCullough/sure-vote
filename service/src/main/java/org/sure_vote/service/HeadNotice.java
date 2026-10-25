@@ -11,6 +11,7 @@ public final class HeadNotice {
     private final Instant observedAt;
     private final String signature;
     private final String canvassHash;
+    private final String bundleHash;
     private final boolean witnessGap;
 
     public HeadNotice(
@@ -21,6 +22,7 @@ public final class HeadNotice {
         final Instant observedAt,
         final String signature,
         final String canvassHash,
+        final String bundleHash,
         final boolean witnessGap
     ) {
         this.electionId = electionId;
@@ -30,6 +32,7 @@ public final class HeadNotice {
         this.observedAt = observedAt;
         this.signature = signature;
         this.canvassHash = canvassHash;
+        this.bundleHash = bundleHash;
         this.witnessGap = witnessGap;
     }
 
@@ -59,6 +62,10 @@ public final class HeadNotice {
 
     public String canvassHash() {
         return this.canvassHash;
+    }
+
+    public String bundleHash() {
+        return this.bundleHash;
     }
 
     public boolean witnessGap() {

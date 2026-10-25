@@ -19,6 +19,7 @@ import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
+import org.sure_vote.entity.CloseBundle;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.LedgerEntity;
@@ -46,6 +47,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         CanvassStatement.class,
         HeldKey.class,
         RestoreIncident.class,
+        CloseBundle.class,
         VoteChainValidationResult.class
     );
 
@@ -487,6 +489,9 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         else if (row instanceof RestoreIncident incident) {
             this.requireIncident(incident, ignoredId);
         }
+        else if (row instanceof CloseBundle bundle) {
+            this.requireBundle(bundle, ignoredId);
+        }
         else if (row instanceof BallotStyle style) {
             this.requireStyle(style, ignoredId);
         }
@@ -625,6 +630,18 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
             final var sameId = this.sameId(existing.getId(), ignoredId);
             if (!sameId && sameElection) {
                 throw new IllegalArgumentException("An election has one restore incident");
+            }
+        }
+    }
+
+    private void requireBundle(final CloseBundle bundle, final UUID ignoredId) {
+        this.requirePresent(bundle.getElectionId(), "electionId");
+        for (final var existing : this.listLocked(CloseBundle.class)) {
+            final var electionId = existing.getElectionId();
+            final var sameElection = electionId.equals(bundle.getElectionId());
+            final var sameId = this.sameId(existing.getId(), ignoredId);
+            if (!sameId && sameElection) {
+                throw new IllegalArgumentException("An election has one close bundle");
             }
         }
     }

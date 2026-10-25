@@ -30,7 +30,7 @@ The chain lives in PostgreSQL. A copy of the chain head, its latest entry, held 
 - Coercion resistance. An in-person access code is a bearer token. Anyone with that slip can open that ballot.
 - A networked voting machine. Polling-place machines stay offline and write ballots to local media.
 - A ledger-level proof that every ballot came from an eligible voter exactly once. One ballot per voter is required and is enforced today by the private `BallotIssuance` mark. Whether to add a cryptographic spend is open. See [system.md](./docs/system.md).
-- Publishing ballot bodies before close. Bodies are published at close, and validators pull the ledger in bulk then.
+- Publishing ballot bodies before close. Bodies are published at close in the operator-signed close bundle (`GET /elections/{id}/close-bundle`), and validators pull the ledger in bulk then.
 - A parent chain per precinct, district, state, or nation. Geographic totals are the canvass statement.
 - Provisional ballots. A voter who is not accepted is not recorded.
 

@@ -16,6 +16,7 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.Candidate;
 import org.sure_vote.entity.DisputeStatus;
+import org.sure_vote.entity.CloseBundle;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
@@ -53,6 +54,7 @@ public final class SureVote {
     private final WorkspaceCatalog catalog;
     private final ValidatorService validators;
     private final RestoreService restores;
+    private final CloseBundleService bundles;
     private final SystemAdminService system;
     private final SessionService sessions;
     private final OfficialService officials;
@@ -76,6 +78,7 @@ public final class SureVote {
         this.catalog = new WorkspaceCatalog(repository, stores);
         this.validators = new ValidatorService(repository, stores);
         this.restores = new RestoreService(repository, stores, this.validators);
+        this.bundles = new CloseBundleService(repository, stores, this.validators);
         this.system = new SystemAdminService(repository, stores);
         this.sessions = new SessionService(repository, stores);
         this.officials = new OfficialService(repository, stores, this.system);
@@ -485,8 +488,21 @@ public final class SureVote {
         return this.published(electionId, () -> this.validators.validators(electionId));
     }
 
+    public String closeBundleHash(final UUID electionId) {
+        final var payload = this.published(electionId, () -> this.bundles.payload(electionId));
+        return Digests.sha256Hex(payload);
+    }
+
+    public CloseBundle fileCloseBundle(final UUID electionId, final String signature, final UUID actor) {
+        return this.repository.transaction(() -> this.bundles.file(electionId, signature, actor));
+    }
+
+    public BundleDownload closeBundle(final UUID electionId) {
+        return this.published(electionId, () -> this.bundles.download(electionId));
+    }
+
     public String restoreIncidentPayload(final UUID electionId, final String reason, final Instant timestamp) {
-        return this.restores.payload(electionId, reason, timestamp);
+        return this.published(electionId, () -> this.restores.payload(electionId, reason, timestamp));
     }
 
     public RestoreIncident fileRestoreIncident(

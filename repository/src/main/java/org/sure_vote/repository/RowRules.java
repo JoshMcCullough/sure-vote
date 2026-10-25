@@ -14,6 +14,7 @@ import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
+import org.sure_vote.entity.CloseBundle;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.RestoreIncident;
@@ -30,6 +31,7 @@ final class RowRules {
         CanvassStatement.class,
         HeldKey.class,
         RestoreIncident.class,
+        CloseBundle.class,
         VoteChainValidationResult.class
     );
 
@@ -92,6 +94,9 @@ final class RowRules {
         }
         else if (row instanceof RestoreIncident incident) {
             requireIncident(connection, incident, ignoredId);
+        }
+        else if (row instanceof CloseBundle bundle) {
+            requireBundle(connection, bundle, ignoredId);
         }
         else if (row instanceof BallotStyle style) {
             requireStyle(connection, style, ignoredId);
@@ -242,6 +247,19 @@ final class RowRules {
         values.add(incident.getElectionId());
         addIgnored(values, ignoredId);
         rejectDuplicate(connection, incidentSql(ignoredId), values, "An election has one restore incident");
+    }
+
+    private static void requireBundle(final Connection connection, final CloseBundle bundle, final UUID ignoredId) {
+        final var values = new ArrayList<Object>();
+        requirePresent(bundle.getElectionId(), "electionId");
+        values.add(bundle.getElectionId());
+        addIgnored(values, ignoredId);
+        rejectDuplicate(connection, bundleSql(ignoredId), values, "An election has one close bundle");
+    }
+
+    private static String bundleSql(final UUID ignoredId) {
+        final var sql = "select 1 from close_bundle where \"election_id\" = ?";
+        return sql + except(ignoredId);
     }
 
     private static String incidentSql(final UUID ignoredId) {

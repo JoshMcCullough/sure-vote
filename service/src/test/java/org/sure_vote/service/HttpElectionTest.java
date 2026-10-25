@@ -80,6 +80,38 @@ class HttpElectionTest {
         this.use(world, () -> this.restoreIncident(world));
     }
 
+    @Test
+    void aClosedElectionServesItsSignedBundle() throws Exception {
+        final var world = SampleElection.fptp();
+        world.castOne(world.slotA, "Y");
+        world.close();
+        this.use(world, () -> this.bundle(world));
+    }
+
+    private void bundle(final SampleElection world) throws Exception {
+        final var path = "/elections/" + world.electionId + "/close-bundle";
+        final var missing = this.send("GET", path, null);
+        final var hashed = this.saved(path + "/hash", null);
+        final var hash = this.text(hashed, "hash");
+        final var raw = Digests.unhex(hash);
+        final var seed = world.operator.seed();
+        final var signature = Signatures.sign(seed, raw);
+        final var filed = this.saved(path, "{\"signature\":\"" + signature + "\"}");
+        final var downloaded = this.send("GET", path, null);
+        final var headers = downloaded.headers();
+        final var heads = this.send("GET", "/elections/" + world.electionId + "/heads", null);
+        final var headsBody = heads.body();
+        final var sentHash = headers.firstValue("SureVote-Bundle-Hash");
+        final var sentSignature = headers.firstValue("SureVote-Bundle-Signature");
+        assertEquals(400, missing.statusCode());
+        assertTrue(filed.contains(hash));
+        assertEquals(200, downloaded.statusCode());
+        assertEquals(hash, Digests.sha256Hex(downloaded.body()));
+        assertEquals(hash, sentHash.orElseThrow());
+        assertEquals(signature, sentSignature.orElseThrow());
+        assertTrue(headsBody.contains("\"bundleHash\":\"" + hash + "\""));
+    }
+
     private void restoreIncident(final SampleElection world) throws Exception {
         final var path = "/elections/" + world.electionId + "/restore-incidents";
         final var draft = "{\"reason\":\"Disk lost\",\"timestamp\":\"2026-11-06T09:30:00.250Z\"}";

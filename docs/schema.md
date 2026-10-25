@@ -404,6 +404,14 @@ A public record that a restored chain head differs from the latest head an outsi
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
 - `signature` (String): Operator signature over the raw bytes of `hash`.
 
+### CloseBundle
+The operator signature over the bundle of an election's published ledger after close. Insert-only. One row per election. The bundle bytes are rebuilt from the closed ledger. See [verification.md](./verification.md).
+
+- Ledger fields
+- `election` (Reference to Election): The election. Unique.
+- `hash` (String): SHA-256 of the UTF-8 bytes of the bundle.
+- `signature` (String): Operator signature over the raw bytes of `hash`.
+
 ### TenantOfficial
 A person who acts for one tenant. Row-level security on `tenant_id`. See [auth-proposal.md](./auth-proposal.md).
 

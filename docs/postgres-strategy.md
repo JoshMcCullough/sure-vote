@@ -53,6 +53,7 @@ Storage plan for the operating model in [system.md](./system.md), the fields in 
 - `vote_chain_validation_result`
 - `canvass_statement` (one per election, insert-only, written at close)
 - `restore_incident` (one per election, insert-only, only after a divergent restore)
+- `close_bundle` (one per election, insert-only, the operator-signed hash of the close bundle)
 
 Every table except `vote_chain_validator` has `tenant_id`. The column is immutable after insert. `vote_chain_validator` is global.
 
@@ -82,6 +83,7 @@ Every table except `vote_chain_validator` has `tenant_id`. The column is immutab
 - `vote_chain_validation_result(vote_chain_id, date_validated desc)`
 - `canvass_statement(election_id)` unique
 - `restore_incident(election_id)` unique
+- `close_bundle(election_id)` unique
 - `tenant_validator(tenant_id, validator_id)` unique
 - `tenant_id` on every tenant-scoped table
 
@@ -174,7 +176,7 @@ For `vote_chain`:
 - A trigger rejects `status` moving anywhere except `active` to `closed`.
 - A `closed` chain must have `hash` and `signature`.
 
-`canvass_statement` and `restore_incident` are insert-only. Block `UPDATE` and `DELETE`.
+`canvass_statement`, `restore_incident`, and `close_bundle` are insert-only. Block `UPDATE` and `DELETE`.
 
 On `vote_chain_validation_result`, block changes to the payload, hash, signature, and the columns the payload repeats.
 

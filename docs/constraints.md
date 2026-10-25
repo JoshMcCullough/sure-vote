@@ -64,7 +64,7 @@ No two live `Term` records for the same `Seat` may have overlapping `termStart` 
 
 ## Tenancy
 
-A row's `tenant` equals the tenant of the parent it belongs to. `VoteChainValidator` has no tenant. A production election cannot become `active` without a `TenantValidator` the agreement identifies as outside the host. A showcase tenant rejects a `Person.ssn` or `Person.voterId`. A showcase tenant may store host-held operator, import, viewing, and device seeds in `HeldKey`. That row is insert-only and unique on purpose plus subject. The API does not return it. A production tenant does not keep host keys. A `RestoreIncident` is insert-only, one per election, and its restored heads are the chain heads promoted for that election.
+A row's `tenant` equals the tenant of the parent it belongs to. `VoteChainValidator` has no tenant. A production election cannot become `active` without a `TenantValidator` the agreement identifies as outside the host. A showcase tenant rejects a `Person.ssn` or `Person.voterId`. A showcase tenant may store host-held operator, import, viewing, and device seeds in `HeldKey`. That row is insert-only and unique on purpose plus subject. The API does not return it. A production tenant does not keep host keys. A `CloseBundle` is insert-only, one per election, exists only for a `historical` election, and its signature verifies under the election's operator key. A `RestoreIncident` is insert-only, one per election, and its restored heads are the chain heads promoted for that election.
 
 ## Not a ledger constraint yet
 

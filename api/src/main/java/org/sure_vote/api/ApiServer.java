@@ -264,6 +264,15 @@ public final class ApiServer implements HttpHandler {
         else if ("POST".equals(method) && this.electionAction(parts, "validations")) {
             this.fileValidation(exchange, parts);
         }
+        else if ("POST".equals(method) && this.electionNested(parts, "close-bundle", "hash")) {
+            this.bundleHash(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionAction(parts, "close-bundle")) {
+            this.fileBundle(exchange, parts);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "close-bundle")) {
+            this.downloadBundle(exchange, parts);
+        }
         else if ("POST".equals(method) && this.electionNested(parts, "restore-incidents", "hash")) {
             this.restoreHash(exchange, parts);
         }
@@ -533,6 +542,44 @@ public final class ApiServer implements HttpHandler {
             () -> this.app.fileValidation(id, request, body.validatorId)
         );
         this.writeJson(exchange, 201, this.validationResource(saved));
+    }
+
+    private void bundleHash(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        this.writeJson(exchange, 200, new HashResource(this.app.closeBundleHash(id)));
+    }
+
+    private void fileBundle(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.requests.official(exchange);
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, SignatureBody.class);
+        final var saved = this.app.inElection(
+            actor,
+            id,
+            () -> this.app.fileCloseBundle(id, body.signature, actor.id())
+        );
+        final var resource = new LinkedHashMap<String, Object>();
+        resource.put("electionId", saved.getElectionId());
+        resource.put("hash", saved.getHash());
+        resource.put("signature", saved.getSignature());
+        resource.put("createdAt", this.time(saved.getCreatedAt()));
+        this.writeJson(exchange, 201, resource);
+    }
+
+    private void downloadBundle(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var bundle = this.app.closeBundle(id);
+        final var payload = bundle.payload();
+        final var bytes = payload.getBytes(StandardCharsets.UTF_8);
+        final var headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", "application/json; charset=utf-8");
+        headers.set("Cache-Control", "public, max-age=31536000, immutable");
+        headers.set("SureVote-Bundle-Hash", bundle.hash());
+        headers.set("SureVote-Bundle-Signature", bundle.signature());
+        exchange.sendResponseHeaders(200, bytes.length);
+        try (var output = exchange.getResponseBody()) {
+            output.write(bytes);
+        }
     }
 
     private void restoreHash(final HttpExchange exchange, final List<String> parts) throws IOException {
@@ -947,6 +994,7 @@ public final class ApiServer implements HttpHandler {
         resource.setObservedAt(this.time(notice.observedAt()));
         resource.setSignature(notice.signature());
         resource.setCanvassHash(notice.canvassHash());
+        resource.setBundleHash(notice.bundleHash());
         resource.setWitnessGap(notice.witnessGap());
         return resource;
     }
