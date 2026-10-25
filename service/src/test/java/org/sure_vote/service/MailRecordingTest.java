@@ -12,10 +12,12 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.Person;
+import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChainEntry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -68,6 +70,40 @@ class MailRecordingTest {
             () -> world.app.createPerson(person, world.actor),
             "viewing passphrase is stored only as a sealed box"
         );
+    }
+
+    @Test
+    void aSuspendedTenantRecordsNoMailBallot() {
+        final var world = SampleElection.mailOffice();
+        final var personId = this.voter(world);
+        final var selection = new SealSelection(world.slotA, "Y", "mail-1");
+        final var request = this.request(
+            world,
+            personId,
+            List.of(selection),
+            BallotType.MAIL_IN,
+            world.workstationId,
+            world.officeId,
+            DeliveryChannel.EMAIL,
+            EMAIL
+        );
+        final var capture = new Capture(true);
+        final var sealed = world.app.sealViewingPassphrase(personId, PASSPHRASE, world.viewingPublic, world.actor);
+        world.app.updateSystemTenant(world.tenantId, null, TenantStatus.SUSPENDED, world.admin());
+        this.assertMessage(
+            () -> MailRecorder.record(
+                world.app,
+                world.repository,
+                request,
+                world.viewingSeed,
+                world.workstationKey,
+                world.importKey,
+                capture
+            ),
+            "tenant is suspended"
+        );
+        assertNull(capture.delivery);
+        assertNotNull(sealed.getViewingPassphrase());
     }
 
     @Test

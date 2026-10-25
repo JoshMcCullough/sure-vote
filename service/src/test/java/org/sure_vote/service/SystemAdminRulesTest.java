@@ -4,6 +4,8 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
@@ -118,13 +120,63 @@ class SystemAdminRulesTest {
     }
 
     @Test
-    void aSuspendedTenantRecordsNoBallot() {
+    void aSuspendedTenantRecordsNothingNew() {
         final var world = SampleElection.fptp();
-        final var sealed = world.sealed(world.slotA, "Y");
+        final var recorded = world.castOne(world.slotA, "Y");
+        final var code = world.lastCode;
+        final var voter = world.person("Ada", "Voter");
+        final var sealed = world.sealed(world.slotB, "Y");
+        final var draft = world.election();
         world.app.updateSystemTenant(world.tenantId, null, TenantStatus.SUSPENDED, world.admin());
         this.refused("tenant is suspended", () -> world.app.importBallot(sealed));
+        this.refused("tenant is suspended", () -> world.accept(voter));
+        this.refused("tenant is suspended", () -> world.person("Bea", "Voter"));
+        this.refused("tenant is suspended", () -> world.app.createElection(draft, world.actor));
+        this.refused(
+            "tenant is suspended",
+            () -> world.app.sealViewingPassphrase(voter, "correct horse battery", world.viewingPublic, world.actor)
+        );
+        this.assertPublicReads(world, recorded, code);
         world.app.updateSystemTenant(world.tenantId, null, TenantStatus.ACTIVE, world.admin());
         world.app.importBallot(sealed);
+    }
+
+    @Test
+    void aSuspendedTenantActivatesNoElection() {
+        final var world = SampleElection.upcomingFptp();
+        world.app.updateSystemTenant(world.tenantId, null, TenantStatus.SUSPENDED, world.admin());
+        this.refused("tenant is suspended", world::activate);
+    }
+
+    @Test
+    void aSuspendedDemoTenantCreatesNoShowcaseElection() {
+        final var world = this.showcaseWithLocality();
+        final var draft = world.election();
+        world.app.updateSystemTenant(world.tenantId, null, TenantStatus.SUSPENDED, world.admin());
+        this.refused("tenant is suspended", () -> world.app.createShowcaseElection(draft, world.actor));
+    }
+
+    private SampleElection showcaseWithLocality() {
+        final var world = SampleElection.showcase();
+        final var locality = new Locality();
+        locality.setTenantId(world.tenantId);
+        locality.setName("Town");
+        locality.setType("city");
+        world.localityId = world.app
+            .createLocality(locality, world.actor)
+            .getId();
+        return world;
+    }
+
+    private void assertPublicReads(final SampleElection world, final Ballot recorded, final String code) {
+        final var found = world.app.lookup(code, null);
+        final var election = world.app.election(world.electionId);
+        final var heads = world.app.heads(world.electionId);
+        final var opened = found.ballot();
+        assertEquals(recorded.getId(), opened.getId());
+        assertEquals(world.electionId, election.getId());
+        assertEquals(0, world.app.disputeCount(world.electionId));
+        assertTrue(!heads.isEmpty());
     }
 
     private SystemAdmin admin(final UUID id, final String name) {

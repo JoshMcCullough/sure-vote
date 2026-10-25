@@ -49,6 +49,7 @@ final class DefinitionService {
 
     Person createPerson(final Person person, final UUID actor) {
         final var tenant = this.stores.require(Tenant.class, person.getTenantId());
+        this.stores.requireActiveTenant(person.getTenantId());
         this.rejectShowcase(tenant, person);
         this.rejectPlaintext(person);
         return this.stores.add(person, actor);
@@ -101,6 +102,7 @@ final class DefinitionService {
         final var end = election.getVotingEnd();
         final var window = start != null && end != null && !start.isAfter(end);
         this.stores.sameTenant(election.getTenantId(), locality.getTenantId(), "Locality");
+        this.stores.requireActiveTenant(election.getTenantId());
         this.stores.require(window, "voting window is invalid");
         this.stores.require(Digests.isLowerHex(election.getOperatorPublicKey(), 64), "operator public key");
         this.stores.require(Digests.isLowerHex(election.getImportPublicKey(), 64), "import public key");
@@ -180,6 +182,7 @@ final class DefinitionService {
         this.stores.sameTenant(issuance.getTenantId(), election.getTenantId(), "Election");
         this.stores.sameTenant(issuance.getTenantId(), person.getTenantId(), "Person");
         this.stores.sameTenant(issuance.getTenantId(), place.getTenantId(), "Recording place");
+        this.stores.requireActiveTenant(election.getTenantId());
         this.stores.require(
             election.getStatus() == ElectionStatus.ACTIVE,
             "Voters are accepted while the election is active"
@@ -214,6 +217,7 @@ final class DefinitionService {
             existing.getStatus() == ElectionStatus.UPCOMING,
             "Only an upcoming election can be activated"
         );
+        this.stores.requireActiveTenant(existing.getTenantId());
         this.definitions.validate(this.repository, existing);
         this.stores.require(signed, "Operator signature does not match the election definition");
         this.requireOutsideValidator(existing);
@@ -242,6 +246,7 @@ final class DefinitionService {
     ) {
         final var person = this.stores.require(Person.class, personId);
         this.stores.require(actor != null, "actor is required");
+        this.stores.requireActiveTenant(person.getTenantId());
         this.stores.require(Digests.isLowerHex(viewingPublicKey, 64), "viewing public key");
         this.stores.require(person.getViewingPassphrase() == null, "viewing passphrase is already sealed");
         return this.storePassphrase(person, plaintext, viewingPublicKey, actor);

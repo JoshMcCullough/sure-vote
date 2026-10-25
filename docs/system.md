@@ -46,7 +46,7 @@ A host administrator who uses the migration role can read every tenant. That use
 
 Only a system admin creates a tenant. The one exception is the demo tenant: the host names it in its configuration, and the service creates it at startup as a showcase tenant if it does not exist. A system admin also suspends and reinstates tenants. Until request identity is chosen, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
 
-`Tenant.kind` is `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`. Officials must not load a real voter roll into it. The software cannot tell a fictional name from a real one. Suspending a tenant stops new recording. It does not delete the ledger.
+`Tenant.kind` is `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`. Officials must not load a real voter roll into it. The software cannot tell a fictional name from a real one. Suspending a tenant refuses new registrations, elections, activations, accepted voters, viewing passphrases, and ballots from any channel. It does not delete the ledger. Published data stays readable, and officials may still close an election, void an issuance, and voters may still file disputes.
 
 ### Showcase
 

@@ -589,7 +589,7 @@ final class SampleElection {
         return device;
     }
 
-    private Election election() {
+    Election election() {
         final var election = new Election();
         final var operatorKey = this.operator.publicKey();
         final var importKeyHex = this.importKey.publicKey();

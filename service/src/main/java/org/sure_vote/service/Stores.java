@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import org.sure_vote.entity.Entity;
 import org.sure_vote.entity.Identifiable;
+import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.repository.SureVoteRepository;
 
 final class Stores {
@@ -32,6 +34,11 @@ final class Stores {
         if (!condition) {
             throw new ConstraintException(message);
         }
+    }
+
+    void requireActiveTenant(final UUID tenantId) {
+        final var tenant = this.require(Tenant.class, tenantId);
+        this.require(tenant.getStatus() != TenantStatus.SUSPENDED, "tenant is suspended");
     }
 
     void sameTenant(final UUID expected, final UUID actual, final String label) {

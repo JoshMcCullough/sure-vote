@@ -32,7 +32,7 @@ One election authority on a host. A small locality that does not run its own ele
 - `name` (String): The authority's name. Public.
 - `kind` (Enum): `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`.
 - `residencyRegion` (String): The cloud region named in the agreement. Private rows and backups stay there. It changes only through the region-move procedure.
-- `status` (Enum): `active` or `suspended`. Suspended stops new recording and does not delete the ledger.
+- `status` (Enum): `active` or `suspended`. Suspended refuses new people, elections, activations, accepted voters, viewing passphrases, and ballots. It does not delete the ledger, and published data stays readable.
 
 ### SystemAdmin
 A host operator who creates and suspends tenants. Global: it has no `tenant` and is not linked to any `Person`. A system admin reads and writes `Tenant` rows and other system admins. It does not read a tenant's roll, definition, or ledger through the application. See [system.md](./system.md).
