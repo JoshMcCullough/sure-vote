@@ -157,13 +157,13 @@ Represents a specific voter registration event, which may include changes to the
 - `assignmentStatus` (Enum): The current status of the voting precinct assignment: current, historical, etc.
 
 ### BallotIssuance
-Private mark that this voter has been issued a ballot for this election. Mail-in recording writes it as `issued` in its own transaction before the ballot and, after the ballot commits, sends its bare id to the received queue. A flusher marks queued rows `received` in shuffled batches with a whole-day timestamp. In person the pollbook writes it as `issued`, the voting machine never sees it, and a polling place's rows become `received` when its ballots match them. It is how decision 1 in [system.md](./system.md) is enforced. See [Marking a ballot received](./system.md#marking-a-ballot-received).
+Private mark that this voter has been issued a ballot for this election. For mail-in and absentee it is written as `issued` when the ballot is mailed out, and recording the returned ballot writes no row; after the ballot commits, its bare id goes to the received queue. A replacement mailed ballot voids the earlier row. A flusher marks queued rows `received` in shuffled batches with a whole-day timestamp. In person the pollbook writes it as `issued`, the voting machine never sees it, and a polling place's rows become `received` when its ballots match them. It is how decision 1 in [system.md](./system.md) is enforced. See [Marking a ballot received](./system.md#marking-a-ballot-received).
 
 - Administrative audit fields
 - `person` (Reference to Person): The voter the ballot was accepted for.
 - `election` (Reference to Election): The election.
 - `recordingPlace` (Reference to RecordingPlace): The polling place or office that accepted the voter. Used to compare counts with ballots recorded at that place. Not a link to a ballot.
-- `acceptedAt` (Date): When the voter was accepted. Mail-in rows store the UTC day.
+- `acceptedAt` (Date): When the voter was accepted at the polls, or when the mail ballot was sent.
 - `status` (Enum): `issued`, `received`, or `voided`. `issued` and `received` spend the voter's ballot and count in the place comparison.
 - `receivedAt` (Date, Optional): The UTC day the row was marked `received`, with no time of day. Set exactly when `status` is `received`.
 - `voidReason` (String, Optional): Why the issuance was voided. Required when `status` is `voided`.

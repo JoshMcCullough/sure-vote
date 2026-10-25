@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
-import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionStatus;
@@ -209,20 +208,8 @@ public final class MailRecorder {
     }
 
     private static void requireIssuance(final SureVoteRepository repository, final MailRecord request) {
-        final var rows = repository.list(BallotIssuance.class);
-        for (final var row : rows) {
-            rejectAccepted(row, request.personId(), request.electionId());
-        }
-    }
-
-    private static void rejectAccepted(final BallotIssuance row, final UUID personId, final UUID electionId) {
-        final var samePerson = personId.equals(row.getPersonId());
-        final var sameElection = electionId.equals(row.getElectionId());
-        final var status = row.getStatus();
-        final var accepted = status != null && status.spends();
-        if (samePerson && sameElection && accepted) {
-            throw new ConstraintException("Voter already has an issued ballot");
-        }
+        final var issuer = new MailIssuer(repository, new Stores(repository));
+        issuer.requireOutstanding(request.personId(), request.electionId());
     }
 
     private static void requireSelections(final List<SealSelection> selections) {

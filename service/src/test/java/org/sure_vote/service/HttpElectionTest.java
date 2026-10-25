@@ -467,6 +467,7 @@ class HttpElectionTest {
 
     private void mailImport(final SampleElection world) throws Exception {
         final var personId = world.person("Mae", "Voter");
+        final var mailed = this.mailedJson(world, personId);
         final var sealed = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
         final var keyId = "import:" + world.electionId;
         final var body = this.ballotJson(sealed, "mail-in");
@@ -480,6 +481,8 @@ class HttpElectionTest {
         final var issuance = issuances.getFirst();
         final var place = row.get("recordingPlaceId");
         final var matched = row.get("matched");
+        final var mail = row.get("mail");
+        assertEquals(201, mailed.statusCode());
         assertEquals(201, imported.statusCode());
         assertEquals(IssuanceStatus.ISSUED, issuance.getStatus());
         assertEquals(200, report.statusCode());
@@ -487,8 +490,17 @@ class HttpElectionTest {
         assertEquals(1, this.count(row, "issued"));
         assertEquals(0, this.count(row, "received"));
         assertEquals(1, this.count(row, "ballots"));
-        assertTrue(matched.asBoolean());
+        assertFalse(matched.asBoolean());
+        assertTrue(mail.asBoolean());
         assertEquals(401, visitor.statusCode());
+    }
+
+    private HttpResponse<String> mailedJson(final SampleElection world, final UUID personId) throws Exception {
+        final var body = "{\"personId\":\"" + personId
+            + "\",\"electionId\":\"" + world.electionId
+            + "\",\"recordingPlaceId\":\"" + world.officeId
+            + "\"}";
+        return this.send("POST", "/mail-issuances", body);
     }
 
     private int count(final com.fasterxml.jackson.databind.JsonNode row, final String field) {

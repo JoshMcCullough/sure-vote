@@ -66,6 +66,7 @@ import org.sure_vote.service.HeadNotice;
 import org.sure_vote.service.ImportBallot;
 import org.sure_vote.service.ImportVote;
 import org.sure_vote.service.LookupResult;
+import org.sure_vote.service.MailIssue;
 import org.sure_vote.service.PlaceReconciliation;
 import org.sure_vote.service.RestoreRequest;
 import org.sure_vote.service.SureVote;
@@ -190,6 +191,9 @@ public final class ApiServer implements HttpHandler {
         else if ("POST".equals(method) && this.named(parts, "issuances")) {
             this.createIssuance(exchange);
         }
+        else if ("POST".equals(method) && this.named(parts, "mail-issuances")) {
+            this.mailBallot(exchange);
+        }
         else if ("POST".equals(method) && this.named(parts, "ballots")) {
             this.importBallot(exchange);
         }
@@ -310,6 +314,20 @@ public final class ApiServer implements HttpHandler {
         this.writeJson(exchange, 201, this.electionResource(saved));
     }
 
+    private void mailBallot(final HttpExchange exchange) throws IOException {
+        final var actor = this.requests.official(exchange);
+        final var body = this.read(exchange, MailIssuanceBody.class);
+        final var request = new MailIssue(
+            actor.tenantId(),
+            body.personId,
+            body.electionId,
+            body.recordingPlaceId,
+            body.replace
+        );
+        final var saved = this.app.asTenant(actor, () -> this.app.mailBallot(request, actor.id()));
+        this.writeJson(exchange, 201, this.issuanceResource(saved));
+    }
+
     private void createIssuance(final HttpExchange exchange) throws IOException {
         final var actor = this.requests.official(exchange);
         final var body = this.read(exchange, IssuanceBody.class);
@@ -377,6 +395,7 @@ public final class ApiServer implements HttpHandler {
     private Map<String, Object> reconciliationResource(final PlaceReconciliation row) {
         final var body = new LinkedHashMap<String, Object>();
         body.put("recordingPlaceId", row.recordingPlaceId());
+        body.put("mail", row.mail());
         body.put("issued", row.issued());
         body.put("received", row.received());
         body.put("ballots", row.ballots());
@@ -1117,6 +1136,13 @@ public final class ApiServer implements HttpHandler {
         public UUID personId;
         public UUID electionId;
         public UUID recordingPlaceId;
+    }
+
+    public static final class MailIssuanceBody {
+        public UUID personId;
+        public UUID electionId;
+        public UUID recordingPlaceId;
+        public boolean replace;
     }
 
     public static final class BallotBody {

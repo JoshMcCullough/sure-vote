@@ -58,6 +58,7 @@ public final class SureVote {
     private final PasskeyService passkeys;
     private final SignedRequests signedRequests;
     private final ReceivedMarks marks;
+    private final MailIssuer mailIssuer;
     private final SureVoteRepository repository;
     private volatile boolean devSignIn;
 
@@ -78,7 +79,8 @@ public final class SureVote {
         this.officials = new OfficialService(repository, stores, this.system);
         this.passkeys = new PasskeyService(repository, stores, this.sessions);
         this.signedRequests = new SignedRequests(repository, stores);
-        this.marks = new ReceivedMarks(repository, stores);
+        this.mailIssuer = new MailIssuer(repository, stores);
+        this.marks = new ReceivedMarks(repository, stores, this.mailIssuer);
         this.repository = repository;
     }
 
@@ -496,34 +498,28 @@ public final class SureVote {
     }
 
     <T> T recorded(final ImportBallot request, final Supplier<T> work) {
-        final var issued = this.issued(request);
-        final var result = this.attempted(request, issued, work);
-        this.repository.afterCommit(() -> this.marks.committed(request, issued));
-        return result;
-    }
-
-    private Optional<UUID> issued(final ImportBallot request) {
-        this.repository.inTenant(request.tenantId(), () -> this.checkedImport(request));
-        return this.marks.issue(request);
-    }
-
-    private ImportBallot checkedImport(final ImportBallot request) {
-        this.recording.check(request);
-        return request;
-    }
-
-    Ballot storeBallot(final ImportBallot request) {
-        return this.repository.inTenant(request.tenantId(), () -> this.recording.importBallot(request));
-    }
-
-    private <T> T attempted(final ImportBallot request, final Optional<UUID> issued, final Supplier<T> work) {
         try {
             return work.get();
         }
         catch (final RuntimeException failure) {
-            issued.ifPresent(id -> this.marks.abandon(request.tenantId(), id, request.actorId()));
+            this.marks.release(request);
             throw failure;
         }
+    }
+
+    Ballot storeBallot(final ImportBallot request) {
+        return this.repository.inTenant(request.tenantId(), () -> this.claimedBallot(request));
+    }
+
+    private Ballot claimedBallot(final ImportBallot request) {
+        final var ballot = this.recording.importBallot(request);
+        final var claimed = this.marks.claim(request);
+        this.repository.afterCommit(() -> this.marks.committed(request, claimed));
+        return ballot;
+    }
+
+    public BallotIssuance mailBallot(final MailIssue request, final UUID actor) {
+        return this.mailIssuer.mail(request, actor);
     }
 
     private List<PlaceReconciliation> reconciled(final UUID electionId) {

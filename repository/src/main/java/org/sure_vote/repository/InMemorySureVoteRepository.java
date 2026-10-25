@@ -86,6 +86,11 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     }
 
     @Override
+    public void lock(final UUID key) {
+        this.requirePresent(key, "a lock key");
+    }
+
+    @Override
     public void afterCommit(final Runnable action) {
         final var joined = this.after.get();
         if (joined == null) {

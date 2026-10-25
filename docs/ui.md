@@ -65,7 +65,8 @@ Creates require a session and return the saved resource. Workspace creates and `
 - `POST /elections/{id}/activate` and `POST /elections/{id}/close` with signatures made outside the app
 - `POST /showcase/elections` and `POST /showcase/devices` when the host generates the keys
 - `POST /showcase/elections/{id}/activate`, `/cast`, and `/close`
-- `GET /elections/{id}/reconciliation` returns `[{recordingPlaceId, issued, received, ballots, matched}]` for an official. The React app does not show it yet.
+- `POST /mail-issuances` with `{personId, electionId, recordingPlaceId, replace}` records that a mail ballot was sent.
+- `GET /elections/{id}/reconciliation` returns `[{recordingPlaceId, mail, issued, received, ballots, matched}]` for an official. The React app does not show it yet.
 
 These routes are public and are not called by the workspace:
 

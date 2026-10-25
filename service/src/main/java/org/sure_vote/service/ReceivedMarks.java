@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.sure_vote.entity.Ballot;
@@ -19,7 +20,6 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.IssuanceStatus;
-import org.sure_vote.entity.Person;
 import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.RecordingPlaceKind;
 import org.sure_vote.repository.SureVoteRepository;
@@ -38,13 +38,16 @@ final class ReceivedMarks {
 
     private final SureVoteRepository repository;
     private final Stores stores;
+    private final MailIssuer issuer;
     private final SecureRandom random = new SecureRandom();
+    private final Map<String, UUID> pending = new ConcurrentHashMap<>();
     private volatile ReceivedQueue queue = new InMemoryReceivedQueue();
     private volatile int batchSize = DEFAULT_BATCH;
 
-    ReceivedMarks(final SureVoteRepository repository, final Stores stores) {
+    ReceivedMarks(final SureVoteRepository repository, final Stores stores, final MailIssuer issuer) {
         this.repository = repository;
         this.stores = stores;
+        this.issuer = issuer;
     }
 
     void configure(final ReceivedQueue next, final int size) {
@@ -54,17 +57,17 @@ final class ReceivedMarks {
         this.batchSize = size;
     }
 
-    Optional<UUID> issue(final ImportBallot request) {
+    Optional<UUID> claim(final ImportBallot request) {
         if (mail(request.type())) {
-            return Optional.of(this.repository.inTenant(request.tenantId(), () -> this.issued(request)));
+            return Optional.of(this.claimed(request));
         }
         else {
             return Optional.empty();
         }
     }
 
-    void abandon(final UUID tenantId, final UUID issuanceId, final UUID actor) {
-        this.repository.inTenant(tenantId, () -> this.voided(issuanceId, actor));
+    void release(final ImportBallot request) {
+        this.pending.remove(key(request.personId(), request.electionId()));
     }
 
     void committed(final ImportBallot request, final Optional<UUID> issued) {
@@ -112,7 +115,7 @@ final class ReceivedMarks {
         for (final var issuance : issuances) {
             this.countIssuance(counts, electionId, issuance);
         }
-        return reconciliations(counts);
+        return this.reconciliations(counts);
     }
 
     static Instant coarse(final Instant at) {
@@ -123,40 +126,19 @@ final class ReceivedMarks {
         return type == BallotType.MAIL_IN || type == BallotType.ABSENTEE;
     }
 
-    private UUID issued(final ImportBallot request) {
-        final var person = this.stores.require(Person.class, request.personId());
-        final var issuance = new BallotIssuance();
-        final var day = coarse(Instant.now());
-        this.stores.sameTenant(request.tenantId(), person.getTenantId(), "Person");
-        this.stores.require(person.getDeletedAt() == null, "Person is deleted");
-        issuance.setId(UUID.randomUUID());
-        issuance.setTenantId(request.tenantId());
-        issuance.setPersonId(request.personId());
-        issuance.setElectionId(request.electionId());
-        issuance.setRecordingPlaceId(request.recordingPlaceId());
-        issuance.setStatus(IssuanceStatus.ISSUED);
-        issuance.setAcceptedAt(day);
-        issuance.setCreatedAt(day);
-        issuance.setUpdatedAt(day);
-        issuance.setCreatedBy(request.actorId());
-        issuance.setUpdatedBy(request.actorId());
-        issuance.setVersion(0);
-        return this.savedId(issuance);
+    private UUID claimed(final ImportBallot request) {
+        final var key = key(request.personId(), request.electionId());
+        this.repository.lock(request.personId());
+        return this.guarded(key, this.issuer.requireOutstanding(request.personId(), request.electionId()));
     }
 
-    private UUID savedId(final BallotIssuance issuance) {
-        final var saved = this.stores.insert(issuance);
-        return saved.getId();
+    private UUID guarded(final String key, final UUID id) {
+        this.stores.require(this.pending.putIfAbsent(key, id) == null, "This voter's ballot was already received");
+        return id;
     }
 
-    private BallotIssuance voided(final UUID issuanceId, final UUID actor) {
-        final var existing = this.stores.require(BallotIssuance.class, issuanceId);
-        final var next = Copies.issuance(existing);
-        next.setStatus(IssuanceStatus.VOIDED);
-        next.setVoidReason("the ballot was not recorded");
-        next.setUpdatedBy(actor);
-        next.setVersion(this.stores.nextVersion(existing.getVersion()));
-        return this.stores.replace(next);
+    private static String key(final UUID personId, final UUID electionId) {
+        return personId + ":" + electionId;
     }
 
     private void queued(final UUID issuanceId) {
@@ -194,6 +176,8 @@ final class ReceivedMarks {
         Collections.shuffle(ids, this.random);
         try {
             final var changed = this.repository.transaction(() -> this.repository.markReceived(ids, day));
+            final var values = this.pending.values();
+            values.removeAll(ids);
             current.delete(marks);
             return changed;
         }
@@ -267,12 +251,17 @@ final class ReceivedMarks {
         }
     }
 
-    private static List<PlaceReconciliation> reconciliations(final Map<UUID, int[]> counts) {
+    private List<PlaceReconciliation> reconciliations(final Map<UUID, int[]> counts) {
         final var rows = new ArrayList<PlaceReconciliation>();
         for (final var entry : counts.entrySet()) {
-            final var count = entry.getValue();
-            rows.add(new PlaceReconciliation(entry.getKey(), count[0], count[1], count[2]));
+            rows.add(this.reconciliation(entry.getKey(), entry.getValue()));
         }
         return rows;
+    }
+
+    private PlaceReconciliation reconciliation(final UUID placeId, final int[] count) {
+        final var place = this.stores.require(RecordingPlace.class, placeId);
+        final var mail = place.getKind() == RecordingPlaceKind.CENTRAL_OFFICE;
+        return new PlaceReconciliation(placeId, mail, count[0], count[1], count[2]);
     }
 }

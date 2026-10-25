@@ -68,4 +68,4 @@ A row's `tenant` equals the tenant of the parent it belongs to. `VoteChainValida
 
 ## Not a ledger constraint yet
 
-One accepted ballot per voter per election is required and is not checkable from ledger columns. The ledger has no voter foreign key. Mail-in recording writes `BallotIssuance` as `issued` in its own transaction just before the ballot. In person the pollbook writes it and the machine never sees it. Do not fake this rule with a trigger on `Ballot` alone.
+One accepted ballot per voter per election is required and is not checkable from ledger columns. The ledger has no voter foreign key. Mail-in issues `BallotIssuance` when the ballot is mailed out, and recording the returned ballot only checks it. In person the pollbook writes it and the machine never sees it. Do not fake this rule with a trigger on `Ballot` alone.

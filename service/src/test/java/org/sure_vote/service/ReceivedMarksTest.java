@@ -82,17 +82,19 @@ class ReceivedMarksTest {
         final var world = SampleElection.hostedMail();
         final var queue = this.configured(world, new FailingQueue(), 1);
         final var personId = world.person("Ada", "Voter");
+        final var issued = world.mailTo(personId);
         final var ballot = world.app.importBallot(world.sealedMail(BallotType.MAIL_IN, personId, world.actor));
         final var rows = this.rows(world);
         final var row = rows.getFirst();
         final var again = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
         final var failure = assertThrows(ConstraintException.class, () -> world.app.importBallot(again));
         assertEquals(BallotType.MAIL_IN, ballot.getType());
+        assertEquals(issued, row.getId());
         assertEquals(ReceivedMarks.ATTEMPTS, queue.attempts);
         assertEquals(1, rows.size());
         assertEquals(IssuanceStatus.ISSUED, row.getStatus());
         assertNull(row.getReceivedAt());
-        assertEquals("Voter already has an issued ballot", failure.getMessage());
+        assertEquals("This voter's ballot was already received", failure.getMessage());
     }
 
     @Test
@@ -190,16 +192,23 @@ class ReceivedMarksTest {
         final var report = world.app.reconciliation(world.electionId);
         final var office = this.place(report, world.officeId);
         final var polls = this.place(report, world.placeId);
+        final var flushed = world.app.flushReceived();
+        final var after = this.place(world.app.reconciliation(world.electionId), world.officeId);
         final var missing = UUID.randomUUID();
         assertEquals(1, inPerson.size());
         assertEquals(BallotType.IN_PERSON, ballot.getType());
         assertEquals(2, mailed.size());
-        assertEquals(2, queue.size());
+        assertEquals(0, queue.size());
         assertEquals(2, report.size());
         assertEquals(2, office.issued());
         assertEquals(0, office.received());
         assertEquals(2, office.ballots());
-        assertTrue(office.matched());
+        assertTrue(office.mail());
+        assertFalse(office.matched());
+        assertEquals(2, flushed);
+        assertEquals(2, after.received());
+        assertTrue(after.matched());
+        assertFalse(polls.mail());
         assertEquals(1, polls.received());
         assertThrows(ConstraintException.class, () -> world.app.reconciliation(missing));
     }
@@ -218,6 +227,79 @@ class ReceivedMarksTest {
         assertEquals(0, row.received());
         assertEquals(1, row.ballots());
         assertFalse(row.matched());
+    }
+
+    @Test
+    void aReplacementVoidsTheEarlierMailedBallot() {
+        final var world = SampleElection.hostedMail();
+        final var personId = world.person("Rae", "Voter");
+        final var first = world.mailTo(personId);
+        final var refused = assertThrows(ConstraintException.class, () -> world.mailTo(personId));
+        final var second = this.replaced(world, personId);
+        final var earlier = this.byId(this.rows(world), first);
+        final var later = this.byId(this.rows(world), second);
+        assertEquals("Voter already has an issued ballot", refused.getMessage());
+        assertEquals(IssuanceStatus.VOIDED, earlier.getStatus());
+        assertEquals(MailIssuer.REPLACED, earlier.getVoidReason());
+        assertEquals(IssuanceStatus.ISSUED, later.getStatus());
+    }
+
+    @Test
+    void aReceivedOrInPersonBallotIsNotReplacedByMail() {
+        final var world = SampleElection.hostedMail();
+        final var mailed = world.person("Mo", "Voter");
+        final var polled = world.person("Pia", "Voter");
+        final var ids = this.mail(world, 1);
+        final var flushed = world.app.flushReceived();
+        final var received = this.receivedPerson(world, ids.getFirst());
+        final var inPerson = world.accept(polled);
+        final var again = assertThrows(ConstraintException.class, () -> this.replaced(world, received));
+        final var polls = assertThrows(ConstraintException.class, () -> this.replaced(world, polled));
+        final var office = assertThrows(
+            ConstraintException.class,
+            () -> world.app.mailBallot(this.atPolls(world, mailed), world.actor)
+        );
+        assertEquals(1, flushed);
+        assertEquals("This voter's ballot was already received", again.getMessage());
+        assertEquals("This voter was issued a ballot in person", polls.getMessage());
+        assertEquals("A mail ballot is issued from a central office", office.getMessage());
+        assertEquals(IssuanceStatus.ISSUED, this.statusOf(world, inPerson));
+    }
+
+    @Test
+    void aMailedBallotCanBeSurrenderedToVoteInPerson() {
+        final var world = SampleElection.hostedMail();
+        final var personId = world.person("Sol", "Voter");
+        final var mailed = world.mailTo(personId);
+        final var blocked = assertThrows(ConstraintException.class, () -> world.accept(personId));
+        final var voided = world.app.voidIssuance(mailed, "surrendered at the polls", world.actor);
+        final var inPerson = world.accept(personId);
+        final var late = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
+        final var refused = assertThrows(ConstraintException.class, () -> world.app.importBallot(late));
+        assertEquals("Voter already has an issued ballot", blocked.getMessage());
+        assertEquals(IssuanceStatus.VOIDED, voided.getStatus());
+        assertEquals(IssuanceStatus.ISSUED, this.statusOf(world, inPerson));
+        assertEquals("This voter was issued a ballot in person", refused.getMessage());
+    }
+
+    private UUID replaced(final SampleElection world, final UUID personId) {
+        final var request = new MailIssue(world.tenantId, personId, world.electionId, world.officeId, true);
+        final var saved = world.app.mailBallot(request, world.actor);
+        return saved.getId();
+    }
+
+    private MailIssue atPolls(final SampleElection world, final UUID personId) {
+        return new MailIssue(world.tenantId, personId, world.electionId, world.placeId, false);
+    }
+
+    private IssuanceStatus statusOf(final SampleElection world, final UUID id) {
+        final var row = this.byId(this.rows(world), id);
+        return row.getStatus();
+    }
+
+    private UUID receivedPerson(final SampleElection world, final UUID issuanceId) {
+        final var row = this.byId(this.rows(world), issuanceId);
+        return row.getPersonId();
     }
 
     private <Q extends ReceivedQueue> Q configured(final SampleElection world, final Q queue, final int size) {
@@ -272,18 +354,10 @@ class ReceivedMarksTest {
 
     private UUID mailOne(final SampleElection world, final int index) {
         final var personId = world.person("Mail", "Voter " + index);
+        final var issued = world.mailTo(personId);
         final var sealed = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
         world.app.importBallot(sealed);
-        return this.issuanceFor(world, personId);
-    }
-
-    private UUID issuanceFor(final SampleElection world, final UUID personId) {
-        final var rows = this.rows(world);
-        final var stream = rows.stream();
-        final var matching = stream.filter(row -> personId.equals(row.getPersonId()));
-        final var found = matching.findFirst();
-        final var row = found.orElseThrow();
-        return row.getId();
+        return issued;
     }
 
     private List<BallotIssuance> rows(final SampleElection world) {

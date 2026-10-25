@@ -385,6 +385,12 @@ final class SampleElection {
         this.app.createPerson(person, this.actor);
     }
 
+    UUID mailTo(final UUID personId) {
+        final var request = new MailIssue(this.tenantId, personId, this.electionId, this.officeId, false);
+        final var saved = this.app.mailBallot(request, this.actor);
+        return saved.getId();
+    }
+
     UUID accept(final UUID personId) {
         final var issuance = new BallotIssuance();
         issuance.setTenantId(this.tenantId);

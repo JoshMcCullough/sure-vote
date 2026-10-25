@@ -22,6 +22,8 @@ public interface SureVoteRepository {
 
     void afterCommit(Runnable action);
 
+    void lock(UUID key);
+
     List<Ballot> ballotsByAccessHash(final String voterAccessHash);
 
     Optional<UUID> electionTenant(final UUID electionId);

@@ -48,10 +48,6 @@ final class RecordingService {
         return this.repository.transaction(() -> this.importLocked(request));
     }
 
-    void check(final ImportBallot request) {
-        this.repository.transaction(() -> this.checked(request));
-    }
-
     private Ballot importLocked(final ImportBallot request) {
         final var context = this.checked(request);
         final var prepared = this.prepare(context.election, request);

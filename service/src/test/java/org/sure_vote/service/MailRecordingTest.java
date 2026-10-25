@@ -75,7 +75,7 @@ class MailRecordingTest {
     @Test
     void aSuspendedTenantRecordsNoMailBallot() {
         final var world = SampleElection.mailOffice();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var selection = new SealSelection(world.slotA, "Y", "mail-1");
         final var request = this.request(
             world,
@@ -109,7 +109,7 @@ class MailRecordingTest {
     @Test
     void recordsAReturnedMailBallot() {
         final var world = SampleElection.mailOffice();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var selection = new SealSelection(world.slotA, "Y", "mail-1");
         final var selections = List.of(selection);
         final var request = this.request(
@@ -193,7 +193,7 @@ class MailRecordingTest {
     @Test
     void aRefusedDeliveryRollsTheBallotBack() {
         final var world = SampleElection.mailOffice();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var selection = new SealSelection(world.slotA, "Y", "mail-2");
         final var selections = List.of(selection);
         final var request = this.request(
@@ -228,7 +228,7 @@ class MailRecordingTest {
         assertNotNull(sealedPerson.getViewingPassphrase());
         assertEquals(0, ballots.size());
         assertEquals(1, issuances.size());
-        assertEquals(IssuanceStatus.VOIDED, this.firstStatus(issuances));
+        assertEquals(IssuanceStatus.ISSUED, this.firstStatus(issuances));
         assertEquals("no ballot for that code", missed.getMessage());
     }
 
@@ -292,7 +292,7 @@ class MailRecordingTest {
     }
 
     @Test
-    void anAcceptedIssuanceBlocksAnotherMailBallot() {
+    void anInPersonIssuanceBlocksAMailBallot() {
         final var world = SampleElection.mailOffice();
         final var personId = this.voter(world);
         final var accepted = world.accept(personId);
@@ -301,15 +301,15 @@ class MailRecordingTest {
             ConstraintException.class,
             () -> this.record(world, request, new Capture(true))
         );
-        assertEquals("Voter already has an issued ballot", failure.getMessage());
+        assertEquals("This voter was issued a ballot in person", failure.getMessage());
         assertNotNull(accepted);
     }
 
     @Test
-    void aVoidedIssuanceDoesNotBlockMailRecording() {
+    void aVoidedMailedBallotCannotBeRecorded() {
         final var world = SampleElection.mailOffice();
         final var personId = this.voter(world);
-        final var accepted = world.accept(personId);
+        final var accepted = world.mailTo(personId);
         final var voided = world.app.voidIssuance(accepted, "left the desk", world.actor);
         final var request = this.officeRequest(world, personId, null);
         final var failure = assertThrows(
@@ -317,7 +317,7 @@ class MailRecordingTest {
             () -> this.record(world, request, new Capture(true))
         );
         assertEquals(IssuanceStatus.VOIDED, voided.getStatus());
-        assertEquals("selections are required", failure.getMessage());
+        assertEquals("No mailed ballot is outstanding for this voter", failure.getMessage());
     }
 
     @Test
@@ -373,7 +373,7 @@ class MailRecordingTest {
     @Test
     void absenteeUsesTheMailPath() {
         final var world = SampleElection.mailOffice();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var request = this.request(
             world,
             personId,
@@ -415,7 +415,7 @@ class MailRecordingTest {
     @Test
     void theHostImportsASealedMailBallot() {
         final var world = SampleElection.hostedMail();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var sealed = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
         final var ballot = world.app.importBallot(sealed);
         final var again = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
@@ -437,13 +437,13 @@ class MailRecordingTest {
         assertEquals(world.officeId, issuance.getRecordingPlaceId());
         assertEquals(1, entries.size());
         assertEquals(1, ballots.size());
-        assertEquals("Voter already has an issued ballot", failure.getMessage());
+        assertEquals("This voter's ballot was already received", failure.getMessage());
     }
 
     @Test
     void theHostImportsAnAbsenteeBallot() {
         final var world = SampleElection.hostedMail();
-        final var personId = this.voter(world);
+        final var personId = this.mailedVoter(world);
         final var sealed = world.sealedMail(BallotType.ABSENTEE, personId, world.actor);
         final var ballot = world.app.importBallot(sealed);
         final var issuances = world.repository.list(BallotIssuance.class);
@@ -571,6 +571,12 @@ class MailRecordingTest {
             channel,
             destination
         );
+    }
+
+    private UUID mailedVoter(final SampleElection world) {
+        final var personId = this.voter(world);
+        world.mailTo(personId);
+        return personId;
     }
 
     private UUID voter(final SampleElection world) {

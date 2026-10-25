@@ -208,6 +208,24 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     }
 
     @Override
+    public void lock(final UUID key) {
+        this.query(connection -> this.advisory(connection, key));
+    }
+
+    private Integer advisory(final Connection connection, final UUID key) throws SQLException {
+        final var value = key.getMostSignificantBits() ^ key.getLeastSignificantBits();
+        final var statement = connection.prepareStatement("select pg_advisory_xact_lock(?)");
+        try {
+            statement.setLong(1, value);
+            statement.execute();
+            return 0;
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    @Override
     public void afterCommit(final Runnable action) {
         final var session = this.work.get();
         if (session == null) {
