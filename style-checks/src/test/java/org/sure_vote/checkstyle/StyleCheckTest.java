@@ -95,6 +95,23 @@ class StyleCheckTest {
     }
 
     @Test
+    void flagsAChainOnAnUnqualifiedCall() throws Exception {
+        final var code = """
+            class Sample {
+                boolean run() {
+                    return list().contains("a");
+                }
+
+                java.util.List<String> list() {
+                    return java.util.List.of();
+                }
+            }
+            """;
+        final var messages = violations(code, MethodChainLayoutCheck.class.getName());
+        assertEquals(1, messages.size());
+    }
+
+    @Test
     void allowsBrokenChain() throws Exception {
         final var code = """
             class Sample {

@@ -95,7 +95,13 @@ public final class MethodChainLayoutCheck extends AbstractCheck {
 
     private static DetailAST receiver(final DetailAST innermostCall) {
         final DetailAST dot = innermostCall.getFirstChild();
-        return dot.getFirstChild();
+        final DetailAST target = dot.getFirstChild();
+        if (target == null) {
+            return dot;
+        }
+        else {
+            return target;
+        }
     }
 
     private static boolean distinct(final List<Integer> lines) {

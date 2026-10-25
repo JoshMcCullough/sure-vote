@@ -37,7 +37,7 @@ The chain lives in PostgreSQL. A copy of the chain head, its latest entry, held 
 ## Modules
 
 - `entity` — domain records used by business logic and storage.
-- `repository` — storage access. Hides the db. Tests use an in-memory store. PostgreSQL implements the same contract through JDBC and Flyway.
+- `repository` — storage access. Hides the db. Tests use an in-memory store that applies the tenant row-level security policies inside a tenant or system-admin scope. PostgreSQL implements the same contract through JDBC and Flyway.
 - `service` — recording, chain append, tallies, and cross-entity rules.
 - `resource` — projections returned to clients.
 - `api` — HTTP. Calls the service and returns resources.

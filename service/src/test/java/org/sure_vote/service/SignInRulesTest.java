@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.sure_vote.entity.Election;
 import org.sure_vote.entity.PrincipalKind;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
@@ -14,6 +15,7 @@ import org.sure_vote.entity.TenantOfficialStatus;
 import org.sure_vote.entity.TenantStatus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SignInRulesTest {
@@ -173,11 +175,30 @@ class SignInRulesTest {
         final var created = world.app.createOfficial(other.getId(), "Outsider", admin);
         final var outsider = this.enrolled(world, created);
         final var insider = this.officialSession(world, admin);
-        this.denied(403, "not allowed", () -> world.app.inElection(outsider, world.electionId, () -> "reached"));
         this.denied(403, "not allowed", () -> world.app.asTenant(admin, () -> "reached"));
         this.denied(403, "not allowed", () -> world.app.asTenant(null, () -> "reached"));
         assertEquals("reached", world.app.inElection(insider, world.electionId, () -> "reached"));
         assertEquals("reached", world.app.inElection(outsider, UUID.randomUUID(), () -> "reached"));
+        assertNotEquals("seen", this.reach(world, outsider));
+    }
+
+    private String reach(final SampleElection world, final Principal outsider) {
+        try {
+            return world.app.inElection(outsider, world.electionId, () -> this.seen(world));
+        }
+        catch (final AccessException denied) {
+            return "denied " + denied.status();
+        }
+    }
+
+    private String seen(final SampleElection world) {
+        final var found = world.repository.find(Election.class, world.electionId);
+        if (found.isPresent()) {
+            return "seen";
+        }
+        else {
+            return "hidden";
+        }
     }
 
     static SampleElection passkeys(final SampleElection world) {

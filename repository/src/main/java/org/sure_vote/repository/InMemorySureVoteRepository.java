@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -20,8 +21,11 @@ import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.IssuanceStatus;
+import org.sure_vote.entity.LedgerEntity;
 import org.sure_vote.entity.RequestNonce;
 import org.sure_vote.entity.RestoreIncident;
+import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantEntity;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChain;
@@ -31,6 +35,8 @@ import org.sure_vote.entity.VoteChainValidationResult;
 /**
  * Map-backed store. A transaction snapshots map references and restores them on failure.
  * Replace a stored row with a new instance. Mutating an instance already in a map is not rolled back.
+ * Inside {@code inTenant} or {@code asSystemAdmin} it applies the tenant row-level security policies the way a
+ * non-owner role sees them. Outside a scope it behaves as the table owner.
  */
 public final class InMemorySureVoteRepository implements SureVoteRepository {
     private static final Set<Class<?>> INSERT_ONLY = Set.of(
@@ -45,11 +51,13 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
 
     private final Object lock = new Object();
     private final ThreadLocal<List<Runnable>> after = new ThreadLocal<>();
+    private final ThreadLocal<Scope> scope = new ThreadLocal<>();
     private Map<Class<?>, Map<UUID, Identifiable>> rows = new LinkedHashMap<>();
 
     @Override
     public <T extends Identifiable> T insert(final T row) {
         synchronized (this.lock) {
+            this.requireWritable(row);
             return this.insertLocked(row);
         }
     }
@@ -57,6 +65,8 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     @Override
     public <T extends Identifiable> T replace(final T row) {
         synchronized (this.lock) {
+            this.requireWritable(row);
+            this.requireWritable(this.storedRow(row));
             return this.replaceLocked(row);
         }
     }
@@ -64,14 +74,19 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     @Override
     public <T extends Identifiable> Optional<T> find(final Class<T> type, final UUID id) {
         synchronized (this.lock) {
-            return this.findLocked(type, id);
+            final var found = this.findLocked(type, id);
+            return found.filter(this::visible);
         }
     }
 
     @Override
     public <T extends Identifiable> List<T> list(final Class<T> type) {
         synchronized (this.lock) {
-            return this.listLocked(type);
+            final var rows = this.listLocked(type);
+            final var stream = rows.stream();
+            return stream
+                .filter(this::visible)
+                .toList();
         }
     }
 
@@ -166,7 +181,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
 
     @Override
     public List<Ballot> ballotsByAccessHash(final String voterAccessHash) {
-        final var ballots = this.list(Ballot.class);
+        final var ballots = this.owned(Ballot.class);
         final var stream = ballots.stream();
         final var matched = stream.filter(ballot -> voterAccessHash.equals(ballot.getVoterAccessHash()));
         return matched.toList();
@@ -227,27 +242,118 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
 
     @Override
     public Optional<UUID> electionTenant(final UUID electionId) {
-        final var election = this.find(Election.class, electionId);
+        final var election = this.ownedRow(Election.class, electionId);
         final var live = election.filter(row -> row.getDeletedAt() == null);
         return live.map(Election::getTenantId);
     }
 
     @Override
     public <T> T inTenant(final UUID tenantId, final Supplier<T> work) {
-        return this.scoped(tenantId, "tenantId", work);
+        final var current = this.currentScope();
+        if (tenantId == null) {
+            throw new IllegalArgumentException("tenantId is required");
+        }
+        else if (current.tenantId() != null && !Objects.equals(current.tenantId(), tenantId)) {
+            throw new IllegalArgumentException("A transaction serves one tenant");
+        }
+        else {
+            return this.transaction(() -> this.within(new Scope(tenantId, current.adminId()), work));
+        }
     }
 
     @Override
     public <T> T asSystemAdmin(final UUID adminId, final Supplier<T> work) {
-        return this.scoped(adminId, "adminId", work);
-    }
-
-    private <T> T scoped(final UUID value, final String label, final Supplier<T> work) {
-        if (value == null) {
-            throw new IllegalArgumentException(label + " is required");
+        final var current = this.currentScope();
+        if (adminId == null) {
+            throw new IllegalArgumentException("adminId is required");
+        }
+        else if (current.adminId() != null && !Objects.equals(current.adminId(), adminId)) {
+            throw new IllegalArgumentException("A transaction serves one system admin");
         }
         else {
-            return this.transaction(work);
+            return this.transaction(() -> this.within(new Scope(current.tenantId(), adminId), work));
+        }
+    }
+
+    private <T> T within(final Scope next, final Supplier<T> work) {
+        final var previous = this.scope.get();
+        this.scope.set(next);
+        try {
+            return work.get();
+        }
+        finally {
+            this.restore(previous);
+        }
+    }
+
+    private void restore(final Scope previous) {
+        if (previous == null) {
+            this.scope.remove();
+        }
+        else {
+            this.scope.set(previous);
+        }
+    }
+
+    private Scope currentScope() {
+        final var current = this.scope.get();
+        return Objects.requireNonNullElse(current, Scope.OWNER);
+    }
+
+    private boolean visible(final Identifiable row) {
+        final var current = this.currentScope();
+        return current.owner() || current.sees(row);
+    }
+
+    private void requireWritable(final Identifiable row) {
+        if (row != null && !this.visible(row)) {
+            final var type = row.getClass();
+            throw new IllegalArgumentException("Row-level security refuses this " + type.getSimpleName());
+        }
+    }
+
+    private Identifiable storedRow(final Identifiable row) {
+        if (row == null || row.getId() == null) {
+            return null;
+        }
+        else {
+            final var current = this.table(row.getClass());
+            return current.get(row.getId());
+        }
+    }
+
+    private <T extends Identifiable> List<T> owned(final Class<T> type) {
+        synchronized (this.lock) {
+            return this.listLocked(type);
+        }
+    }
+
+    private <T extends Identifiable> Optional<T> ownedRow(final Class<T> type, final UUID id) {
+        synchronized (this.lock) {
+            return this.findLocked(type, id);
+        }
+    }
+
+    private record Scope(UUID tenantId, UUID adminId) {
+        static final Scope OWNER = new Scope(null, null);
+
+        boolean owner() {
+            return this.tenantId == null && this.adminId == null;
+        }
+
+        boolean sees(final Identifiable row) {
+            if (row instanceof Tenant tenant) {
+                return this.adminId != null || Objects.equals(this.tenantId, tenant.getId());
+            }
+            else if (row instanceof TenantEntity owned) {
+                return this.tenantId != null && this.tenantId.equals(owned.getTenantId());
+            }
+            else if (row instanceof LedgerEntity owned) {
+                return this.tenantId != null && this.tenantId.equals(owned.getTenantId());
+            }
+            else {
+                return true;
+            }
         }
     }
 

@@ -151,7 +151,7 @@ Enforcement: `term_no_overlap`, an exclusion constraint with `btree_gist` on `se
 ### Tenancy
 
 Constraint: a row's `tenant_id` matches its parent, and a production election is not `active` without an outside validator.
-Enforcement: row-level security on the writer role, `tenant_id = current_setting('app.tenant_id')::uuid`, plus insert triggers that copy `tenant_id` from the parent and reject a mismatch. The service sets `app.tenant_id`. It does not take the tenant from the client. The migration role bypasses row-level security, is logged, and is not used by the API.
+Enforcement: row-level security on the writer role, `tenant_id = current_setting('app.tenant_id')::uuid`, plus insert triggers that copy `tenant_id` from the parent and reject a mismatch. The service sets `app.tenant_id`. It does not take the tenant from the client. The migration role bypasses row-level security, is logged, and is not used by the API. Under the writer role a row of another tenant is invisible, so a session that names one gets the same answer as for a missing row; the owner connection gets 403 from the service check instead. The in-memory store applies the same tenant policies inside a scope so the service tests exercise them without PostgreSQL.
 
 The public lookup sets no tenant. `lookup_ballots(voter_access_hash)` returns only the ballots with that hash, and `election_tenant(election_id)` returns only the tenant id of one election. Both are `security definer`. The service then reads that ballot's votes and disputes, and an election's public rows, inside that one tenant.
 
@@ -182,7 +182,7 @@ On `vote_chain_validation_result`, block changes to the payload, hash, signature
 
 - Use migration tooling from day one (Flyway).
 - Use separate db roles:
-  - app writer role (limited DML, used by the recording service, row-level security on `tenant_id`). Built: `SUREVOTE_JDBC_APP_USER` names an existing role, and startup grants it `usage` on the schema and `select`, `insert`, `update` on every table after migrating. It has no `delete`. The public lookup runs through the same role and the `security definer` functions in `V7__public_lookup.sql`; a separate read-only public role is not built.
+  - app writer role (limited DML, used by the recording service, row-level security on `tenant_id`). Built: `SUREVOTE_JDBC_APP_USER` names an existing role, and startup grants it `usage` on the schema and `select`, `insert`, `update` on every table after migrating. It has no `delete`. The public lookup runs through the same role and the `security definer` functions in `V7__public_lookup.sql`. Public reads can instead run through the read-only role described further down.
   - public verifier role (`SELECT` on the published-definition tables, chain headers, validator rows, and validation results; `SELECT` on ballot, vote, and chain-entry bodies only when the election is `historical`; no access to `person`, `voter_registration`, issuance, dispute, or passphrase columns; no access to an `address` row that is a person's address)
   - read-only analytics role for officials, still scoped by row-level security to one tenant
   - migration/admin role (bypasses row-level security, logged, not used by the API)
