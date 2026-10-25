@@ -3,7 +3,7 @@ import { actorId } from './session'
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'X-Actor-Id': actorId(),
+    'SureVote-Actor-Id': actorId(),
   }
   let payload: string | undefined
   if (body !== undefined) {

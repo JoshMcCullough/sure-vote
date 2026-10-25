@@ -41,13 +41,13 @@ On a showcase tenant the host holds the operator, import, viewing, and device se
 
 A demonstration cast is refused for a production tenant. Production recording stays on the air-gapped machine and the authority workstation.
 
-`X-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The tenant id may be stored under `surevote.tenant`. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
+`SureVote-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The tenant id may be stored under `surevote.tenant`. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
 
 Voter rolls, mail-in from the browser, dispute review, restore incidents, and row-level security stay out of this app for now.
 
 ## API the workspace calls
 
-Official creates require `X-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
+Official creates require `SureVote-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
 
 - `POST /tenants`, `POST /persons`
 - `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`

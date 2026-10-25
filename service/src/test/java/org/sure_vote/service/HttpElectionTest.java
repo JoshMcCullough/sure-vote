@@ -541,7 +541,7 @@ class HttpElectionTest {
         assertEquals(200, looked.statusCode());
         assertTrue(lookedBody.contains("the receipt shows a different choice"));
         assertEquals(400, hidden.statusCode());
-        assertEquals("X-Actor-Id is required", this.text(hiddenBody, "error"));
+        assertEquals("SureVote-Actor-Id is required", this.text(hiddenBody, "error"));
         assertEquals(400, denied.statusCode());
         assertEquals(200, noted.statusCode());
         assertEquals("noted", this.text(notedBody, "status"));
@@ -589,7 +589,7 @@ class HttpElectionTest {
         final var uri = URI.create(this.base + path);
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
-        builder.header("X-Actor-Id", this.actorId);
+        builder.header("SureVote-Actor-Id", this.actorId);
         this.addBody(builder, method, body);
         return builder.build();
     }

@@ -94,7 +94,7 @@ class ApiServerTest {
         final var response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
         final var message = this.error(response.body());
         assertEquals(400, response.statusCode());
-        assertEquals("X-Actor-Id is required", message);
+        assertEquals("SureVote-Actor-Id is required", message);
     }
 
     @Test
@@ -360,7 +360,7 @@ class ApiServerTest {
 
     private void addActor(final HttpRequest.Builder builder, final boolean includeActor) {
         if (includeActor) {
-            builder.header("X-Actor-Id", this.actor.toString());
+            builder.header("SureVote-Actor-Id", this.actor.toString());
         }
     }
 
@@ -425,7 +425,7 @@ class ApiServerTest {
         final var publisher = HttpRequest.BodyPublishers.ofString(this.tenantJson());
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
-        builder.header("X-Actor-Id", actor);
+        builder.header("SureVote-Actor-Id", actor);
         builder.POST(publisher);
         return builder.build();
     }

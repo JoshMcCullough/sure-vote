@@ -938,9 +938,9 @@ public final class ApiServer implements HttpHandler {
 
     private UUID actor(final HttpExchange exchange) {
         final var headers = exchange.getRequestHeaders();
-        final var values = headers.get("X-Actor-Id");
+        final var values = headers.get("SureVote-Actor-Id");
         if (values == null || values.isEmpty()) {
-            throw new ConstraintException("X-Actor-Id is required");
+            throw new ConstraintException("SureVote-Actor-Id is required");
         }
         else {
             final var text = values.getFirst();
