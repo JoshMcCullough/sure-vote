@@ -1,6 +1,6 @@
-# Request identity proposal
+# Request identity
 
-Status: proposal. Nothing here is built. Today every official and system-admin request names its principal with an unsigned `SureVote-Actor-Id` header, and an official request names its tenant with a `tenantId` in the body or path. That is enough to build and test locally. It is not enough for a production console, and [system.md](./system.md) says a client-supplied tenant id is not the source.
+Status: people's sign-in is decided: WebAuthn passkeys and PostgreSQL-backed server-side sessions. Machine request signing is still a recommendation. Nothing here is built. Today every official and system-admin request names its principal with an unsigned `SureVote-Actor-Id` header, and an official request names its tenant with a `tenantId` in the body or path. That is enough to build and test locally. It is not enough for a production console, and [system.md](./system.md) says a client-supplied tenant id is not the source.
 
 ## What has to be proven
 
@@ -12,7 +12,7 @@ Status: proposal. Nothing here is built. Today every official and system-admin r
 | Validator | `POST /elections/{id}/validations` | global | the result is already Ed25519-signed |
 | Voter | lookup, disputes | the ballot the code names | the access code, plus the passphrase for mail-in |
 
-The threat model in [system.md](./system.md) sets the bar. A neighboring official or an ordinary request must not read or write another tenant. The host can read the private roll, and outside copies of chain heads are what catch a host rewrite, so request identity does not have to defend against the host. Production keys stay on hardware tokens in the authority's custody and never reach the host. Revocation has to be immediate: suspending a tenant or disabling an admin must stop the next request.
+The threat model in [system.md](./system.md) sets the bar. A neighboring official or an ordinary request must not read or write another tenant. The host can read the private roll, and outside copies of chain heads are what catch a host rewrite, so request identity does not have to defend against the host. Production operator and viewing keys stay on hardware tokens in the authority's custody and never reach the host. Testing, development, and the showcase use software keys and need no hardware. Revocation has to be immediate: suspending a tenant or disabling an admin must stop the next request.
 
 The voter path stays anonymous. A voter has no account. The code and passphrase are the proof, and lookup needs no tenant.
 
@@ -29,7 +29,7 @@ The service, or the authority's identity provider through OIDC, signs a short-li
 
 ### 2. WebAuthn for people, opaque server sessions
 
-Officials and system admins enroll a passkey or a hardware security key. Sign-in is a WebAuthn assertion. The service stores a short-lived session row naming the principal, the tenant or the system scope, and the role, and returns an opaque random cookie. Each request loads the session, and the transaction sets `app.tenant_id` or `app.system_admin_id` from that row.
+Officials and system admins enroll a WebAuthn passkey, either a hardware security key or a platform passkey. Sign-in is a WebAuthn assertion. The service stores a short-lived session row naming the principal, the tenant or the system scope, and the role, and returns an opaque random cookie. Each request loads the session, and the transaction sets `app.tenant_id` or `app.system_admin_id` from that row.
 
 - Phishing-resistant, and nothing reusable is stored on the host. Authorities already keep hardware tokens under the two-officer rule, so a key is not a new kind of object for them.
 - Revocation is a row update: suspend the tenant, disable the admin, or delete the session.
@@ -44,9 +44,27 @@ The import workstation and validators already hold Ed25519 keys whose public hal
 - mTLS needs a CA and certificate rotation, and it terminates at whatever proxy is in front of the service. Signing the request with the existing key avoids both.
 - Not usable for a person in a browser without a key on a token.
 
-## Recommendation
+## Decision
 
-Use option 2 for every person and option 3, with request signatures rather than mTLS, for the import workstation and validators. A WebAuthn sign-in creates a server-side session, and the session alone decides the tenant or the system scope for the transaction. Clients stop sending `SureVote-Actor-Id` and `tenantId`. That matches the existing hardware-key custody, gives immediate revocation, and never puts a reusable secret on the host. JWT and OIDC federation can be added later as another sign-in method that creates the same session, if an authority requires it.
+Option 2 is chosen for every person. Option 3 is recommended, with request signatures rather than mTLS, for the import workstation and validators. A WebAuthn sign-in creates a server-side session, and the session alone decides the tenant or the system scope for the transaction. Clients stop sending `SureVote-Actor-Id` and `tenantId`. That matches the existing hardware-key custody, gives immediate revocation, and never puts a reusable secret on the host. JWT and OIDC federation can be added later as another sign-in method that creates the same session, if an authority requires it.
+
+## Sessions across instances
+
+The service runs as several containers. Sessions live in PostgreSQL, not in a container's memory, so any container can validate any request.
+
+- Sign-in creates a `session` row: id, principal, tenant or system scope, role, created, last seen, expiry, and revoked time. The row stores the SHA-256 hash of the token, never the token.
+- The token is 32 random bytes, sent once as a `Secure`, `HttpOnly`, `SameSite=Strict` cookie. A db leak does not yield a usable cookie.
+- Each request hashes the cookie, loads the row, checks expiry, revocation, the tenant's status, and the principal's status, and sets `app.tenant_id` or `app.system_admin_id` for its transaction. No sticky routing is needed.
+- Revocation is immediate: sign-out, an admin disabling a principal, or a tenant suspension updates or deletes the row, and the next request on any container is refused.
+- Sessions are short, with an idle timeout and an absolute limit. The row lookup is one indexed read per request.
+
+## Keys and hardware
+
+Sign-in needs only WebAuthn, so any FIDO2 key or platform passkey works. A FIDO-only key such as a Google Titan key is for sign-in only.
+
+Operator and viewing keys need Ed25519 and X25519 on the token. Examples: a YubiKey 5 series key through OpenPGP (firmware 5.2.3 and later) or PIV (firmware 5.7 and later), or a Nitrokey 3. The host's backup key uses a YubiHSM 2, AWS CloudHSM, or AWS KMS.
+
+Every signing step must also run with a software key, so tests, development, and the showcase never need hardware. A production tenant does not accept a software operator or viewing key held by the host.
 
 ## What changes when it is chosen
 

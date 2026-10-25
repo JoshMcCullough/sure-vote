@@ -157,14 +157,14 @@ Represents a specific voter registration event, which may include changes to the
 - `assignmentStatus` (Enum): The current status of the voting precinct assignment: current, historical, etc.
 
 ### BallotIssuance
-Private mark that this voter has already had a ballot accepted for this election. Mail-in recording writes it in the same transaction as the ballot. In person the pollbook writes it, and the voting machine never sees it. It is how decision 1 in [system.md](./system.md) is enforced today. Whether a cryptographic spend replaces it is still open.
+Private mark that this voter has already had a ballot accepted for this election. Mail-in recording writes it in the same transaction as the ballot. In person the pollbook writes it, and the voting machine never sees it. It is how decision 1 in [system.md](./system.md) is enforced today. The decided design, not built, marks it `issued` before recording and `received` later in a shuffled batch with a coarse timestamp. See [Marking a ballot received](./system.md#marking-a-ballot-received).
 
 - Administrative audit fields
 - `person` (Reference to Person): The voter the ballot was accepted for.
 - `election` (Reference to Election): The election.
 - `recordingPlace` (Reference to RecordingPlace): The polling place or office that accepted the voter. Used to compare counts with ballots recorded at that place. Not a link to a ballot.
 - `acceptedAt` (Date): When the voter was accepted.
-- `status` (Enum): `accepted` or `voided`. Only `accepted` spends the voter's ballot and counts in the place comparison.
+- `status` (Enum): `accepted` or `voided`. Only `accepted` spends the voter's ballot and counts in the place comparison. The decided design replaces `accepted` with `issued` and `received`, and both spend the ballot.
 - `voidReason` (String, Optional): Why the issuance was voided. Required when `status` is `voided`.
 
 Unique on (`person`, `election`) where `status` is `accepted`. Voided rows may repeat. A void is allowed only while the official attests the voter has not started a machine session. The row stores neither the ballot id nor the access code. `createdBy` is the official or service principal, which may match the recording time closely enough to correlate with a public ballot. That correlation is an accepted limit of this mark.
@@ -339,7 +339,7 @@ The header for one race's chain. Created when the race is published, in `active`
 - `initialEntry` (Reference to VoteChainEntry, Optional): The first entry. Empty until the first vote. Immutable once set.
 - `latestEntry` (Reference to VoteChainEntry, Optional): The entry with the greatest index. Empty until the first vote.
 - `length` (Integer): The number of entries. Zero until the first vote.
-- `hash` (String): Equal to `latestEntry.hash` when the chain is non-empty. When the chain has no entries, equal to the empty-head digest in [verification.md](./verification.md), and that digest is set when the chain is created. This is the head a verifier compares.
+- `hash` (String): The head: the tip of the chain, as in git's `HEAD`, not the first entry. Equal to `latestEntry.hash` when the chain is non-empty. When the chain has no entries, equal to the empty-head digest in [verification.md](./verification.md), and that digest is set when the chain is created. This is the head a verifier compares.
 - `signature` (String, Optional): Operator signature over the raw head-hash bytes. Updated when a head is published. The header keeps the latest signature. Empty until a head is published. Required once `status` is `closed`.
 
 ### VoteChainEntry

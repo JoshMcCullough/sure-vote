@@ -44,7 +44,7 @@ The db enforces the boundary with row-level security on `tenant_id`. The recordi
 
 A host administrator who uses the migration role can read every tenant. That use is logged and is not the application path. Tenant isolation stops a neighboring official, and an ordinary application request, from reading another tenant. It does not hide the private roll from the host. Outside copies of the chain heads, below, are what make a host rewrite of the ledger detectable.
 
-Only a system admin creates a tenant. The one exception is the demo tenant: the host names it in its configuration, and the service creates it at startup as a showcase tenant if it does not exist. A system admin also suspends and reinstates tenants. Until request identity is chosen, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
+Only a system admin creates a tenant. The one exception is the demo tenant: the host names it in its configuration, and the service creates it at startup as a showcase tenant if it does not exist. A system admin also suspends and reinstates tenants. Until sign-in is built, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
 
 `Tenant.kind` is `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`. Officials must not load a real voter roll into it. The software cannot tell a fictional name from a real one. Suspending a tenant refuses new registrations, elections, activations, accepted voters, viewing passphrases, and ballots from any channel. It does not delete the ledger. Published data stays readable, and officials may still close an election, void an issuance, and voters may still file disputes.
 
@@ -68,11 +68,13 @@ Moving a tenant is a migration, not a setting change. The host copies that tenan
 
 Backups exist so a lost disk can be recovered. They are not a way to edit a ballot or to drop a suffix of a chain.
 
-The host runs a logged backup job. People do not take ad-hoc snapshots of the production db. The job writes a daily base backup and continuous write-ahead logs to an object-lock bucket in the tenant's region, in a cloud account separate from the db. Both are encrypted with a backup key in an HSM. That key is not the operator key, the import key, or the viewing key. Two host officers must be present to use it. Access is logged. Write-ahead logs and base backups are kept for 35 days. When an election becomes `historical`, a locked copy of that election's tenant state is kept for 22 months, or longer when the agreement says so. Twenty-two months is the working default, matching the federal retention period for records of an election that includes a federal office. The agreement can name a longer period.
+The host runs a logged backup job. People do not take ad-hoc snapshots of the production db. The job writes a daily base backup and continuous write-ahead logs to an object-lock bucket in the tenant's region, in a cloud account separate from the db. Both are encrypted with a backup key in an HSM, such as AWS CloudHSM, AWS KMS backed by its HSMs, or a YubiHSM 2 in the host's custody. That key is not the operator key, the import key, or the viewing key. Two host officers must be present to use it. Access is logged. Write-ahead logs and base backups are kept for 35 days. When an election becomes `historical`, a locked copy of that election's tenant state is kept for 22 months, or longer when the agreement says so. Twenty-two months is the working default, matching the federal retention period for records of an election that includes a federal office. The agreement can name a longer period.
 
 A tenant export is separate. The authority can request an encrypted copy of its own tenant. That copy is not a snapshot of other tenants.
 
-A restore lands first in a quarantined instance. That instance cannot become the production writer and cannot export the private roll. The operator compares each race head and length with the latest outside witness described below. Quarterly test restores use the same quarantine.
+On AWS the db is Amazon RDS for PostgreSQL. A restore is a point-in-time restore of the whole database into a new, isolated instance. It is not a per-tenant or per-election restore. That instance lands in quarantine: it has no route from the application or the public lookup, it cannot become the production writer, and it cannot export the private roll. The operator compares each race head and length with the latest outside witness described below. Quarterly test restores use the same quarantine.
+
+The restore is whole-database, but promotion is decided per election. Each election is checked against its own witnesses. An election that passes is promoted. An election that fails stays frozen: recording, closing, and publication are refused for it until its `RestoreIncident` exists. The other elections and tenants on the restored instance are not held back by it. This per-election freeze is not built yet.
 
 Promotion back to production follows the witnesses:
 
@@ -88,11 +90,15 @@ The backup contains the private roll and the sealed passphrases. It does not con
 
 ### Outside copies
 
+A chain's head is its latest entry, the tip, as in git's `HEAD`. It is not the first entry. The first entry is the genesis entry, `VoteChain.initialEntry`. Each append moves the head forward. A head notice therefore names the newest entry the host has, and a longer chain whose prefix matches an earlier head is the same chain grown.
+
 A rewrite of the hosted db is detectable only when someone the host does not control kept an earlier head. Validator signatures are that copy. The host cannot produce them.
 
 A production election cannot become `active` until the tenant has registered at least one `VoteChainValidator` that the agreement identifies as outside Sure Vote Systems. The host's own publication bucket is not that party. The tenant records that registration as a `VoteChainValidator` and a `TenantValidator`. The host stores the public key and does not store the private key. Activate rejects a production election until that registration exists. The software cannot tell a host-controlled key from an outside key. A showcase election may use a validator run by Sure Vote Systems in a separate service account, and the election stays labeled as a demonstration, so a verifier can see that the witness and the host are the same organization. A showcase election may also activate with no validator.
 
-While an election is `active`, the host publishes a head notice whenever a race's length has changed, and at least once after each import batch. It also publishes at the move to `historical`, including the canvass statement hash. A notice carries the election id, race id, length, head hash, and the time it was observed. Where officials have signed that head with the operator key, the notice includes that signature. Between those ceremonies the notice is the hash and the length. Validators fetch the notice and the entries the public API is allowed to show, then file a `VoteChainValidationResult`. The chain header still keeps only the latest operator signature. Earlier heads remain in those validator results.
+While an election is `active`, the host publishes a head notice whenever a race's length has changed, and at least once after each import batch. It also publishes at the move to `historical`, including the canvass statement hash. A notice carries the election id, race id, length, head hash, and the time it was observed. Where officials have signed that head with the operator key, the notice includes that signature. Between those ceremonies the notice is the hash and the length. Validators pull each notice and keep it, with its signature when it has one, so they can check later that the closed chain grows from every head they saw. They then file a `VoteChainValidationResult`. The chain header still keeps only the latest operator signature. Earlier heads remain in those validator results and in the notices validators kept.
+
+During voting, head notices are served through Amazon CloudFront with a short cache time, so many validators can poll without load on the db. AWS WAF rate-limits the API. At close, the host builds one immutable bundle per election: every ballot, vote, and chain entry body, the chain headers, and the canvass statement. The operator signs the bundle hash. The bundle goes to an object-lock S3 bucket behind CloudFront, and the closing head notice carries its hash. Validators pull the bundle in bulk after close and verify it against that hash before they check the chains. The CloudFront path, the WAF rules, and the bundle are not built yet.
 
 The host also writes each notice to the object-lock bucket. That bucket survives a db restore. It is still the host's account. A validator who stores the signed result is the outside copy.
 
@@ -229,6 +235,14 @@ A ballot, vote, and chain entry each store a canonical JSON `payload`. The selec
 
 Signatures are Ed25519. The rules are in [verification.md](./verification.md).
 
+Production keys live on hardware tokens. Testing, development, and the showcase must work with software keys and no hardware: the same Ed25519 and X25519 operations, with the seed in a file, in memory, or in `HeldKey`. A production tenant does not accept a software operator or viewing key from the host.
+
+Hardware that fits, as examples rather than requirements:
+
+- **Operator and viewing keys.** A YubiKey 5 series key, through OpenPGP (Ed25519 and X25519 from firmware 5.2.3) or PIV (Ed25519 and X25519 from firmware 5.7), or a Nitrokey 3.
+- **Official and system-admin sign-in.** Any WebAuthn passkey, hardware or platform. A FIDO-only key such as a Google Titan key is for sign-in only. It cannot hold an operator or viewing key.
+- **The host's backup key.** A YubiHSM 2, AWS CloudHSM, or AWS KMS.
+
 - **Device key.** Generated on the device. The private key never leaves it. The public key is registered before the election is signed. A lost or retired device cannot sign new ballots. Ballots it already signed still verify. There is no copy of the private key in escrow. Ballots still only on a dead device are lost with it.
 - **Operator key.** One per election. Generated offline. The private key stays on a hardware token in the authority's custody, and two officers must be present to use it. It is not on a voting machine and not on the db server. On a production tenant the host does not hold it. Sure Vote Systems may hold it for a showcase tenant. It signs the election definition, each published chain head, the canvass statement, and any restore incident. The chain header stores only the latest head signature. A validator result is what keeps an earlier head outside the db.
 - **Import key.** Generated on the authority's central import workstation. Its public key is inside the signed election definition. It signs chain entries and nothing else. The private key stays on that workstation. The hosted service checks the signature and does not hold the key.
@@ -278,6 +292,17 @@ This deployment is one election authority. The top locality in the statement is 
 
 The statement also lists, for each recording place that has an accepted issuance or a recorded ballot, those two counts. A difference is part of the published result. Abandoned sessions are one reason accepted issuances can exceed ballots. The statement does not name voters.
 
+## Marking a ballot received
+
+Decided design, not built. Each eligible voter gets at most one ballot, and the voter's row for the election is marked `received` once the ballot is committed. The mark must not link that row to the ballot. Today mail-in writes `BallotIssuance` in the same transaction as the ballot, which ties the two by commit time. The design replaces that with two phases.
+
+1. **Issue.** Before recording, set the voter's `BallotIssuance` to `issued`. An `issued` row already blocks a second ballot. Generate a random reservation token. It is held only in memory or in the recording queue. It is never stored with the ballot.
+2. **Commit the ballot.** The ballot, votes, and chain entries are committed with no voter reference.
+3. **Batch the mark.** Put the reservation into a shuffled batch. When the batch reaches `k` reservations, configurable with a working default of 25, or at a scheduled flush, and always at close, mark every row in the batch `received` in one transaction, in random order. The mark carries a coarse timestamp, the batch or the day with no milliseconds, and no ballot id. Issuance rows keep random UUID keys. There is no foreign key between the ballot and issuance tables.
+4. **Recover.** If the process dies, rows stuck at `issued` still block a second ballot. At close, each precinct is reconciled: `received` plus `issued` against the count of ballots. A mismatch goes into the canvass for officials.
+
+What still leaks: the host can see write-ahead-log and physical row order below the application, a precinct with very few voters narrows any batch, and batch counts and flush times are visible to the host. The in-person path is already decoupled. The pollbook writes the issuance at acceptance, and the offline machine never learns the voter.
+
 ## Privacy limits of this schema
 
 An in-person access code is a bearer token. Anyone who obtains the slip can open that ballot and can show the contents to someone else. A mail-in code also needs the viewing passphrase. Neither path provides coercion resistance.
@@ -300,6 +325,6 @@ Module boundaries:
 
 Decisions 1, 2, and 3 are decided. The mechanism for decision 1 is still open, and decision 3 is not designed.
 
-1. **One ballot per eligible voter.** Decided: each eligible voter has at most one accepted ballot per election. The mechanism is open: keep the private `BallotIssuance` mark, or add a cryptographic spend, such as a nullifier or a blind signature, so the ledger itself can show it without linking a voter to a ballot. Today recording uses `BallotIssuance`: a private row keyed by voter and election, storing neither the ballot id nor the access code. Mail-in writes it in the same transaction as the ballot. In person the pollbook writes it and the machine never sees it. The operator can still correlate roughly by time and place.
+1. **One ballot per eligible voter.** Decided: each eligible voter has at most one accepted ballot per election, and the voter's row is marked `received` after commit without a link to the ballot. The batched marking in [Marking a ballot received](#marking-a-ballot-received) is the decided design for `BallotIssuance`. Whether to add a cryptographic spend later is open, such as a nullifier or a blind signature, so the ledger itself can show it without linking a voter to a ballot. Today recording uses `BallotIssuance`: a private row keyed by voter and election, storing neither the ballot id nor the access code. Mail-in writes it in the same transaction as the ballot. In person the pollbook writes it and the machine never sees it. The operator can still correlate roughly by time and place.
 2. **Earlier publication.** Decided: close only. During voting only head hashes and lengths are published. Full ledger bodies are published when the election closes, and validators pull the ledger in bulk after close. An authority cannot publish bodies sooner, which avoids the linkage risk in [Privacy limits](#privacy-limits-of-this-schema). A bulk ledger download is not built yet.
 3. **Voter-device casting.** Decided: a voter will be able to cast a binding ballot from their own device through a React Native app. It depends on decision 1, a coercion answer, and a way for the voter to trust the client. None of those are specified and nothing is built. Showcase demo recording is a separate, non-binding form. Polling-place voting machines stay offline.

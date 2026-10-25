@@ -60,7 +60,7 @@ The election payload keys, in order, are `electionId`, `hashAlgorithm`, `ballotH
 
 `Election.hash` is SHA-256 of that JSON. `Election.signature` is the operator signature over the raw hash bytes.
 
-An empty race chain has no entry hash. Its head payload keys are `raceId`, `length`, and `length` is 0. `VoteChain.hash` is SHA-256 of that JSON. A non-empty chain's `hash` remains the latest entry's hash. In both cases the operator signature covers the 32 raw bytes of `VoteChain.hash`. A closed chain has both `hash` and `signature` set.
+An empty race chain has no entry hash. Its head payload keys are `raceId`, `length`, and `length` is 0. `VoteChain.hash` is SHA-256 of that JSON. A non-empty chain's `hash` remains the latest entry's hash. That is the head: the tip, as in git's `HEAD`. The first entry is the genesis entry. In both cases the operator signature covers the 32 raw bytes of `VoteChain.hash`. A closed chain has both `hash` and `signature` set.
 
 ## Signatures
 
