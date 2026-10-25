@@ -130,7 +130,7 @@ public final class Main {
             return app;
         }
         else {
-            final var name = or(text("SUREVOTE_DEMO_TENANT_NAME"), "SureVote demo");
+            final var name = or(text("SUREVOTE_DEMO_TENANT_NAME"), "SureVote Demo");
             final var region = or(text("SUREVOTE_DEMO_TENANT_REGION"), "us-east");
             app.provisionDemoTenant(UUID.fromString(id), name, region);
             return app;
