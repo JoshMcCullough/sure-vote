@@ -87,7 +87,7 @@ class InMemorySureVoteRepositoryTest {
     }
 
     @Test
-    void voterAccessHashIsUniquePerElection() {
+    void voterAccessHashIsUniqueAcrossElections() {
         final var failure = assertThrows(IllegalArgumentException.class, this::twoBallots);
         assertEquals("Duplicate voter access hash", failure.getMessage());
     }
@@ -188,9 +188,9 @@ class InMemorySureVoteRepositoryTest {
     }
 
     @Test
-    void theSameAccessHashCanExistInAnotherElection() {
-        final var listed = this.sameHashTwoElections();
-        assertEquals(2, listed.size());
+    void theSameAccessHashIsRejectedInAnotherElection() {
+        final var failure = assertThrows(IllegalArgumentException.class, this::sameHashTwoElections);
+        assertEquals("Duplicate voter access hash", failure.getMessage());
     }
 
     @Test
@@ -499,12 +499,11 @@ class InMemorySureVoteRepositoryTest {
         this.repository.replace(moved);
     }
 
-    private List<Ballot> sameHashTwoElections() {
+    private void sameHashTwoElections() {
         final var first = this.ballot(UUID.randomUUID(), "ab");
         final var second = this.ballot(UUID.randomUUID(), "ab");
         this.repository.insert(first);
         this.repository.insert(second);
-        return this.repository.list(Ballot.class);
     }
 
     private void blankHash() {

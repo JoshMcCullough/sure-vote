@@ -83,15 +83,9 @@ final class LookupService {
     private Ballot findOrNull(final UUID electionId, final String hash) {
         final var ballots = this.repository.ballotsByAccessHash(hash);
         final var stream = ballots.stream();
-        final var matched = stream
-            .filter(ballot -> electionId == null || electionId.equals(ballot.getElectionId()))
-            .toList();
-        if (matched.size() == 1) {
-            return matched.getFirst();
-        }
-        else {
-            return null;
-        }
+        final var matched = stream.filter(ballot -> electionId == null || electionId.equals(ballot.getElectionId()));
+        final var first = matched.findFirst();
+        return first.orElse(null);
     }
 
     private List<Vote> votesFor(final UUID ballotId) {

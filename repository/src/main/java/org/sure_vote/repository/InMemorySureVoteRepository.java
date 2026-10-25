@@ -269,12 +269,10 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     private void scanBallots(final Ballot ballot, final UUID ignoredId) {
         final var rows = this.listLocked(Ballot.class);
         for (final var existing : rows) {
-            final var electionId = existing.getElectionId();
-            final var sameElection = electionId.equals(ballot.getElectionId());
             final var accessHash = existing.getVoterAccessHash();
             final var sameHash = accessHash.equals(ballot.getVoterAccessHash());
             final var sameId = this.sameId(existing.getId(), ignoredId);
-            if (!sameId && sameElection && sameHash) {
+            if (!sameId && sameHash) {
                 throw new IllegalArgumentException("Duplicate voter access hash");
             }
         }

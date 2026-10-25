@@ -108,14 +108,13 @@ final class RowRules {
         final var values = new ArrayList<Object>();
         requireText(ballot.getVoterAccessHash(), "voterAccessHash");
         requirePresent(ballot.getElectionId(), "electionId");
-        values.add(ballot.getElectionId());
         values.add(ballot.getVoterAccessHash());
         addIgnored(values, ignoredId);
         rejectDuplicate(connection, ballotSql(ignoredId), values, "Duplicate voter access hash");
     }
 
     private static String ballotSql(final UUID ignoredId) {
-        final var sql = "select 1 from ballot where \"election_id\" = ? and \"voter_access_hash\" = ?";
+        final var sql = "select 1 from ballot where \"voter_access_hash\" = ?";
         return sql + except(ignoredId);
     }
 

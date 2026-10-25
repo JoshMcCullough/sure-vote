@@ -213,6 +213,23 @@ class PostgresGuardTest {
     }
 
     @Test
+    void anAccessHashIsOnOneBallotInTheDatabase() throws SQLException {
+        final var other = this.rows.election();
+        final var ballot = "insert into ballot (id, tenant_id, election_id, voting_precinct_id, voter_access_hash)"
+            + " values (?, ?, ?, ?, ?)";
+        this.run(ballot, UUID.randomUUID(), this.rows.tenantId, this.rows.electionId, this.rows.precinctId, "shared");
+        this.refusedInsert(
+            ballot,
+            "ballot_access_hash",
+            UUID.randomUUID(),
+            this.rows.tenantId,
+            other,
+            this.rows.precinctId,
+            "shared"
+        );
+    }
+
+    @Test
     void aBallotNeedsACurrentPrecinctAssignment() throws SQLException {
         final var precinct = UUID.randomUUID();
         final var ballot = "insert into ballot (id, tenant_id, election_id, voting_precinct_id, voter_access_hash)"

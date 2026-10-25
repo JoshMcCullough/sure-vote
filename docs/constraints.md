@@ -35,7 +35,7 @@ For each recording place, the canvass statement publishes the number of `accepte
 At most one `accepted` `BallotIssuance` exists for a person and election. An official may mark it `voided`, with a reason, only while attesting that the voter has not started a machine session. The voided row remains. A new `accepted` row may then be written.
 
 ### Access hash uniqueness
-`Ballot.voterAccessHash` is unique within an election. The stored value is the lookup hash in [verification.md](./verification.md). The access code is not a column. The voter receives it as a QR code and as text. A mail-in or absentee hash also uses the viewing passphrase, which is not a column on the ballot.
+`Ballot.voterAccessHash` is unique across all elections and tenants, so a code opens at most one ballot. Import refuses a hash that is already in use. The stored value is the lookup hash in [verification.md](./verification.md). The access code is not a column. The voter receives it as a QR code and as text. A mail-in or absentee hash also uses the viewing passphrase, which is not a column on the ballot.
 
 ### Ledger immutability
 `Ballot`, `Vote`, and `VoteChainEntry` accept insert only. `VoteChain` accepts updates only to the tip fields (`latestEntry`, `length`, `hash`, `signature`) and to `status` moving from `active` to `closed`.

@@ -86,6 +86,7 @@ final class RecordingService {
             Digests.isLowerHex(request.voterAccessHash(), 64),
             "voterAccessHash must be lowercase SHA-256 hex"
         );
+        this.stores.require(this.unused(request.voterAccessHash()), "voter access code is already in use");
         this.stores.require(device.getStatus() == RecordingDeviceStatus.ACTIVE, "Recording device is not active");
         this.stores.require(device.getDeletedAt() == null, "Recording device is deleted");
         this.stores.require(deviceIds.contains(request.recordingDeviceId()), "Device is not in the signed definition");
@@ -95,6 +96,11 @@ final class RecordingService {
         this.requireMailActor(request);
         this.requireAssignment(request.electionId(), request.votingPrecinctId());
         return new ImportContext(election, device);
+    }
+
+    private boolean unused(final String voterAccessHash) {
+        final var ballots = this.repository.ballotsByAccessHash(voterAccessHash);
+        return ballots.isEmpty();
     }
 
     private void requireType(final BallotType type) {

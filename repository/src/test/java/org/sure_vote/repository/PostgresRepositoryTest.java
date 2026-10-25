@@ -128,7 +128,7 @@ class PostgresRepositoryTest {
     }
 
     @Test
-    void voterAccessHashIsUniquePerElection() {
+    void voterAccessHashIsUniqueAcrossElections() {
         final var failure = assertThrows(IllegalArgumentException.class, this::twoBallots);
         assertEquals("Duplicate voter access hash", failure.getMessage());
     }
@@ -222,9 +222,9 @@ class PostgresRepositoryTest {
     }
 
     @Test
-    void theSameAccessHashCanExistInAnotherElection() {
-        final var listed = this.sameHashTwoElections();
-        assertEquals(2, listed.size());
+    void theSameAccessHashIsRejectedInAnotherElection() {
+        final var failure = assertThrows(IllegalArgumentException.class, this::sameHashTwoElections);
+        assertEquals("Duplicate voter access hash", failure.getMessage());
     }
 
     @Test
@@ -582,12 +582,11 @@ class PostgresRepositoryTest {
         repository.replace(moved);
     }
 
-    private List<Ballot> sameHashTwoElections() {
+    private void sameHashTwoElections() {
         final var first = this.ballot(this.rows.electionId, "ab");
         final var second = this.ballot(this.rows.election(), "ab");
         repository.insert(first);
         repository.insert(second);
-        return repository.list(Ballot.class);
     }
 
     private void blankHash() {

@@ -55,6 +55,14 @@ class ImportRulesTest {
     }
 
     @Test
+    void anAccessHashAlreadyInUseIsRejected() {
+        final var world = SampleElection.fptp();
+        final var sealed = world.sealed(world.slotA, "Y");
+        world.app.importBallot(sealed);
+        this.assertMessage(() -> world.app.importBallot(sealed), "voter access code is already in use");
+    }
+
+    @Test
     void votesAndRecordedByAreRequired() {
         final var world = SampleElection.fptp();
         final var sealed = world.sealed(world.slotA, "Y");

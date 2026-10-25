@@ -104,7 +104,7 @@ final class ParentRows {
         ballot.setTenantId(this.tenantId);
         ballot.setElectionId(electionId);
         ballot.setVotingPrecinctId(this.precinctId);
-        ballot.setVoterAccessHash("access-" + this.ballots);
+        ballot.setVoterAccessHash("access-" + this.ballots + "-" + UUID.randomUUID());
         this.repository.insert(ballot);
         return ballot.getId();
     }

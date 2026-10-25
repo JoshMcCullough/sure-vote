@@ -73,7 +73,7 @@ Every table except `vote_chain_validator` has `tenant_id`. The column is immutab
 - `ballot(election_id, timestamp)`
 - `vote(ballot_id)`
 - `vote(race_candidate_id)`
-- `ballot(election_id, voter_access_hash)` unique
+- `ballot(voter_access_hash)` unique
 - `ballot_issuance(person_id, election_id)` unique where `status = 'accepted'`
 - `vote_chain(race_id)` unique where `status = 'active'`
 - `vote_chain_entry(previous_entry_id)`
@@ -116,8 +116,8 @@ Enforcement: partial unique index on `vote_chain(race_id) WHERE status = 'active
 
 ### Access-hash uniqueness
 
-Constraint: one `voter_access_hash` per election.
-Enforcement: unique index on `ballot(election_id, voter_access_hash)`.
+Constraint: a `voter_access_hash` appears on one ballot in the whole database.
+Enforcement: unique index on `ballot(voter_access_hash)` (`V8__unique_access_hash.sql`).
 
 ### One ballot per voter
 

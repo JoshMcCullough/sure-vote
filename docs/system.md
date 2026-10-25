@@ -110,7 +110,7 @@ Sure Vote Systems patches the hosted service. A self-hosted instance's host patc
 
 The voter receives an access code when their ballot is recorded. It is 32 random bytes, shown as base64url text without padding, and as a QR code of that same text. `Ballot.voterAccessHash` stores a one-way result defined in [verification.md](./verification.md). The code is not stored. The QR payload is the text code, not `voterAccessHash`, and not the ballot's integrity `hash`.
 
-Lookup needs only the voter's input: the code, plus the passphrase for mail-in. It does not need the election id or the tenant. `POST /lookup` finds the one ballot whose `voterAccessHash` matches, and the election-scoped routes also require that ballot to be in the named election. If more than one ballot matches, the lookup is a miss.
+Lookup needs only the voter's input: the code, plus the passphrase for mail-in. It does not need the election id or the tenant. `POST /lookup` finds the one ballot whose `voterAccessHash` matches, and the election-scoped routes also require that ballot to be in the named election. `voterAccessHash` is unique across all tenants, so at most one ballot matches. The access code is 32 random bytes, so two honest devices never draw the same one. Import refuses a hash already in use, and the database has a unique index, so a faulty or malicious device that reuses a code is rejected rather than shadowing another ballot.
 
 An unknown submission gets "no ballot for that code." The page does not reveal whether a different submission would have matched.
 
