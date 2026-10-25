@@ -315,10 +315,14 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void importBallot(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
-        final var body = this.read(exchange, BallotBody.class);
-        final var request = this.importRequest(body, actor);
-        final var saved = this.app.importBallot(request);
+        final var bytes = this.bytes(exchange);
+        final var body = this.parse(bytes, BallotBody.class);
+        final var signed = Requests.signed(exchange, bytes);
+        final var saved = this.app.asImport(
+            signed,
+            body.electionId,
+            (tenantId, actor) -> this.app.importBallot(this.importRequest(body, tenantId, actor))
+        );
         this.writeJson(exchange, 201, this.ballotResource(saved));
     }
 
@@ -466,11 +470,17 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void fileValidation(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
         final var id = this.id(parts.get(1));
-        final var body = this.read(exchange, ValidationBody.class);
+        final var bytes = this.bytes(exchange);
+        final var body = this.parse(bytes, ValidationBody.class);
         final var request = this.validationRequest(body);
-        final var saved = this.app.fileValidation(id, request, actor);
+        final var signed = Requests.signed(exchange, bytes);
+        final var saved = this.app.asValidator(
+            signed,
+            id,
+            body.validatorId,
+            () -> this.app.fileValidation(id, request, body.validatorId)
+        );
         this.writeJson(exchange, 201, this.validationResource(saved));
     }
 
@@ -630,11 +640,11 @@ public final class ApiServer implements HttpHandler {
         return issuance;
     }
 
-    private ImportBallot importRequest(final BallotBody body, final UUID actor) {
+    private ImportBallot importRequest(final BallotBody body, final UUID tenantId, final UUID actor) {
         final var type = this.wire(BallotType.values(), body.type, "ballot type");
         final var votes = this.votes(body.votes);
         return new ImportBallot(
-            body.tenantId,
+            tenantId,
             actor,
             body.electionId,
             body.votingPrecinctId,
@@ -941,6 +951,21 @@ public final class ApiServer implements HttpHandler {
         }
     }
 
+    private byte[] bytes(final HttpExchange exchange) throws IOException {
+        final var input = exchange.getRequestBody();
+        return input.readAllBytes();
+    }
+
+    private <T> T parse(final byte[] bytes, final Class<T> type) throws IOException {
+        final var body = this.json.readValue(bytes, type);
+        if (body == null) {
+            throw new ConstraintException("invalid json");
+        }
+        else {
+            return body;
+        }
+    }
+
     private <T> T read(final HttpExchange exchange, final Class<T> type) throws IOException {
         final var input = exchange.getRequestBody();
         final var bytes = input.readAllBytes();
@@ -971,18 +996,6 @@ public final class ApiServer implements HttpHandler {
         }
         catch (final IOException failure) {
             exchange.close();
-        }
-    }
-
-    private UUID actor(final HttpExchange exchange) {
-        final var headers = exchange.getRequestHeaders();
-        final var values = headers.get("SureVote-Actor-Id");
-        if (values == null || values.isEmpty()) {
-            throw new ConstraintException("SureVote-Actor-Id is required");
-        }
-        else {
-            final var text = values.getFirst();
-            return this.id(text);
         }
     }
 
@@ -1073,7 +1086,6 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static final class BallotBody {
-        public UUID tenantId;
         public UUID electionId;
         public UUID votingPrecinctId;
         public String type;

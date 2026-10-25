@@ -91,6 +91,10 @@ A locality object uses `localityId`, `ballots`, `undervotes`, `candidates`, sort
 
 A restore incident, when present, uses the payload in [schema.md](./schema.md). Its hash is SHA-256 of that JSON, and the operator signature covers the raw hash bytes. The restored heads in the incident are the chain heads the verifier is checking. The witnessed heads are the latest outside validator heads from before the restore. The incident does not remove entries. It records that the promoted chain and the last outside witness differ.
 
+## Request signatures
+
+A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is Ed25519 over those 32 raw bytes, in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.
+
 ## Checks
 
 A verifier does the following.

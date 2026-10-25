@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Address;
@@ -224,7 +224,7 @@ public final class SureVote {
         }
     }
 
-    public <T> T asImport(final SignedRequest request, final UUID electionId, final Function<UUID, T> work) {
+    public <T> T asImport(final SignedRequest request, final UUID electionId, final BiFunction<UUID, UUID, T> work) {
         final var tenant = this.repository.electionTenant(this.present(electionId));
         final var tenantId = tenant.orElseThrow(() -> new ConstraintException("Missing Election"));
         return this.repository.inTenant(tenantId, () -> this.imported(request, electionId, tenantId, work));
@@ -239,21 +239,32 @@ public final class SureVote {
         final var validator = this.repository.find(VoteChainValidator.class, this.present(validatorId));
         final var live = validator.filter(row -> row.getDeletedAt() == null);
         final var key = live.map(VoteChainValidator::getPublicKey);
-        this.signedRequests.verify(request, "validator:" + validatorId, key.orElseThrow(AccessException::signIn));
-        return this.published(electionId, work);
+        final var publicKey = key.orElseThrow(AccessException::signIn);
+        return this.published(this.present(electionId), () -> this.verified(request, validatorId, publicKey, work));
+    }
+
+    private <T> T verified(
+        final SignedRequest request,
+        final UUID validatorId,
+        final String publicKey,
+        final Supplier<T> work
+    ) {
+        this.signedRequests.verify(request, "validator:" + validatorId, publicKey);
+        return work.get();
     }
 
     private <T> T imported(
         final SignedRequest request,
         final UUID electionId,
         final UUID tenantId,
-        final Function<UUID, T> work
+        final BiFunction<UUID, UUID, T> work
     ) {
         final var found = this.repository.find(Election.class, electionId);
         final var election = found.orElseThrow(() -> new ConstraintException("Missing Election"));
         final var key = election.getImportPublicKey();
-        this.signedRequests.verify(request, "import:" + electionId, key);
-        return work.apply(tenantId);
+        final var keyId = "import:" + electionId;
+        this.signedRequests.verify(request, keyId, key);
+        return work.apply(tenantId, Tokens.derived("key", keyId));
     }
 
     private UUID present(final UUID id) {

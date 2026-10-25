@@ -1,6 +1,6 @@
 # Request identity
 
-Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed server-side sessions, described in [Built](#built). Official, visitor, workspace, and system-admin routes take the principal and the tenant from the session. No request names a `tenantId` for its own scope, and the `SureVote-Actor-Id` header is gone from those routes. Machine request signing is still a recommendation, and `POST /ballots` and `POST /elections/{id}/validations` still take the unsigned header.
+Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed server-side sessions, described in [Built](#built). Official, visitor, workspace, and system-admin routes take the principal and the tenant from the session. No request names a `tenantId` for its own scope, and the `SureVote-Actor-Id` header is gone from those routes. Machines sign each request: `POST /ballots` with the election's import key and `POST /elections/{id}/validations` with the validator's key, with a timestamp and a nonce against replay. No route takes `SureVote-Actor-Id`.
 
 ## What has to be proven
 
@@ -46,7 +46,7 @@ The import workstation and validators already hold Ed25519 keys whose public hal
 
 ## Decision
 
-Option 2 is chosen for every person. Option 3 is recommended, with request signatures rather than mTLS, for the import workstation and validators. A WebAuthn sign-in creates a server-side session, and the session alone decides the tenant or the system scope for the transaction. Clients stop sending `SureVote-Actor-Id` and `tenantId`. That matches the existing hardware-key custody, gives immediate revocation, and never puts a reusable secret on the host. JWT and OIDC federation can be added later as another sign-in method that creates the same session, if an authority requires it.
+Option 2 is chosen for every person. Option 3 is chosen, with request signatures rather than mTLS, for the import workstation and validators. A WebAuthn sign-in creates a server-side session, and the session alone decides the tenant or the system scope for the transaction. Clients stop sending `SureVote-Actor-Id` and `tenantId`. That matches the existing hardware-key custody, gives immediate revocation, and never puts a reusable secret on the host. JWT and OIDC federation can be added later as another sign-in method that creates the same session, if an authority requires it.
 
 ## Sessions across instances
 
@@ -76,6 +76,7 @@ Every signing step must also run with a software key, so tests, development, and
 - The first admin enrolls with `SUREVOTE_SYSTEM_ADMIN_ENROLLMENT_TOKEN`. The service stores its hash once, and the token works once.
 - `POST /auth/enrollments/start` and `POST /auth/passkeys/finish` enroll a passkey. `POST /auth/passkeys/start` adds another for the signed-in person. `POST /auth/sign-in/start` and `/finish` sign in. `GET /auth/session` names the principal, and `POST /auth/sign-out` revokes the row and clears the cookie.
 - Routes: `/system/*` needs a system-admin session. `POST /elections`, issuances, activate, close, disputes, validators, and restore incidents need an official. `POST /persons`, the workspace creates, `GET /workspace`, and the showcase routes accept an official or a visitor. Each runs in `inTenant` with the session's tenant, and a route that names an election, issuance, or dispute of another tenant is refused with 403 before the service runs.
+- Signed machine requests carry `SureVote-Key-Id`, `SureVote-Timestamp`, `SureVote-Nonce`, and `SureVote-Signature`. The signature is Ed25519 over SHA-256 of the UTF-8 lines `method`, raw `path`, key id, timestamp, nonce, and the lowercase hex SHA-256 of the body bytes, joined by `\n`. The key id is `import:{electionId}` checked against `Election.importPublicKey`, or `validator:{validatorId}` checked against `VoteChainValidator.publicKey`. The timestamp is ISO-8601 within 5 minutes of the server clock. The nonce is 16 to 128 url-safe characters, and `request_nonce` refuses a second use of the same key id and nonce in the same transaction as the write. Each failure is a 401 with its reason. The import's tenant comes from the election, never from the body.
 - The software path: `SUREVOTE_DEV_SIGN_IN=true` turns on `POST /auth/dev/sign-in` with `{kind, id, tenantId}`, which opens a session for an active admin or official without a passkey. It is off by default, `GET /auth/config` reports it, and it never opens a visitor session. Tests also enroll and sign in with a software authenticator. `POST /showcase/session` opens a visitor session in the demo tenant.
 
 ## What changes when it is chosen

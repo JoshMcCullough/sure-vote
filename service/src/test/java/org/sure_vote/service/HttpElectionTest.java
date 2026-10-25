@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -22,10 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpElectionTest {
+    private static final String NONCE = "nonce-0123456789abcdef";
+
     private HttpClient client;
     private ObjectMapper json;
     private String base;
-    private String actorId;
     private String cookie;
 
     @Test
@@ -224,7 +226,12 @@ class HttpElectionTest {
         final var path = "/elections/" + world.electionId;
         final var heads = this.send("GET", path + "/heads", null);
         final var headBody = heads.body();
-        final var filed = this.saved(path + "/validations", this.validationJson(world, chain));
+        final var keyId = "validator:" + world.validatorId;
+        final var seed = world.validatorKey.seed();
+        final var validation = this.validationJson(world, chain);
+        final var forged = this.signed(path + "/validations", validation, keyId, new byte[32], NONCE);
+        final var response = this.signed(path + "/validations", validation, keyId, seed, NONCE);
+        final var filed = response.body();
         final var listed = this.send("GET", path + "/validations", null);
         final var validators = this.send("GET", path + "/validators", null);
         final var listBody = listed.body();
@@ -235,6 +242,9 @@ class HttpElectionTest {
         assertTrue(headBody.contains("\"witnessGap\":false"));
         assertTrue(headBody.contains("\"signature\":null"));
         assertTrue(headBody.contains(chain.getHash()));
+        assertEquals(401, forged.statusCode());
+        assertEquals("request signature is invalid", this.text(forged.body(), "error"));
+        assertEquals(201, response.statusCode());
         assertTrue(filed.contains("\"result\":\"valid\""));
         assertEquals(200, listed.statusCode());
         assertTrue(listBody.contains("\"result\":\"valid\""));
@@ -450,7 +460,10 @@ class HttpElectionTest {
 
     private void record(final SampleElection world) throws Exception {
         final var ballotBody = this.ballotJson(world);
-        final var imported = this.send("POST", "/ballots", ballotBody);
+        final var keyId = "import:" + world.electionId;
+        final var imported = this.signed("/ballots", ballotBody, keyId, world.importKey.seed(), NONCE);
+        final var replayed = this.signed("/ballots", ballotBody, keyId, world.importKey.seed(), NONCE);
+        final var unsigned = this.send("POST", "/ballots", ballotBody);
         final var importedBody = imported.body();
         final var code = world.lastCode;
         final var lookupPath = "/elections/" + world.electionId + "/ballots?code=" + code;
@@ -473,6 +486,10 @@ class HttpElectionTest {
         final var byCode = this.send("POST", "/lookup", postedJson);
         final var byCodeValue = this.voteValue(byCode.body());
         assertEquals(201, imported.statusCode());
+        assertEquals(401, replayed.statusCode());
+        assertEquals("request was already used", this.text(replayed.body(), "error"));
+        assertEquals(401, unsigned.statusCode());
+        assertEquals("a signed request is required", this.text(unsigned.body(), "error"));
         assertEquals("in-person", type);
         assertFalse(payload.contains(code));
         assertEquals(200, lookedUp.statusCode());
@@ -552,15 +569,36 @@ class HttpElectionTest {
         return builder.build();
     }
 
+    private HttpResponse<String> signed(
+        final String path,
+        final String body,
+        final String keyId,
+        final byte[] seed,
+        final String nonce
+    ) throws Exception {
+        final var bytes = body.getBytes(StandardCharsets.UTF_8);
+        final var now = Instant.now();
+        final var timestamp = now.toString();
+        final var unsigned = new SignedRequest("POST", path, keyId, timestamp, nonce, bytes, null);
+        final var signature = SignedRequests.sign(seed, unsigned);
+        final var builder = HttpRequest.newBuilder();
+        builder.uri(URI.create(this.base + path));
+        builder.header("Content-Type", "application/json");
+        builder.header("SureVote-Key-Id", keyId);
+        builder.header("SureVote-Timestamp", timestamp);
+        builder.header("SureVote-Nonce", nonce);
+        builder.header("SureVote-Signature", signature);
+        builder.POST(HttpRequest.BodyPublishers.ofByteArray(bytes));
+        return this.client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
     private void use(final SampleElection world, final Work work) throws Exception {
         final var server = ApiServer.start(world.app, 0);
         final var http = HttpClient.newHttpClient();
         final var mapper = new ObjectMapper();
-        final var actor = world.actor.toString();
         final var cookie = "surevote_session=" + world.officialSession();
         this.client = http;
         this.json = mapper;
-        this.actorId = actor;
         this.cookie = cookie;
         this.base = "http://127.0.0.1:" + server.port();
         try {
@@ -581,7 +619,6 @@ class HttpElectionTest {
         final var uri = URI.create(this.base + path);
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
-        builder.header("SureVote-Actor-Id", this.actorId);
         builder.header("Cookie", this.cookie);
         this.addBody(builder, method, body);
         return builder.build();
@@ -637,7 +674,6 @@ class HttpElectionTest {
         final var vote = votes.getFirst();
         final var candidateId = vote.raceCandidateId();
         final var entryTimestamp = vote.entryTimestamp();
-        final var tenantId = sealed.tenantId();
         final var electionId = sealed.electionId();
         final var precinctId = sealed.votingPrecinctId();
         final var deviceId = sealed.recordingDeviceId();
@@ -653,7 +689,6 @@ class HttpElectionTest {
         voteRow.put("entryTimestamp", entryTimestamp.toString());
         voteRow.put("nonce", vote.nonce());
         voteRow.put("entrySignature", vote.entrySignature());
-        body.put("tenantId", tenantId.toString());
         body.put("electionId", electionId.toString());
         body.put("votingPrecinctId", precinctId.toString());
         body.put("type", "in-person");
