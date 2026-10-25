@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, Created, messageOf, votingWindow } from '../api'
 import { Field, Step } from '../forms'
 import { Principal, workspaceSession } from '../session'
+import { Reconciliation } from './Reconciliation'
 
 type Ids = {
   tenantId: string
@@ -475,6 +476,8 @@ export function Workspace() {
           {closed ? <span className="saved">Status {closed}</span> : null}
         </div>
       </section>
+
+      <Reconciliation electionId={ids.electionId} ownPlaceId={ids.placeId} />
 
       <Step
         key={'production-activate-' + ids.electionId}

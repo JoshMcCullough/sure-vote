@@ -48,3 +48,4 @@ infra/node_modules/
 infra/dist/
 infra/cdk.out/
 !infra/bin/
+ui/smoke-failure.png

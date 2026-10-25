@@ -398,7 +398,7 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void reconciliation(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.requests.official(exchange);
+        final var actor = this.requests.member(exchange);
         final var id = this.id(parts.get(1));
         final var rows = this.app.inElection(actor, id, () -> this.app.reconciliation(id));
         final var body = new ArrayList<Map<String, Object>>();

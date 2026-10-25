@@ -39,6 +39,8 @@ A signed-in official works in their own tenant. Anyone else gets a visitor sessi
 
 On a showcase tenant the host holds the operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. The workspace can activate, cast one in-person demonstration ballot, and close without a hardware token. The cast response returns the access code once. The page shows it and tells the voter to copy it before leaving. Refreshing or clearing the page drops it. The code is not stored.
 
+After a cast or close, the workspace's Reconciliation card loads `GET /elections/{id}/reconciliation` and shows one row per recording place: kind (polling place or mail at a central office), issued, received, ballots, and whether it matches. A polling place matches when issued plus received equals its ballots; a central office matches when received equals ballots, because unreturned mailed ballots stay issued. Received marks are batched, so a fresh ballot can show as not matched until the next flush.
+
 A demonstration cast is refused for a production tenant. Production recording stays on the air-gapped machine and the authority workstation.
 
 The session is the `surevote_session` cookie, `HttpOnly`, so page scripts cannot read it. The app sends no actor id and no `tenantId`. The tenant comes from the session.
@@ -67,7 +69,7 @@ Creates require a session and return the saved resource. Workspace creates and `
 - `POST /showcase/elections` and `POST /showcase/devices` when the host generates the keys
 - `POST /showcase/elections/{id}/activate`, `/cast`, and `/close`
 - `POST /mail-issuances` with `{personId, electionId, recordingPlaceId, replace}` records that a mail ballot was sent.
-- `GET /elections/{id}/reconciliation` returns `[{recordingPlaceId, mail, issued, received, ballots, matched}]` for an official. The React app does not show it yet.
+- `GET /elections/{id}/reconciliation` returns `[{recordingPlaceId, mail, issued, received, ballots, matched}]` for an official or a visitor in that election's tenant. The workspace shows it.
 
 These routes are public and are not called by the workspace:
 
@@ -87,7 +89,7 @@ Vite, React, and TypeScript. No second state library. The dev server proxies the
 
 `./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_JDBC_APP_USER` and `SUREVOTE_JDBC_APP_PASSWORD` name the writer role the API connects as: the process migrates as the owner, grants that existing role `select`, `insert`, and `update` on every table, and opens the store as the role, so row-level security applies. Without them it connects as the owner and prints a warning. `SUREVOTE_JDBC_PUBLIC_USER` and `SUREVOTE_JDBC_PUBLIC_PASSWORD` name an existing read-only role for public reads. At startup the owner grants it `select` on `tenant`, `election`, `race`, `race_candidate`, `candidate`, `vote_chain`, `vote_chain_entry`, `vote`, `vote_chain_validator`, `tenant_validator`, `vote_chain_validation_result`, `restore_incident`, `canvass_statement`, and `close_bundle` only (`JdbcSureVoteRepository.grantReader`), and `GET /elections/{id}`, the ballot lookups, heads, validators, validations, and restore incidents run through it. It has no access to `person`, `ballot_issuance`, `ballot` (lookups go through `lookup_ballots`), disputes, sessions, or held keys, and it cannot write. The dispute count stays on the writer role, because the dispute table holds private statements. Without the variables, public reads use the writer connection. `SUREVOTE_STATIC` overrides the static root. The default root is `ui/dist`, and it is mounted only when `index.html` is there.
 
-From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run build` writes `ui/dist`.
+From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run build` writes `ui/dist`. `npm run smoke` builds the app, starts `:api:run` on port 8089 (`SUREVOTE_SMOKE_PORT`) with a demo tenant, and drives headless Chrome (`SUREVOTE_SMOKE_CHROME`, default `/usr/bin/google-chrome`) through `playwright-core`: it configures a showcase election, casts, closes, checks the reconciliation row, and opens the public lookup with the code. It is not part of `./gradlew check`.
 
 ## Out of this app
 

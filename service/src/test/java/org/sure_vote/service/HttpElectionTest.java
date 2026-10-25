@@ -232,6 +232,7 @@ class HttpElectionTest {
         final var cast = this.demoCast(election, precinct, device, place, voter, slot);
         final var closed = this.saved("/showcase/elections/" + election + "/close", "{}");
         final var listed = this.workspaceBody(world);
+        final var report = this.visitorReport(world, election);
         final var code = this.text(cast, "code");
         final var payload = this.nested(cast, "ballot", "payload");
         final var value = this.voteValue(cast);
@@ -251,6 +252,39 @@ class HttpElectionTest {
         assertFalse(style.isBlank());
         assertFalse(owned.isBlank());
         assertFalse(assignment.isBlank());
+        assertTrue(report.contains("\"recordingPlaceId\":\"" + place + "\""));
+        assertTrue(report.contains("\"received\":1"));
+        assertTrue(report.contains("\"matched\":true"));
+    }
+
+    private String visitorReport(final SampleElection world, final String election) throws Exception {
+        final var path = "/elections/" + election + "/reconciliation";
+        final var cookie = this.visitorCookie(world);
+        final var request = this.withCookie(path, cookie);
+        final var response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, response.statusCode());
+        return response.body();
+    }
+
+    private HttpRequest withCookie(final String path, final String cookie) {
+        final var builder = HttpRequest.newBuilder();
+        final var uri = URI.create(this.base + path);
+        builder.uri(uri);
+        builder.header("Cookie", cookie);
+        return builder.build();
+    }
+
+    private String visitorCookie(final SampleElection world) throws Exception {
+        final var started = this.visitorSession(world);
+        final var headers = started.headers();
+        final var setCookie = headers.firstValue("Set-Cookie");
+        final var cookie = setCookie.orElseThrow();
+        return cookie.substring(0, cookie.indexOf(';'));
+    }
+
+    private HttpResponse<String> visitorSession(final SampleElection world) throws Exception {
+        world.app.provisionDemoTenant(world.tenantId, "Demo", "us-east");
+        return this.sendUnsigned("POST", "/showcase/session", null);
     }
 
     private void hiddenHeads(final SampleElection world) throws Exception {
