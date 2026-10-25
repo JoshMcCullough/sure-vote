@@ -26,7 +26,7 @@ The chain lives in PostgreSQL. A copy of the chain head, its latest entry, held 
 ## Not in this design
 
 - A consensus network or a second operator.
-- A voter-controlled device submitting a binding ballot. It is planned as a React Native app and is not designed yet. See [system.md](./docs/system.md).
+- A voter-controlled device submitting a binding ballot. It is planned as a React Native app and is designed but not built: it requires a blind-signed one-time token, cast through a separate endpoint with no session or device id. See [device-voting.md](./docs/device-voting.md).
 - Coercion resistance. An in-person access code is a bearer token. Anyone with that slip can open that ballot.
 - A networked voting machine. Polling-place machines stay offline and write ballots to local media.
 - A ledger-level proof that every ballot came from an eligible voter exactly once. One ballot per voter is required and is enforced today by the private `BallotIssuance` mark. Whether to add a cryptographic spend is open. See [system.md](./docs/system.md).
