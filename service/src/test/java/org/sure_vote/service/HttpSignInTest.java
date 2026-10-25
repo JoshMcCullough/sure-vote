@@ -115,9 +115,11 @@ class HttpSignInTest {
         final var visitor = this.session(started);
         final var listed = this.send("GET", "/officials", null, visitor);
         final var passkey = this.send("POST", "/auth/passkeys/start", null, visitor);
+        final var election = this.send("POST", "/elections", "{\"name\":\"Real\"}", visitor);
         assertEquals("visitor", this.field(started.body(), "kind"));
         assertEquals(403, listed.statusCode());
         assertEquals("a visitor has no passkey", this.field(passkey.body(), "error"));
+        assertEquals(403, election.statusCode());
     }
 
     private String devAdmin(final SampleElection world) throws Exception {

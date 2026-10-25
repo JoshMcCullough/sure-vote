@@ -26,6 +26,7 @@ class HttpElectionTest {
     private ObjectMapper json;
     private String base;
     private String actorId;
+    private String cookie;
 
     @Test
     void definitionAndActivate() throws Exception {
@@ -138,8 +139,7 @@ class HttpElectionTest {
     }
 
     private void rejectHostKeys(final SampleElection world) throws Exception {
-        final var body = "{\"tenantId\":\"" + world.tenantId
-            + "\",\"name\":\"Nope\",\"votingStart\":\"2026-11-03T00:00:00Z\""
+        final var body = "{\"name\":\"Nope\",\"votingStart\":\"2026-11-03T00:00:00Z\""
             + ",\"votingEnd\":\"2026-11-04T00:00:00Z\"}";
         final var created = this.send("POST", "/showcase/elections", body);
         final var createdBody = created.body();
@@ -149,9 +149,9 @@ class HttpElectionTest {
     }
 
     private void listLocality(final SampleElection world) throws Exception {
-        final var body = "{\"tenantId\":\"" + world.tenantId + "\",\"name\":\"Town\",\"type\":\"city\"}";
+        final var body = "{\"name\":\"Town\",\"type\":\"city\"}";
         final var created = this.send("POST", "/localities", body);
-        final var path = "/tenants/" + world.tenantId + "/workspace";
+        final var path = "/workspace";
         final var listed = this.send("GET", path, null);
         final var createdBody = created.body();
         final var listedBody = listed.body();
@@ -294,7 +294,7 @@ class HttpElectionTest {
     }
 
     private String workspaceBody(final SampleElection world) throws Exception {
-        final var path = "/tenants/" + world.tenantId + "/workspace";
+        final var path = "/workspace";
         final var response = this.send("GET", path, null);
         final var body = response.body();
         final var status = response.statusCode();
@@ -324,74 +324,65 @@ class HttpElectionTest {
     }
 
     private String localityJson(final SampleElection world) {
-        return "{\"tenantId\":\"" + world.tenantId + "\",\"name\":\"Town\",\"type\":\"city\"}";
+        return "{\"name\":\"Town\",\"type\":\"city\"}";
     }
 
     private String addressJson(final SampleElection world, final String locality) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"localityId\":\"" + locality
+        return "{\"localityId\":\"" + locality
             + "\",\"street1\":\"1 Main\",\"postalCode\":\"00000\"}";
     }
 
     private String precinctJson(final SampleElection world, final String address) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"name\":\"Precinct 1\",\"addressId\":\"" + address + "\"}";
+        return "{\"name\":\"Precinct 1\",\"addressId\":\"" + address + "\"}";
     }
 
     private String districtJson(final SampleElection world, final String locality) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"localityId\":\"" + locality
+        return "{\"localityId\":\"" + locality
             + "\",\"name\":\"Ward 1\",\"type\":\"city-council\"}";
     }
 
     private String linkJson(final SampleElection world, final String precinct, final String district) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"votingPrecinctId\":\"" + precinct
+        return "{\"votingPrecinctId\":\"" + precinct
             + "\",\"votingDistrictId\":\"" + district
             + "\",\"districtType\":\"city-council\"}";
     }
 
     private String seatJson(final SampleElection world, final String locality) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"localityId\":\"" + locality
+        return "{\"localityId\":\"" + locality
             + "\",\"name\":\"Mayor\",\"jurisdiction\":\"local\",\"type\":\"mayor\""
             + ",\"appointments\":1,\"termLength\":4}";
     }
 
     private String termJson(final SampleElection world, final String seat) {
-        return "{\"tenantId\":\"" + world.tenantId + "\",\"seatId\":\"" + seat + "\"}";
+        return "{\"seatId\":\"" + seat + "\"}";
     }
 
     private String showcaseElectionJson(final SampleElection world, final String locality) {
         final var now = Instant.now();
         final var start = now.minus(Duration.ofHours(1));
         final var end = now.plus(Duration.ofDays(1));
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"localityId\":\"" + locality
+        return "{\"localityId\":\"" + locality
             + "\",\"name\":\"General\",\"votingStart\":\"" + start
             + "\",\"votingEnd\":\"" + end + "\"}";
     }
 
     private String raceJson(final SampleElection world, final String election, final String term) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"electionId\":\"" + election
+        return "{\"electionId\":\"" + election
             + "\",\"termId\":\"" + term
             + "\",\"name\":\"Mayor\",\"type\":\"general\",\"method\":\"first-past-the-post\"}";
     }
 
     private String personJson(final SampleElection world, final String first, final String last) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"firstName\":\"" + first
+        return "{\"firstName\":\"" + first
             + "\",\"lastName\":\"" + last + "\"}";
     }
 
     private String candidateJson(final SampleElection world, final String person) {
-        return "{\"tenantId\":\"" + world.tenantId + "\",\"personId\":\"" + person + "\"}";
+        return "{\"personId\":\"" + person + "\"}";
     }
 
     private String slotJson(final SampleElection world, final String race, final String candidate) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"raceId\":\"" + race
+        return "{\"raceId\":\"" + race
             + "\",\"candidateId\":\"" + candidate
             + "\",\"writeIn\":false}";
     }
@@ -402,36 +393,31 @@ class HttpElectionTest {
         final String precinct,
         final String race
     ) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"electionId\":\"" + election
+        return "{\"electionId\":\"" + election
             + "\",\"votingPrecinctId\":\"" + precinct
             + "\",\"raceId\":\"" + race + "\"}";
     }
 
     private String placeJson(final SampleElection world, final String locality, final String address) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"localityId\":\"" + locality
+        return "{\"localityId\":\"" + locality
             + "\",\"addressId\":\"" + address
             + "\",\"name\":\"Town Hall\",\"kind\":\"polling-place\"}";
     }
 
     private String showcaseDeviceJson(final SampleElection world) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"name\":\"Machine 1\",\"kind\":\"polling-place-machine\"}";
+        return "{\"name\":\"Machine 1\",\"kind\":\"polling-place-machine\"}";
     }
 
     private String deviceJson(final SampleElection world) {
         final var key = Signatures.generate();
         final var publicKey = key.publicKey();
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"name\":\"Machine 2\",\"kind\":\"polling-place-machine\""
+        return "{\"name\":\"Machine 2\",\"kind\":\"polling-place-machine\""
             + ",\"publicKey\":\"" + publicKey
             + "\",\"status\":\"active\"}";
     }
 
     private String assignmentJson(final SampleElection world, final String election, final String precinct) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"electionId\":\"" + election
+        return "{\"electionId\":\"" + election
             + "\",\"votingPrecinctId\":\"" + precinct
             + "\",\"assignmentStatus\":\"current\"}";
     }
@@ -544,9 +530,9 @@ class HttpElectionTest {
         assertFalse(countedBody.contains("receipt"));
         assertEquals(200, looked.statusCode());
         assertTrue(lookedBody.contains("the receipt shows a different choice"));
-        assertEquals(400, hidden.statusCode());
-        assertEquals("SureVote-Actor-Id is required", this.text(hiddenBody, "error"));
-        assertEquals(400, denied.statusCode());
+        assertEquals(401, hidden.statusCode());
+        assertEquals("sign-in required", this.text(hiddenBody, "error"));
+        assertEquals(401, denied.statusCode());
         assertEquals(200, noted.statusCode());
         assertEquals("noted", this.text(notedBody, "status"));
     }
@@ -571,9 +557,11 @@ class HttpElectionTest {
         final var http = HttpClient.newHttpClient();
         final var mapper = new ObjectMapper();
         final var actor = world.actor.toString();
+        final var cookie = "surevote_session=" + world.officialSession();
         this.client = http;
         this.json = mapper;
         this.actorId = actor;
+        this.cookie = cookie;
         this.base = "http://127.0.0.1:" + server.port();
         try {
             work.run();
@@ -594,6 +582,7 @@ class HttpElectionTest {
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
         builder.header("SureVote-Actor-Id", this.actorId);
+        builder.header("Cookie", this.cookie);
         this.addBody(builder, method, body);
         return builder.build();
     }
@@ -636,8 +625,7 @@ class HttpElectionTest {
     }
 
     private String issuanceJson(final SampleElection world, final UUID voter) {
-        return "{\"tenantId\":\"" + world.tenantId
-            + "\",\"personId\":\"" + voter
+        return "{\"personId\":\"" + voter
             + "\",\"electionId\":\"" + world.electionId
             + "\",\"recordingPlaceId\":\"" + world.placeId
             + "\"}";

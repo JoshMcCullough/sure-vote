@@ -25,7 +25,7 @@ import org.sure_vote.service.ConstraintException;
 import org.sure_vote.service.SureVote;
 
 /**
- * System admin routes under {@code /system}. The admin is the unsigned actor header until request identity is chosen.
+ * System admin routes under {@code /system}. The admin is the signed-in session.
  */
 final class SystemHttp {
     private final SureVote app;
@@ -151,7 +151,7 @@ final class SystemHttp {
     }
 
     private void createTenant(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var body = this.read(exchange, TenantBody.class);
         final var tenant = new Tenant();
         tenant.setName(body.name);
@@ -162,7 +162,7 @@ final class SystemHttp {
     }
 
     private void listTenants(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var rows = this.app.systemTenants(actor);
         final var resources = new ArrayList<TenantResource>();
         final var list = new TenantListResource();
@@ -174,7 +174,7 @@ final class SystemHttp {
     }
 
     private void updateTenant(final HttpExchange exchange, final String text) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var id = this.id(text);
         final var body = this.read(exchange, TenantChangeBody.class);
         final var status = this.optional(TenantStatus.values(), body.status, "tenant status");
@@ -183,7 +183,7 @@ final class SystemHttp {
     }
 
     private void createAdmin(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var body = this.read(exchange, AdminBody.class);
         final var admin = new SystemAdmin();
         admin.setName(body.name);
@@ -191,7 +191,7 @@ final class SystemHttp {
     }
 
     private void listAdmins(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var rows = this.app.systemAdmins(actor);
         final var resources = new ArrayList<SystemAdminResource>();
         final var list = new SystemAdminListResource();
@@ -203,7 +203,7 @@ final class SystemHttp {
     }
 
     private void updateAdmin(final HttpExchange exchange, final String text) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.adminId(exchange);
         final var id = this.id(text);
         final var body = this.read(exchange, AdminChangeBody.class);
         final var status = this.optional(SystemAdminStatus.values(), body.status, "system admin status");
@@ -263,15 +263,9 @@ final class SystemHttp {
         output.close();
     }
 
-    private UUID actor(final HttpExchange exchange) {
-        final var headers = exchange.getRequestHeaders();
-        final var values = headers.get("SureVote-Actor-Id");
-        if (values == null || values.isEmpty()) {
-            throw new ConstraintException("SureVote-Actor-Id is required");
-        }
-        else {
-            return this.id(values.getFirst());
-        }
+    private UUID adminId(final HttpExchange exchange) {
+        final var admin = this.requests.admin(exchange);
+        return admin.id();
     }
 
     private UUID id(final String text) {

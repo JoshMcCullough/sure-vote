@@ -26,6 +26,12 @@ final class Requests {
 
     Principal official(final HttpExchange exchange) {
         final var principal = this.principal(exchange);
+        allowed(principal.kind() == PrincipalKind.OFFICIAL);
+        return principal;
+    }
+
+    Principal member(final HttpExchange exchange) {
+        final var principal = this.principal(exchange);
         allowed(principal.inTenant());
         return principal;
     }

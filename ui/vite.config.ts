@@ -9,6 +9,13 @@ export default defineConfig({
   server: {
     proxy: {
       '/health': api,
+      '/auth': api,
+      '/system': api,
+      '/officials': api,
+      '/workspace': api,
+      '/lookup': api,
+      '/validators': api,
+      '/tenant-validators': api,
       '/tenants': api,
       '/persons': api,
       '/elections': api,

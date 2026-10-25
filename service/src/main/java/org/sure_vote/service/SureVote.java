@@ -30,6 +30,7 @@ import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantEntity;
 import org.sure_vote.entity.TenantOfficial;
 import org.sure_vote.entity.TenantOfficialStatus;
 import org.sure_vote.entity.TenantStatus;
@@ -190,6 +191,36 @@ public final class SureVote {
         }
         else {
             return this.repository.inTenant(principal.tenantId(), work);
+        }
+    }
+
+    public <T> T inElection(final Principal principal, final UUID electionId, final Supplier<T> work) {
+        return this.asTenantRow(principal, Election.class, electionId, work);
+    }
+
+    public <T> T asTenantRow(
+        final Principal principal,
+        final Class<? extends TenantEntity> type,
+        final UUID id,
+        final Supplier<T> work
+    ) {
+        return this.asTenant(principal, () -> this.owned(principal, type, this.present(id), work));
+    }
+
+    private <T> T owned(
+        final Principal principal,
+        final Class<? extends TenantEntity> type,
+        final UUID id,
+        final Supplier<T> work
+    ) {
+        final var tenantId = principal.tenantId();
+        final var found = this.repository.find(type, id);
+        final var foreign = found.filter(row -> !tenantId.equals(row.getTenantId()));
+        if (foreign.isPresent()) {
+            throw AccessException.denied();
+        }
+        else {
+            return work.get();
         }
     }
 

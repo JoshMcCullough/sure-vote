@@ -1,13 +1,13 @@
 # Request identity
 
-Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed server-side sessions, described in [Built](#built). The election and workspace routes do not use the session yet. Machine request signing is still a recommendation. Today every official and system-admin request names its principal with an unsigned `SureVote-Actor-Id` header, and an official request names its tenant with a `tenantId` in the body or path. That is enough to build and test locally. It is not enough for a production console, and [system.md](./system.md) says a client-supplied tenant id is not the source.
+Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed server-side sessions, described in [Built](#built). Official, visitor, workspace, and system-admin routes take the principal and the tenant from the session. No request names a `tenantId` for its own scope, and the `SureVote-Actor-Id` header is gone from those routes. Machine request signing is still a recommendation, and `POST /ballots` and `POST /elections/{id}/validations` still take the unsigned header.
 
 ## What has to be proven
 
 | Principal | Calls | Scope | Today |
 | --- | --- | --- | --- |
-| Official | configure, accept voters, import, close | one tenant | `SureVote-Actor-Id` plus a body `tenantId` |
-| System admin | create, list, suspend tenants and admins | every tenant, not their rows | `SureVote-Actor-Id` checked against `SystemAdmin` |
+| Official | configure, accept voters, import, close | one tenant | passkey session |
+| System admin | create, list, suspend tenants and admins | every tenant, not their rows | passkey session checked against `SystemAdmin` |
 | Import workstation | `POST /ballots` | one tenant | the ballot and chain entries are already Ed25519-signed |
 | Validator | `POST /elections/{id}/validations` | global | the result is already Ed25519-signed |
 | Voter | lookup, disputes | the ballot the code names | the access code, plus the passphrase for mail-in |
@@ -75,6 +75,7 @@ Every signing step must also run with a software key, so tests, development, and
 - A system admin adds an official with `POST /system/tenants/{tenantId}/officials` and gets a one-time enrollment token, valid for 24 hours. An active official adds, lists, disables, and re-enrolls officials of their own tenant through `/officials`. An official cannot change their own status. A new enrollment token replaces a lost passkey. `POST /system/admins/{id}/enrollments` does the same for an admin.
 - The first admin enrolls with `SUREVOTE_SYSTEM_ADMIN_ENROLLMENT_TOKEN`. The service stores its hash once, and the token works once.
 - `POST /auth/enrollments/start` and `POST /auth/passkeys/finish` enroll a passkey. `POST /auth/passkeys/start` adds another for the signed-in person. `POST /auth/sign-in/start` and `/finish` sign in. `GET /auth/session` names the principal, and `POST /auth/sign-out` revokes the row and clears the cookie.
+- Routes: `/system/*` needs a system-admin session. `POST /elections`, issuances, activate, close, disputes, validators, and restore incidents need an official. `POST /persons`, the workspace creates, `GET /workspace`, and the showcase routes accept an official or a visitor. Each runs in `inTenant` with the session's tenant, and a route that names an election, issuance, or dispute of another tenant is refused with 403 before the service runs.
 - The software path: `SUREVOTE_DEV_SIGN_IN=true` turns on `POST /auth/dev/sign-in` with `{kind, id, tenantId}`, which opens a session for an active admin or official without a passkey. It is off by default, `GET /auth/config` reports it, and it never opens a visitor session. Tests also enroll and sign in with a software authenticator. `POST /showcase/session` opens a visitor session in the demo tenant.
 
 ## What changes when it is chosen

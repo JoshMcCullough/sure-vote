@@ -37,6 +37,7 @@ class SystemHttpTest {
         first.setId(this.admin);
         first.setName("Host");
         app.bootstrapSystemAdmin(first);
+        app.enableDevSignIn();
         this.server = ApiServer.start(app);
         this.client = HttpClient.newHttpClient();
         this.json = new ObjectMapper();
@@ -80,8 +81,8 @@ class SystemHttpTest {
         assertEquals("active", this.field(created, "status"));
         assertEquals("disabled", this.field(disabled, "status"));
         assertEquals(2, this.count(listed, "admins"));
-        assertEquals(400, refused.statusCode());
-        assertEquals("not a system admin", this.error(refused));
+        assertEquals(401, refused.statusCode());
+        assertEquals("sign-in required", this.error(refused));
     }
 
     @Test
@@ -97,8 +98,8 @@ class SystemHttpTest {
         final var wrongAdminMethod = this.send("GET", "/system/admins/" + this.admin, null, this.admin);
         final var unknown = this.send("GET", "/system/other", null, this.admin);
         final var badKind = this.send("POST", "/system/tenants", BAD_KIND, this.admin);
-        assertEquals("not a system admin", this.error(stranger));
-        assertEquals("SureVote-Actor-Id is required", this.error(anonymous));
+        assertEquals("sign-in required", this.error(stranger));
+        assertEquals("sign-in required", this.error(anonymous));
         assertEquals("invalid id", this.error(badId));
         assertEquals("Unknown system admin status: gone", this.error(badStatus));
         assertEquals("system admin status is required", this.error(noStatus));
@@ -124,10 +125,26 @@ class SystemHttpTest {
         return this.client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private void addActor(final HttpRequest.Builder builder, final UUID actor) {
+    private void addActor(final HttpRequest.Builder builder, final UUID actor) throws Exception {
         if (actor != null) {
-            builder.header("SureVote-Actor-Id", actor.toString());
+            builder.header("Cookie", this.cookie(actor));
         }
+    }
+
+    private HttpRequest signIn(final UUID actor) {
+        final var builder = HttpRequest.newBuilder();
+        final var body = "{\"kind\":\"system-admin\",\"id\":\"" + actor + "\"}";
+        builder.uri(URI.create(this.base + "/auth/dev/sign-in"));
+        builder.POST(HttpRequest.BodyPublishers.ofString(body));
+        return builder.build();
+    }
+
+    private String cookie(final UUID actor) throws Exception {
+        final var response = this.client.send(this.signIn(actor), HttpResponse.BodyHandlers.ofString());
+        final var headers = response.headers();
+        final var header = headers.firstValue("Set-Cookie");
+        final var value = header.orElse("surevote_session=none;");
+        return value.substring(0, value.indexOf(';'));
     }
 
     private HttpRequest.BodyPublisher publisher(final String body) {

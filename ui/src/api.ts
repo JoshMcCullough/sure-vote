@@ -1,16 +1,13 @@
-import { actorId } from './session'
-
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    'SureVote-Actor-Id': actorId(),
   }
   let payload: string | undefined
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
     payload = JSON.stringify(body)
   }
-  const response = await fetch(path, { method, headers, body: payload })
+  const response = await fetch(path, { method, headers, body: payload, credentials: 'same-origin' })
   const text = await response.text()
   const parsed = text === '' ? null : JSON.parse(text) as unknown
   if (!response.ok) {

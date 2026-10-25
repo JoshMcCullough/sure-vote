@@ -13,7 +13,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.sure_vote.entity.PrincipalKind;
+import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.repository.InMemorySureVoteRepository;
+import org.sure_vote.service.Principal;
 import org.sure_vote.service.SureVote;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,7 +27,8 @@ class ApiServerTest {
     private ApiServer server;
     private HttpClient client;
     private ObjectMapper json;
-    private UUID actor;
+    private String cookie;
+    private String official;
     private UUID demo;
     private String base;
 
@@ -34,11 +38,12 @@ class ApiServerTest {
         final var app = new SureVote(repository);
         this.demo = UUID.randomUUID();
         app.provisionDemoTenant(this.demo, "Demo", "us-east");
+        this.official = "surevote_session=" + official(app, this.demo);
         this.server = ApiServer.start(app);
         this.client = HttpClient.newHttpClient();
         this.json = new ObjectMapper();
-        this.actor = UUID.randomUUID();
         this.base = "http://127.0.0.1:" + this.server.port();
+        this.cookie = this.visitor();
     }
 
     @AfterEach
@@ -62,8 +67,8 @@ class ApiServerTest {
     void showcasePersonRejectsSsnAndOmitsSecrets() throws Exception {
         final var created = this.send("GET", "/showcase/tenant", null);
         final var tenantId = this.idOf(created.body());
-        final var rejected = this.send("POST", "/persons", this.secretPerson(tenantId));
-        final var accepted = this.send("POST", "/persons", this.plainPerson(tenantId));
+        final var rejected = this.send("POST", "/persons", this.secretPerson());
+        final var accepted = this.send("POST", "/persons", this.plainPerson());
         final var rejectedBody = rejected.body();
         final var acceptedBody = accepted.body();
         final var message = this.error(rejectedBody);
@@ -93,12 +98,12 @@ class ApiServerTest {
     }
 
     @Test
-    void writesRequireAnActor() throws Exception {
-        final var request = this.request("POST", "/persons", this.plainPerson(this.demo), false);
+    void writesRequireASession() throws Exception {
+        final var request = this.request("POST", "/persons", this.plainPerson(), false);
         final var response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
         final var message = this.error(response.body());
-        assertEquals(400, response.statusCode());
-        assertEquals("SureVote-Actor-Id is required", message);
+        assertEquals(401, response.statusCode());
+        assertEquals("sign-in required", message);
     }
 
     @Test
@@ -118,11 +123,11 @@ class ApiServerTest {
     }
 
     @Test
-    void invalidActorIdIsRejected() throws Exception {
-        final var response = this.sendAs("not-a-uuid");
+    void anUnknownSessionIsRefused() throws Exception {
+        final var response = this.sendAs("surevote_session=not-a-session");
         final var message = this.error(response.body());
-        assertEquals(400, response.statusCode());
-        assertEquals("invalid id", message);
+        assertEquals(401, response.statusCode());
+        assertEquals("sign-in required", message);
     }
 
     @Test
@@ -141,7 +146,7 @@ class ApiServerTest {
 
     @Test
     void invalidElectionTimestampIsRejected() throws Exception {
-        final var response = this.send("POST", "/elections", "{\"votingStart\":\"nope\"}");
+        final var response = this.sendAsOfficial("POST", "/elections", "{\"votingStart\":\"nope\"}");
         final var message = this.error(response.body());
         assertEquals(400, response.statusCode());
         assertEquals("invalid timestamp", message);
@@ -151,7 +156,7 @@ class ApiServerTest {
     void invalidIdsAreRejected() throws Exception {
         final var election = this.send("GET", "/elections/not-a-uuid", null);
         final var definition = this.send("POST", "/elections/not-a-uuid/definition", "{}");
-        final var issuance = this.send("POST", "/issuances/not-a-uuid/void", "{\"reason\":\"x\"}");
+        final var issuance = this.sendAsOfficial("POST", "/issuances/not-a-uuid/void", "{\"reason\":\"x\"}");
         final var electionMessage = this.error(election.body());
         final var definitionMessage = this.error(definition.body());
         final var issuanceMessage = this.error(issuance.body());
@@ -370,7 +375,7 @@ class ApiServerTest {
 
     private void addActor(final HttpRequest.Builder builder, final boolean includeActor) {
         if (includeActor) {
-            builder.header("SureVote-Actor-Id", this.actor.toString());
+            builder.header("Cookie", this.cookie);
         }
     }
 
@@ -410,14 +415,54 @@ class ApiServerTest {
         return "{\"name\":\"Demo\",\"kind\":\"showcase\",\"residencyRegion\":\"us-east\",\"status\":\"active\"}";
     }
 
-    private String secretPerson(final UUID tenantId) {
-        return "{\"tenantId\":\"" + tenantId + "\",\"firstName\":\"Ada\",\"lastName\":\"One\",\"ssn\":\"123-45-6789\"}";
+    private String secretPerson() {
+        return "{\"firstName\":\"Ada\",\"lastName\":\"One\",\"ssn\":\"123-45-6789\"}";
     }
 
-    private String plainPerson(final UUID tenantId) {
-        return "{\"tenantId\":\""
-            + tenantId
-            + "\",\"firstName\":\"Bea\",\"lastName\":\"Two\",\"voterId\":null}";
+    private String plainPerson() {
+        return "{\"firstName\":\"Bea\",\"lastName\":\"Two\",\"voterId\":null}";
+    }
+
+    private String visitor() {
+        try {
+            final var response = this.client.send(
+                this.request("POST", "/showcase/session", null, false),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            final var headers = response.headers();
+            final var header = headers.firstValue("Set-Cookie");
+            final var value = header.orElseThrow();
+            return value.substring(0, value.indexOf(';'));
+        }
+        catch (final IOException | InterruptedException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
+    private static String official(final SureVote app, final UUID tenantId) {
+        final var principal = host(app);
+        final var created = app.createOfficial(tenantId, "Clerk", principal);
+        final var row = created.official();
+        return app.devSignIn(PrincipalKind.OFFICIAL, row.getId(), tenantId);
+    }
+
+    private static Principal host(final SureVote app) {
+        final var admin = new SystemAdmin();
+        admin.setId(UUID.randomUUID());
+        admin.setName("Host");
+        app.bootstrapSystemAdmin(admin);
+        app.enableDevSignIn();
+        return app.session(app.devSignIn(PrincipalKind.SYSTEM_ADMIN, admin.getId(), null));
+    }
+
+    private HttpResponse<String> sendAsOfficial(final String method, final String path, final String body)
+        throws Exception {
+        final var builder = HttpRequest.newBuilder();
+        builder.uri(URI.create(this.base + path));
+        builder.header("Content-Type", "application/json");
+        builder.header("Cookie", this.official);
+        this.addBody(builder, method, body);
+        return this.client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> sendAs(final String actor) throws Exception {
@@ -428,10 +473,10 @@ class ApiServerTest {
     private HttpRequest actorRequest(final String actor) {
         final var builder = HttpRequest.newBuilder();
         final var uri = URI.create(this.base + "/persons");
-        final var publisher = HttpRequest.BodyPublishers.ofString(this.plainPerson(this.demo));
+        final var publisher = HttpRequest.BodyPublishers.ofString(this.plainPerson());
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
-        builder.header("SureVote-Actor-Id", actor);
+        builder.header("Cookie", actor);
         builder.POST(publisher);
         return builder.build();
     }

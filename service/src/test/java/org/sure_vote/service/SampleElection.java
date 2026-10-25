@@ -21,6 +21,7 @@ import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.Outcome;
 import org.sure_vote.entity.Person;
+import org.sure_vote.entity.PrincipalKind;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.RaceType;
@@ -827,6 +828,19 @@ final class SampleElection {
         final var admin = this.admin();
         final var saved = this.app.createSystemTenant(tenant, admin);
         return saved.getId();
+    }
+
+    String officialSession() {
+        final var admin = this.adminPrincipal();
+        final var created = this.app.createOfficial(this.tenantId, "Clerk", admin);
+        final var official = created.official();
+        return this.app.devSignIn(PrincipalKind.OFFICIAL, official.getId(), this.tenantId);
+    }
+
+    private Principal adminPrincipal() {
+        final var adminId = this.admin();
+        this.app.enableDevSignIn();
+        return this.app.session(this.app.devSignIn(PrincipalKind.SYSTEM_ADMIN, adminId, null));
     }
 
     UUID admin() {

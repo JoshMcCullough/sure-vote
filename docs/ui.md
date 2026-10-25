@@ -33,28 +33,34 @@ These official routes stay off the public page:
 
 ## Workspace
 
-`/workspace` edits the parts of an election in the demo tenant: locality, address, precinct, district, precinct district, seat, term, election, race, person, candidate, race slot, ballot style, recording place, recording device, and precinct assignment.
+`/workspace` edits the parts of an election in the caller's tenant: locality, address, precinct, district, precinct district, seat, term, election, race, person, candidate, race slot, ballot style, recording place, recording device, and precinct assignment.
 
-The workspace runs in the demo tenant. A production tenant uses the same screens once sign-in can name it. Until then the app does not reach a production tenant. The browser does not hold a production operator, import, viewing, or device private key. On a production tenant, activate and close take a signature made outside the app. The workspace only submits that signature.
+A signed-in official works in their own tenant. Anyone else gets a visitor session in the demo tenant from `POST /showcase/session`. A signed-in system admin is told to sign out first, because an admin does not configure elections. The browser does not hold a production operator, import, viewing, or device private key. On a production tenant, activate and close take a signature made outside the app. The workspace only submits that signature.
 
 On a showcase tenant the host holds the operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. The workspace can activate, cast one in-person demonstration ballot, and close without a hardware token. The cast response returns the access code once. The page shows it and tells the voter to copy it before leaving. Refreshing or clearing the page drops it. The code is not stored.
 
 A demonstration cast is refused for a production tenant. Production recording stays on the air-gapped machine and the authority workstation.
 
-`SureVote-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The workspace reads the demo tenant from `GET /showcase/tenant` and creates every row in it. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
+The session is the `surevote_session` cookie, `HttpOnly`, so page scripts cannot read it. The app sends no actor id and no `tenantId`. The tenant comes from the session.
+
+## Sign-in and officials
+
+`/sign-in` signs in with a passkey (`POST /auth/sign-in/start` and `/finish`), enrolls one from a one-time token (`POST /auth/enrollments/start` and `POST /auth/passkeys/finish`), adds another passkey, and signs out. When `GET /auth/config` reports `devSignIn`, the page also offers the development sign-in by kind and id, with no passkey. A production host leaves it off.
+
+`/admin` manages officials. A system admin picks a tenant from `GET /system/tenants` and adds officials with `POST /system/tenants/{id}/officials`. An official manages their own tenant through `/officials`. Adding an official, or asking for a new enrollment token, shows the token once. Disable signs that official out at once. Nobody can disable themselves.
 
 Voter rolls, mail-in from the browser, dispute review, restore incidents, and row-level security stay out of this app for now.
 
 ## API the workspace calls
 
-Official creates require `SureVote-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
+Creates require a session and return the saved resource. Workspace creates and `POST /persons` accept an official or a visitor. `POST /elections`, issuances, activate, close, disputes, and validators need an official. They map onto the service. The app does not grow a second set of rules.
 
-- `GET /showcase/tenant` returns the demo tenant. There is no public tenant create. Every other tenant is created by a system admin through `POST /system/tenants`, and the app has no system-admin screens.
+- `GET /showcase/tenant` returns the demo tenant. There is no public tenant create. Every other tenant is created by a system admin through `POST /system/tenants`, and the app's only system-admin screen is `/admin`.
 - `POST /persons`
 - `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`
 - `POST /seats`, `/terms`, `/races`, `/candidates`, `/race-candidates`, `/ballot-styles`
 - `POST /places`, `/devices`, `/precinct-assignments`
-- `GET /tenants/{id}/workspace` lists the tenant's rows. It does not include `HeldKey` or person secrets.
+- `GET /workspace` lists the session tenant's rows. It does not include `HeldKey` or person secrets.
 - `POST /elections` when the caller brings operator, import, and viewing public keys
 - `POST /elections/{id}/activate` and `POST /elections/{id}/close` with signatures made outside the app
 - `POST /showcase/elections` and `POST /showcase/devices` when the host generates the keys

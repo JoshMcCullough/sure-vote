@@ -83,7 +83,7 @@ public final class ApiServer implements HttpHandler {
         this.app = app;
         this.server = server;
         this.requests = new Requests(app);
-        this.workspace = new WorkspaceHttp(app, this.json);
+        this.workspace = new WorkspaceHttp(app, this.json, this.requests);
         this.system = new SystemHttp(app, this.json, this.requests);
         this.auth = new AuthHttp(app, this.json, this.requests);
     }
@@ -291,26 +291,26 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void createPerson(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, PersonBody.class);
-        final var person = this.person(body);
-        final var saved = this.app.createPerson(person, actor);
+        final var person = this.person(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createPerson(person, actor.id()));
         this.writeJson(exchange, 201, this.personResource(saved));
     }
 
     private void createElection(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var body = this.read(exchange, ElectionBody.class);
-        final var election = this.election(body);
-        final var saved = this.app.createElection(election, actor);
+        final var election = this.election(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createElection(election, actor.id()));
         this.writeJson(exchange, 201, this.electionResource(saved));
     }
 
     private void createIssuance(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var body = this.read(exchange, IssuanceBody.class);
-        final var issuance = this.issuance(body);
-        final var saved = this.app.acceptVoter(issuance, actor);
+        final var issuance = this.issuance(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.acceptVoter(issuance, actor.id()));
         this.writeJson(exchange, 201, this.issuanceResource(saved));
     }
 
@@ -335,27 +335,36 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void activate(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, SignatureBody.class);
-        final var saved = this.app.activate(id, body.signature, actor);
+        final var saved = this.app.inElection(actor, id, () -> this.app.activate(id, body.signature, actor.id()));
         this.writeJson(exchange, 200, this.electionResource(saved));
     }
 
     private void closeElection(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, CloseBody.class);
         final var signatures = this.signatures(body);
-        final var saved = this.app.close(id, signatures, body.canvassSignature, actor);
+        final var saved = this.app.inElection(
+            actor,
+            id,
+            () -> this.app.close(id, signatures, body.canvassSignature, actor.id())
+        );
         this.writeJson(exchange, 200, this.electionResource(saved));
     }
 
     private void voidIssuance(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, VoidBody.class);
-        final var saved = this.app.voidIssuance(id, body.reason, actor);
+        final var saved = this.app.asTenantRow(
+            actor,
+            BallotIssuance.class,
+            id,
+            () -> this.app.voidIssuance(id, body.reason, actor.id())
+        );
         this.writeJson(exchange, 200, this.issuanceResource(saved));
     }
 
@@ -402,34 +411,39 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void listDisputes(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
-        final var rows = this.app.listDisputes(id, actor);
+        final var rows = this.app.inElection(actor, id, () -> this.app.listDisputes(id, actor.id()));
         this.writeJson(exchange, 200, this.disputeList(rows));
     }
 
     private void reviewDispute(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, DisputeStatusBody.class);
         final var status = this.wire(DisputeStatus.values(), body.status, "dispute status");
-        final var saved = this.app.setDisputeStatus(id, status, actor);
+        final var saved = this.app.asTenantRow(
+            actor,
+            BallotDispute.class,
+            id,
+            () -> this.app.setDisputeStatus(id, status, actor.id())
+        );
         this.writeJson(exchange, 200, this.disputeResource(saved));
     }
 
     private void createValidator(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var body = this.read(exchange, ValidatorBody.class);
         final var draft = this.validatorDraft(body);
-        final var saved = this.app.registerValidator(draft, actor);
+        final var saved = this.app.asTenant(actor, () -> this.app.registerValidator(draft, actor.id()));
         this.writeJson(exchange, 201, this.validatorResource(saved));
     }
 
     private void createTenantValidator(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var body = this.read(exchange, TenantValidatorBody.class);
-        final var link = this.tenantValidator(body);
-        final var saved = this.app.registerTenantValidator(link, actor);
+        final var link = this.tenantValidator(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.registerTenantValidator(link, actor.id()));
         this.writeJson(exchange, 201, this.tenantValidatorResource(saved));
     }
 
@@ -469,12 +483,12 @@ public final class ApiServer implements HttpHandler {
     }
 
     private void fileRestoreIncident(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.official(exchange);
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, RestoreBody.class);
         final var when = this.instant(body.timestamp);
         final var request = new RestoreRequest(body.reason, when, body.signature);
-        final var saved = this.app.fileRestoreIncident(id, request, actor);
+        final var saved = this.app.inElection(actor, id, () -> this.app.fileRestoreIncident(id, request, actor.id()));
         this.writeJson(exchange, 201, this.restoreResource(saved));
     }
 
@@ -584,9 +598,9 @@ public final class ApiServer implements HttpHandler {
         }
     }
 
-    private Person person(final PersonBody body) {
+    private Person person(final PersonBody body, final UUID tenantId) {
         final var person = new Person();
-        person.setTenantId(body.tenantId);
+        person.setTenantId(tenantId);
         person.setFirstName(body.firstName);
         person.setLastName(body.lastName);
         person.setSsn(body.ssn);
@@ -594,9 +608,9 @@ public final class ApiServer implements HttpHandler {
         return person;
     }
 
-    private Election election(final ElectionBody body) {
+    private Election election(final ElectionBody body, final UUID tenantId) {
         final var election = new Election();
-        election.setTenantId(body.tenantId);
+        election.setTenantId(tenantId);
         election.setLocalityId(body.localityId);
         election.setName(body.name);
         election.setVotingStart(this.instant(body.votingStart));
@@ -607,9 +621,9 @@ public final class ApiServer implements HttpHandler {
         return election;
     }
 
-    private BallotIssuance issuance(final IssuanceBody body) {
+    private BallotIssuance issuance(final IssuanceBody body, final UUID tenantId) {
         final var issuance = new BallotIssuance();
-        issuance.setTenantId(body.tenantId);
+        issuance.setTenantId(tenantId);
         issuance.setPersonId(body.personId);
         issuance.setElectionId(body.electionId);
         issuance.setRecordingPlaceId(body.recordingPlaceId);
@@ -799,9 +813,9 @@ public final class ApiServer implements HttpHandler {
         return draft;
     }
 
-    private TenantValidator tenantValidator(final TenantValidatorBody body) {
+    private TenantValidator tenantValidator(final TenantValidatorBody body, final UUID tenantId) {
         final var link = new TenantValidator();
-        link.setTenantId(body.tenantId);
+        link.setTenantId(tenantId);
         link.setValidatorId(body.validatorId);
         return link;
     }
@@ -1036,7 +1050,6 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static final class PersonBody {
-        public UUID tenantId;
         public String firstName;
         public String lastName;
         public String ssn;
@@ -1044,7 +1057,6 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static final class ElectionBody {
-        public UUID tenantId;
         public UUID localityId;
         public String name;
         public String votingStart;
@@ -1055,7 +1067,6 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static final class IssuanceBody {
-        public UUID tenantId;
         public UUID personId;
         public UUID electionId;
         public UUID recordingPlaceId;
@@ -1107,7 +1118,6 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static final class TenantValidatorBody {
-        public UUID tenantId;
         public UUID validatorId;
     }
 

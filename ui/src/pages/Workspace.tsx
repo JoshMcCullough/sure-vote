@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, Created, messageOf, votingWindow } from '../api'
 import { Field, Step } from '../forms'
+import { Principal, workspaceSession } from '../session'
 
 type Ids = {
   tenantId: string
@@ -92,6 +93,7 @@ export function Workspace() {
   const [active, setActive] = useState(draft.active)
   const [castDone, setCastDone] = useState(draft.castDone)
   const [demo, setDemo] = useState<DemoTenant | null>(null)
+  const [principal, setPrincipal] = useState<Principal | null>(null)
   const previousElection = useRef<string | null>(null)
 
   useEffect(() => {
@@ -99,9 +101,12 @@ export function Workspace() {
     async function load() {
       try {
         const tenant = await api<DemoTenant>('GET', '/showcase/tenant')
+        const principal = await workspaceSession()
         if (!gone) {
           setDemo(tenant)
-          setIds((current) => (current.tenantId === tenant.id ? current : { ...blank, tenantId: tenant.id }))
+          setPrincipal(principal)
+          const tenantId = principal.tenantId ?? ''
+          setIds((current) => (current.tenantId === tenantId ? current : { ...blank, tenantId }))
         }
       } catch (caught) {
         if (!gone) {
@@ -203,13 +208,8 @@ export function Workspace() {
       {error ? <p className="banner" role="alert">{error}</p> : null}
 
       <section className="card">
-        <h2>Demo tenant</h2>
-        <p>
-          {demo
-            ? 'Everything here is created in the shared demo tenant ' + demo.name + '. It has no legal effect.'
-            : 'Loading the demo tenant.'}
-          {' '}A system admin creates every other tenant.
-        </p>
+        <h2>{principal?.kind === 'official' ? 'Your tenant' : 'Demo tenant'}</h2>
+        <p>{tenantText(principal, demo)}</p>
       </section>
       <Step
         key={'locality-' + ids.tenantId}
@@ -217,7 +217,7 @@ export function Workspace() {
         detail="The city or town the election belongs to."
         path="/localities"
         submitLabel="Create locality"
-        fields={localityFields(ids)}
+        fields={localityFields()}
         disabled={!ids.tenantId}
         onCreated={save('localityId')}
         onError={setError}
@@ -327,7 +327,7 @@ export function Workspace() {
         detail="A fictional name is enough. A showcase tenant rejects an SSN and a voter id."
         path="/persons"
         submitLabel="Create candidate person"
-        fields={personFields(ids, 'Ada', 'One')}
+        fields={personFields('Ada', 'One')}
         disabled={!ids.tenantId}
         onCreated={save('candidatePersonId')}
         onError={setError}
@@ -338,7 +338,7 @@ export function Workspace() {
         detail="Accepted onto the pollbook when the demonstration ballot is cast. Not written onto the ballot."
         path="/persons"
         submitLabel="Create voter"
-        fields={personFields(ids, 'Cam', 'Voter')}
+        fields={personFields('Cam', 'Voter')}
         disabled={!ids.tenantId}
         onCreated={save('voterId')}
         onError={setError}
@@ -393,7 +393,7 @@ export function Workspace() {
         detail="Create this before activate. The host generates the device key."
         path="/showcase/devices"
         submitLabel="Create demonstration device"
-        fields={showcaseDeviceFields(ids)}
+        fields={showcaseDeviceFields()}
         disabled={!ids.tenantId}
         onCreated={save('deviceId')}
         onError={setError}
@@ -404,7 +404,7 @@ export function Workspace() {
         detail="Optional. Paste a device public key generated on the machine. Create it before activate."
         path="/devices"
         submitLabel="Register outside device"
-        fields={deviceFields(ids)}
+        fields={deviceFields()}
         disabled={!ids.tenantId}
         onCreated={() => undefined}
         onError={setError}
@@ -503,9 +503,20 @@ export function Workspace() {
   )
 }
 
-function localityFields(ids: Ids): Field[] {
+function tenantText(principal: Principal | null, demo: DemoTenant | null): string {
+  if (!principal) {
+    return 'Starting a session.'
+  }
+  if (principal.kind === 'official') {
+    return 'Signed in as ' + principal.name + '. Everything here is created in your tenant.'
+  }
+  const name = demo ? demo.name : 'the demo tenant'
+  return 'Everything here is created in the shared demo tenant ' + name
+    + '. It has no legal effect. A system admin creates every other tenant.'
+}
+
+function localityFields(): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'name', label: 'Name', value: 'Town' },
     { name: 'type', label: 'Type', value: 'city' },
   ]
@@ -513,7 +524,6 @@ function localityFields(ids: Ids): Field[] {
 
 function addressFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'street1', label: 'Street', value: '1 Main' },
     { name: 'postalCode', label: 'Postal code', value: '00000' },
@@ -522,7 +532,6 @@ function addressFields(ids: Ids): Field[] {
 
 function precinctFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'name', label: 'Name', value: 'Precinct 1' },
     { name: 'addressId', label: 'Address', value: ids.addressId },
   ]
@@ -530,7 +539,6 @@ function precinctFields(ids: Ids): Field[] {
 
 function districtFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'name', label: 'Name', value: 'Ward 1' },
     {
@@ -544,7 +552,6 @@ function districtFields(ids: Ids): Field[] {
 
 function linkFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
     { name: 'votingDistrictId', label: 'District', value: ids.districtId },
     {
@@ -558,7 +565,6 @@ function linkFields(ids: Ids): Field[] {
 
 function seatFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'name', label: 'Name', value: 'Mayor' },
     { name: 'jurisdiction', label: 'Jurisdiction', value: 'local', options: ['federal', 'state', 'local'] },
@@ -575,14 +581,12 @@ function seatFields(ids: Ids): Field[] {
 
 function termFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'seatId', label: 'Seat', value: ids.seatId },
   ]
 }
 
 function electionFields(ids: Ids, span: { start: string; end: string }): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'name', label: 'Name', value: 'General' },
     { name: 'votingStart', label: 'Voting start', value: span.start },
@@ -592,7 +596,6 @@ function electionFields(ids: Ids, span: { start: string; end: string }): Field[]
 
 function productionElectionFields(ids: Ids, span: { start: string; end: string }): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'name', label: 'Name', value: 'General' },
     { name: 'votingStart', label: 'Voting start', value: span.start },
@@ -605,7 +608,6 @@ function productionElectionFields(ids: Ids, span: { start: string; end: string }
 
 function raceFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'electionId', label: 'Election', value: ids.electionId },
     { name: 'termId', label: 'Term', value: ids.termId },
     { name: 'name', label: 'Name', value: 'Mayor' },
@@ -619,9 +621,8 @@ function raceFields(ids: Ids): Field[] {
   ]
 }
 
-function personFields(ids: Ids, first: string, last: string): Field[] {
+function personFields(first: string, last: string): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'firstName', label: 'First name', value: first },
     { name: 'lastName', label: 'Last name', value: last },
   ]
@@ -629,7 +630,6 @@ function personFields(ids: Ids, first: string, last: string): Field[] {
 
 function candidateFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'personId', label: 'Person', value: ids.candidatePersonId },
     { name: 'partyAffiliation', label: 'Party', value: '' },
   ]
@@ -637,7 +637,6 @@ function candidateFields(ids: Ids): Field[] {
 
 function slotFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'raceId', label: 'Race', value: ids.raceId },
     { name: 'candidateId', label: 'Candidate', value: ids.candidateId },
     { name: 'writeIn', label: 'Write-in', value: 'false', kind: 'boolean' },
@@ -647,7 +646,6 @@ function slotFields(ids: Ids): Field[] {
 
 function styleFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'electionId', label: 'Election', value: ids.electionId },
     { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
     { name: 'raceId', label: 'Race', value: ids.raceId },
@@ -656,7 +654,6 @@ function styleFields(ids: Ids): Field[] {
 
 function placeFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'localityId', label: 'Locality', value: ids.localityId },
     { name: 'addressId', label: 'Address', value: ids.addressId },
     { name: 'name', label: 'Name', value: 'Town Hall' },
@@ -664,9 +661,8 @@ function placeFields(ids: Ids): Field[] {
   ]
 }
 
-function showcaseDeviceFields(ids: Ids): Field[] {
+function showcaseDeviceFields(): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'name', label: 'Name', value: 'Machine 1' },
     {
       name: 'kind',
@@ -677,9 +673,8 @@ function showcaseDeviceFields(ids: Ids): Field[] {
   ]
 }
 
-function deviceFields(ids: Ids): Field[] {
+function deviceFields(): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'name', label: 'Name', value: 'Machine 2' },
     {
       name: 'kind',
@@ -694,7 +689,6 @@ function deviceFields(ids: Ids): Field[] {
 
 function assignmentFields(ids: Ids): Field[] {
   return [
-    { name: 'tenantId', label: 'Tenant', value: ids.tenantId },
     { name: 'electionId', label: 'Election', value: ids.electionId },
     { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
     { name: 'assignmentStatus', label: 'Status', value: 'current', options: ['current', 'historical'] },

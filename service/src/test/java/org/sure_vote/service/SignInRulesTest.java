@@ -165,6 +165,21 @@ class SignInRulesTest {
         );
     }
 
+    @Test
+    void anOfficialCannotReachAnotherTenantsRows() {
+        final var world = passkeys(SampleElection.fptp());
+        final var admin = this.adminSession(world);
+        final var other = world.app.createSystemTenant(this.tenant("Other"), admin.id());
+        final var created = world.app.createOfficial(other.getId(), "Outsider", admin);
+        final var outsider = this.enrolled(world, created);
+        final var insider = this.officialSession(world, admin);
+        this.denied(403, "not allowed", () -> world.app.inElection(outsider, world.electionId, () -> "reached"));
+        this.denied(403, "not allowed", () -> world.app.asTenant(admin, () -> "reached"));
+        this.denied(403, "not allowed", () -> world.app.asTenant(null, () -> "reached"));
+        assertEquals("reached", world.app.inElection(insider, world.electionId, () -> "reached"));
+        assertEquals("reached", world.app.inElection(outsider, UUID.randomUUID(), () -> "reached"));
+    }
+
     static SampleElection passkeys(final SampleElection world) {
         world.app.configurePasskeys(new PasskeySettings("surevote.test", "SureVote", Set.of(ORIGIN)));
         world.app.enableDevSignIn();

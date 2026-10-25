@@ -91,10 +91,12 @@ final class WorkspaceHttp {
 
     private final SureVote app;
     private final ObjectMapper json;
+    private final Requests requests;
 
-    WorkspaceHttp(final SureVote app, final ObjectMapper json) {
+    WorkspaceHttp(final SureVote app, final ObjectMapper json, final Requests requests) {
         this.app = app;
         this.json = json;
+        this.requests = requests;
     }
 
     boolean handles(final String method, final List<String> parts) {
@@ -109,7 +111,7 @@ final class WorkspaceHttp {
             this.create(exchange, parts.getFirst());
         }
         else if (this.tenantWorkspace(method, parts)) {
-            this.workspace(exchange, parts);
+            this.workspace(exchange);
         }
         else if (this.showcase(method, parts)) {
             this.showcase(exchange, parts);
@@ -132,15 +134,8 @@ final class WorkspaceHttp {
 
     private boolean tenantWorkspace(final String method, final List<String> parts) {
         final var get = "GET".equals(method);
-        final var three = parts.size() == 3;
-        if (get && three) {
-            final var root = parts.get(0);
-            final var leaf = parts.get(2);
-            return "tenants".equals(root) && "workspace".equals(leaf);
-        }
-        else {
-            return false;
-        }
+        final var one = parts.size() == 1;
+        return get && one && "workspace".equals(parts.getFirst());
     }
 
     private boolean showcase(final String method, final List<String> parts) {
@@ -269,216 +264,215 @@ final class WorkspaceHttp {
         }
     }
 
-    private void workspace(final HttpExchange exchange, final List<String> parts) throws IOException {
-        final var actor = this.actor(exchange);
-        final var id = this.id(parts.get(1));
-        final var view = this.app.workspace(id, actor);
+    private void workspace(final HttpExchange exchange) throws IOException {
+        final var actor = this.requests.member(exchange);
+        final var view = this.app.asTenant(actor, () -> this.app.workspace(actor.tenantId(), actor.id()));
         this.writeJson(exchange, 200, this.workspaceResource(view));
     }
 
     private void createLocality(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, LocalityBody.class);
-        final var locality = this.locality(body);
-        final var saved = this.app.createLocality(locality, actor);
+        final var locality = this.locality(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createLocality(locality, actor.id()));
         this.writeJson(exchange, 201, this.localityResource(saved));
     }
 
     private void createAddress(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, AddressBody.class);
-        final var address = this.address(body);
-        final var saved = this.app.createAddress(address, actor);
+        final var address = this.address(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createAddress(address, actor.id()));
         this.writeJson(exchange, 201, this.addressResource(saved));
     }
 
     private void createPrecinct(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, PrecinctBody.class);
-        final var precinct = this.precinct(body);
-        final var saved = this.app.createPrecinct(precinct, actor);
+        final var precinct = this.precinct(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createPrecinct(precinct, actor.id()));
         this.writeJson(exchange, 201, this.precinctResource(saved));
     }
 
     private void createDistrict(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, DistrictBody.class);
-        final var district = this.district(body);
-        final var saved = this.app.createVotingDistrict(district, actor);
+        final var district = this.district(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createVotingDistrict(district, actor.id()));
         this.writeJson(exchange, 201, this.districtResource(saved));
     }
 
     private void createPrecinctDistrict(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, PrecinctDistrictBody.class);
-        final var row = this.precinctDistrict(body);
-        final var saved = this.app.createPrecinctDistrict(row, actor);
+        final var row = this.precinctDistrict(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createPrecinctDistrict(row, actor.id()));
         this.writeJson(exchange, 201, this.precinctDistrictResource(saved));
     }
 
     private void createSeat(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, SeatBody.class);
-        final var seat = this.seat(body);
-        final var saved = this.app.createSeat(seat, actor);
+        final var seat = this.seat(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createSeat(seat, actor.id()));
         this.writeJson(exchange, 201, this.seatResource(saved));
     }
 
     private void createTerm(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, TermBody.class);
-        final var term = this.term(body);
-        final var saved = this.app.createTerm(term, actor);
+        final var term = this.term(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createTerm(term, actor.id()));
         this.writeJson(exchange, 201, this.termResource(saved));
     }
 
     private void createRace(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, RaceBody.class);
-        final var race = this.race(body);
-        final var saved = this.app.createRace(race, actor);
+        final var race = this.race(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createRace(race, actor.id()));
         this.writeJson(exchange, 201, this.raceResource(saved));
     }
 
     private void createCandidate(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, CandidateBody.class);
-        final var candidate = this.candidate(body);
-        final var saved = this.app.createCandidate(candidate, actor);
+        final var candidate = this.candidate(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createCandidate(candidate, actor.id()));
         this.writeJson(exchange, 201, this.candidateResource(saved));
     }
 
     private void createRaceCandidate(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, RaceCandidateBody.class);
-        final var slot = this.raceCandidate(body);
-        final var saved = this.app.createRaceCandidate(slot, actor);
+        final var slot = this.raceCandidate(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createRaceCandidate(slot, actor.id()));
         this.writeJson(exchange, 201, this.raceCandidateResource(saved));
     }
 
     private void createBallotStyle(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, BallotStyleBody.class);
-        final var style = this.ballotStyle(body);
-        final var saved = this.app.createBallotStyle(style, actor);
+        final var style = this.ballotStyle(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createBallotStyle(style, actor.id()));
         this.writeJson(exchange, 201, this.ballotStyleResource(saved));
     }
 
     private void createPlace(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, PlaceBody.class);
-        final var place = this.place(body);
-        final var saved = this.app.createRecordingPlace(place, actor);
+        final var place = this.place(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createRecordingPlace(place, actor.id()));
         this.writeJson(exchange, 201, this.placeResource(saved));
     }
 
     private void createDevice(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, DeviceBody.class);
-        final var device = this.device(body);
-        final var saved = this.app.createRecordingDevice(device, actor);
+        final var device = this.device(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createRecordingDevice(device, actor.id()));
         this.writeJson(exchange, 201, this.deviceResource(saved));
     }
 
     private void createAssignment(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, AssignmentBody.class);
-        final var assignment = this.assignment(body);
-        final var saved = this.app.assignPrecinct(assignment, actor);
+        final var assignment = this.assignment(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.assignPrecinct(assignment, actor.id()));
         this.writeJson(exchange, 201, this.assignmentResource(saved));
     }
 
     private void createShowcaseElection(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, ShowcaseElectionBody.class);
-        final var election = this.showcaseElection(body);
-        final var saved = this.app.createShowcaseElection(election, actor);
+        final var election = this.showcaseElection(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createShowcaseElection(election, actor.id()));
         this.writeJson(exchange, 201, this.electionResource(saved));
     }
 
     private void createShowcaseDevice(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, ShowcaseDeviceBody.class);
-        final var device = this.showcaseDevice(body);
-        final var saved = this.app.createShowcaseDevice(device, actor);
+        final var device = this.showcaseDevice(body, actor.tenantId());
+        final var saved = this.app.asTenant(actor, () -> this.app.createShowcaseDevice(device, actor.id()));
         this.writeJson(exchange, 201, this.deviceResource(saved));
     }
 
     private void activateShowcase(final HttpExchange exchange, final UUID id) throws IOException {
-        final var actor = this.actor(exchange);
-        final var saved = this.app.activateShowcase(id, actor);
+        final var actor = this.requests.member(exchange);
+        final var saved = this.app.inElection(actor, id, () -> this.app.activateShowcase(id, actor.id()));
         this.writeJson(exchange, 200, this.electionResource(saved));
     }
 
     private void castShowcase(final HttpExchange exchange, final UUID id) throws IOException {
-        final var actor = this.actor(exchange);
+        final var actor = this.requests.member(exchange);
         final var body = this.read(exchange, CastBody.class);
         final var selections = this.selections(body.selections);
-        final var cast = this.app.castShowcase(
+        final var cast = this.app.inElection(actor, id, () -> this.app.castShowcase(
             id,
             body.votingPrecinctId,
             body.recordingDeviceId,
             body.recordingPlaceId,
             body.personId,
             selections,
-            actor
-        );
+            actor.id()
+        ));
         this.writeJson(exchange, 200, this.demoCastResource(cast));
     }
 
     private void closeShowcase(final HttpExchange exchange, final UUID id) throws IOException {
-        final var actor = this.actor(exchange);
-        final var saved = this.app.closeShowcase(id, actor);
+        final var actor = this.requests.member(exchange);
+        final var saved = this.app.inElection(actor, id, () -> this.app.closeShowcase(id, actor.id()));
         this.writeJson(exchange, 200, this.electionResource(saved));
     }
 
-    private Locality locality(final LocalityBody body) {
+    private Locality locality(final LocalityBody body, final UUID tenantId) {
         final var locality = new Locality();
-        locality.setTenantId(body.tenantId);
+        locality.setTenantId(tenantId);
         locality.setName(body.name);
         locality.setType(body.type);
         locality.setParentId(body.parentId);
         return locality;
     }
 
-    private Address address(final AddressBody body) {
+    private Address address(final AddressBody body, final UUID tenantId) {
         final var address = new Address();
-        address.setTenantId(body.tenantId);
+        address.setTenantId(tenantId);
         address.setLocalityId(body.localityId);
         address.setStreet1(body.street1);
         address.setPostalCode(body.postalCode);
         return address;
     }
 
-    private VotingPrecinct precinct(final PrecinctBody body) {
+    private VotingPrecinct precinct(final PrecinctBody body, final UUID tenantId) {
         final var precinct = new VotingPrecinct();
-        precinct.setTenantId(body.tenantId);
+        precinct.setTenantId(tenantId);
         precinct.setName(body.name);
         precinct.setAddressId(body.addressId);
         return precinct;
     }
 
-    private VotingDistrict district(final DistrictBody body) {
+    private VotingDistrict district(final DistrictBody body, final UUID tenantId) {
         final var district = new VotingDistrict();
-        district.setTenantId(body.tenantId);
+        district.setTenantId(tenantId);
         district.setLocalityId(body.localityId);
         district.setName(body.name);
         district.setType(this.wire(DistrictType.values(), body.type, "district type"));
         return district;
     }
 
-    private PrecinctDistrict precinctDistrict(final PrecinctDistrictBody body) {
+    private PrecinctDistrict precinctDistrict(final PrecinctDistrictBody body, final UUID tenantId) {
         final var row = new PrecinctDistrict();
-        row.setTenantId(body.tenantId);
+        row.setTenantId(tenantId);
         row.setVotingPrecinctId(body.votingPrecinctId);
         row.setVotingDistrictId(body.votingDistrictId);
         row.setDistrictType(this.wire(DistrictType.values(), body.districtType, "district type"));
         return row;
     }
 
-    private Seat seat(final SeatBody body) {
+    private Seat seat(final SeatBody body, final UUID tenantId) {
         final var seat = new Seat();
-        seat.setTenantId(body.tenantId);
+        seat.setTenantId(tenantId);
         seat.setLocalityId(body.localityId);
         seat.setName(body.name);
         seat.setJurisdiction(this.wire(SeatJurisdiction.values(), body.jurisdiction, "seat jurisdiction"));
@@ -488,16 +482,16 @@ final class WorkspaceHttp {
         return seat;
     }
 
-    private Term term(final TermBody body) {
+    private Term term(final TermBody body, final UUID tenantId) {
         final var term = new Term();
-        term.setTenantId(body.tenantId);
+        term.setTenantId(tenantId);
         term.setSeatId(body.seatId);
         return term;
     }
 
-    private Election showcaseElection(final ShowcaseElectionBody body) {
+    private Election showcaseElection(final ShowcaseElectionBody body, final UUID tenantId) {
         final var election = new Election();
-        election.setTenantId(body.tenantId);
+        election.setTenantId(tenantId);
         election.setLocalityId(body.localityId);
         election.setName(body.name);
         election.setVotingStart(this.instant(body.votingStart));
@@ -505,9 +499,9 @@ final class WorkspaceHttp {
         return election;
     }
 
-    private Race race(final RaceBody body) {
+    private Race race(final RaceBody body, final UUID tenantId) {
         final var race = new Race();
-        race.setTenantId(body.tenantId);
+        race.setTenantId(tenantId);
         race.setElectionId(body.electionId);
         race.setTermId(body.termId);
         race.setName(body.name);
@@ -516,17 +510,17 @@ final class WorkspaceHttp {
         return race;
     }
 
-    private Candidate candidate(final CandidateBody body) {
+    private Candidate candidate(final CandidateBody body, final UUID tenantId) {
         final var candidate = new Candidate();
-        candidate.setTenantId(body.tenantId);
+        candidate.setTenantId(tenantId);
         candidate.setPersonId(body.personId);
         candidate.setPartyAffiliation(body.partyAffiliation);
         return candidate;
     }
 
-    private RaceCandidate raceCandidate(final RaceCandidateBody body) {
+    private RaceCandidate raceCandidate(final RaceCandidateBody body, final UUID tenantId) {
         final var slot = new RaceCandidate();
-        slot.setTenantId(body.tenantId);
+        slot.setTenantId(tenantId);
         slot.setRaceId(body.raceId);
         slot.setCandidateId(body.candidateId);
         slot.setWriteIn(body.writeIn);
@@ -534,18 +528,18 @@ final class WorkspaceHttp {
         return slot;
     }
 
-    private BallotStyle ballotStyle(final BallotStyleBody body) {
+    private BallotStyle ballotStyle(final BallotStyleBody body, final UUID tenantId) {
         final var style = new BallotStyle();
-        style.setTenantId(body.tenantId);
+        style.setTenantId(tenantId);
         style.setElectionId(body.electionId);
         style.setVotingPrecinctId(body.votingPrecinctId);
         style.setRaceId(body.raceId);
         return style;
     }
 
-    private RecordingPlace place(final PlaceBody body) {
+    private RecordingPlace place(final PlaceBody body, final UUID tenantId) {
         final var place = new RecordingPlace();
-        place.setTenantId(body.tenantId);
+        place.setTenantId(tenantId);
         place.setLocalityId(body.localityId);
         place.setName(body.name);
         place.setKind(this.wire(RecordingPlaceKind.values(), body.kind, "recording place kind"));
@@ -553,9 +547,9 @@ final class WorkspaceHttp {
         return place;
     }
 
-    private RecordingDevice device(final DeviceBody body) {
+    private RecordingDevice device(final DeviceBody body, final UUID tenantId) {
         final var device = new RecordingDevice();
-        device.setTenantId(body.tenantId);
+        device.setTenantId(tenantId);
         device.setName(body.name);
         device.setKind(this.wire(RecordingDeviceKind.values(), body.kind, "recording device kind"));
         device.setPublicKey(body.publicKey);
@@ -563,17 +557,17 @@ final class WorkspaceHttp {
         return device;
     }
 
-    private RecordingDevice showcaseDevice(final ShowcaseDeviceBody body) {
+    private RecordingDevice showcaseDevice(final ShowcaseDeviceBody body, final UUID tenantId) {
         final var device = new RecordingDevice();
-        device.setTenantId(body.tenantId);
+        device.setTenantId(tenantId);
         device.setName(body.name);
         device.setKind(this.wire(RecordingDeviceKind.values(), body.kind, "recording device kind"));
         return device;
     }
 
-    private ElectionVotingPrecinctAssignment assignment(final AssignmentBody body) {
+    private ElectionVotingPrecinctAssignment assignment(final AssignmentBody body, final UUID tenantId) {
         final var assignment = new ElectionVotingPrecinctAssignment();
-        assignment.setTenantId(body.tenantId);
+        assignment.setTenantId(tenantId);
         assignment.setElectionId(body.electionId);
         assignment.setVotingPrecinctId(body.votingPrecinctId);
         assignment.setAssignmentStatus(this.assignmentStatus(body.assignmentStatus));
@@ -1097,18 +1091,6 @@ final class WorkspaceHttp {
         output.close();
     }
 
-    private UUID actor(final HttpExchange exchange) {
-        final var headers = exchange.getRequestHeaders();
-        final var values = headers.get("SureVote-Actor-Id");
-        if (values == null || values.isEmpty()) {
-            throw new ConstraintException("SureVote-Actor-Id is required");
-        }
-        else {
-            final var text = values.getFirst();
-            return this.id(text);
-        }
-    }
-
     private UUID id(final String text) {
         try {
             return UUID.fromString(text);
@@ -1137,41 +1119,35 @@ final class WorkspaceHttp {
     }
 
     static final class LocalityBody {
-        public UUID tenantId;
         public String name;
         public String type;
         public UUID parentId;
     }
 
     static final class AddressBody {
-        public UUID tenantId;
         public UUID localityId;
         public String street1;
         public String postalCode;
     }
 
     static final class PrecinctBody {
-        public UUID tenantId;
         public String name;
         public UUID addressId;
     }
 
     static final class DistrictBody {
-        public UUID tenantId;
         public UUID localityId;
         public String name;
         public String type;
     }
 
     static final class PrecinctDistrictBody {
-        public UUID tenantId;
         public UUID votingPrecinctId;
         public UUID votingDistrictId;
         public String districtType;
     }
 
     static final class SeatBody {
-        public UUID tenantId;
         public UUID localityId;
         public String name;
         public String jurisdiction;
@@ -1181,12 +1157,10 @@ final class WorkspaceHttp {
     }
 
     static final class TermBody {
-        public UUID tenantId;
         public UUID seatId;
     }
 
     static final class RaceBody {
-        public UUID tenantId;
         public UUID electionId;
         public UUID termId;
         public String name;
@@ -1195,13 +1169,11 @@ final class WorkspaceHttp {
     }
 
     static final class CandidateBody {
-        public UUID tenantId;
         public UUID personId;
         public String partyAffiliation;
     }
 
     static final class RaceCandidateBody {
-        public UUID tenantId;
         public UUID raceId;
         public UUID candidateId;
         public boolean writeIn;
@@ -1209,14 +1181,12 @@ final class WorkspaceHttp {
     }
 
     static final class BallotStyleBody {
-        public UUID tenantId;
         public UUID electionId;
         public UUID votingPrecinctId;
         public UUID raceId;
     }
 
     static final class PlaceBody {
-        public UUID tenantId;
         public UUID localityId;
         public String name;
         public String kind;
@@ -1224,7 +1194,6 @@ final class WorkspaceHttp {
     }
 
     static final class DeviceBody {
-        public UUID tenantId;
         public String name;
         public String kind;
         public String publicKey;
@@ -1232,14 +1201,12 @@ final class WorkspaceHttp {
     }
 
     static final class AssignmentBody {
-        public UUID tenantId;
         public UUID electionId;
         public UUID votingPrecinctId;
         public String assignmentStatus;
     }
 
     static final class ShowcaseElectionBody {
-        public UUID tenantId;
         public UUID localityId;
         public String name;
         public String votingStart;
@@ -1247,7 +1214,6 @@ final class WorkspaceHttp {
     }
 
     static final class ShowcaseDeviceBody {
-        public UUID tenantId;
         public String name;
         public String kind;
     }
