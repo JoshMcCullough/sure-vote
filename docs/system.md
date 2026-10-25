@@ -26,7 +26,7 @@ Eligibility and the one-ballot rule are applied before recording, against the pr
 - **Sure Vote Systems.** The copyright holder. Publishes the source-available repository and runs the multi-tenant hosted service, including the free showcase tenants.
 - **System admin.** A host operator, global rather than in a tenant. Creates production tenants, renames and suspends tenants, and adds or disables other system admins. Reads no tenant's roll, definition, or ledger through the application. The first one is set in the host configuration.
 
-A voter-controlled device submitting a binding ballot is outside this design. That path needs an eligibility proof, a coercion story, and a client the voter can trust. None of those are specified. The showcase site lets someone record a non-binding demo ballot. That form is not the production casting path.
+A voter-controlled device submitting a binding ballot is not built. It is planned as a React Native app, and it needs an eligibility proof, a coercion story, and a client the voter can trust. None of those are specified. See [Open decisions](#open-decisions). The showcase site lets someone record a non-binding demo ballot. That form is not the production casting path.
 
 ## Deployments
 
@@ -298,8 +298,8 @@ Module boundaries:
 
 ## Open decisions
 
-These are unresolved on purpose.
+Decisions 1 and 3 are decided in direction and not yet designed. Decision 2 is still open.
 
-1. **One ballot per eligible voter.** `BallotIssuance` is the working rule: a private row keyed by voter and election, storing neither the ballot id nor the access code. Mail-in writes it in the same transaction as the ballot. In person the pollbook writes it and the machine never sees it. The operator can still correlate roughly by time and place. A cryptographic spend (a nullifier or a blind signature) would remove that correlation. No such credential is in the schema. Recording uses `BallotIssuance` until a stronger mechanism is specified.
+1. **One ballot per eligible voter.** Decided: SureVote will use a cryptographic spend, a nullifier or a blind signature, so the ledger can show each eligible voter cast at most one ballot without linking the voter to it. The design is not specified and nothing is built. Until it is, recording uses `BallotIssuance`: a private row keyed by voter and election, storing neither the ballot id nor the access code. Mail-in writes it in the same transaction as the ballot. In person the pollbook writes it and the machine never sees it. The operator can still correlate roughly by time and place.
 2. **Earlier publication.** The working assumption publishes full ledger bodies at close and publishes heads during voting. An authority may publish bodies sooner by accepting the linkage risk in [Privacy limits](#privacy-limits-of-this-schema).
-3. **Voter-device casting.** A binding ballot from a voter-controlled device is still out of scope. It depends on a stronger answer to decision 1, plus coercion and client trust. Showcase demo recording is a separate, non-binding form. Polling-place voting machines stay offline.
+3. **Voter-device casting.** Decided: a voter will be able to cast a binding ballot from their own device through a React Native app. It depends on decision 1, a coercion answer, and a way for the voter to trust the client. None of those are specified and nothing is built. Showcase demo recording is a separate, non-binding form. Polling-place voting machines stay offline.

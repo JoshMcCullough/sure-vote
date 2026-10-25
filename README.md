@@ -26,10 +26,10 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 ## Not in this design
 
 - A consensus network or a second operator.
-- A voter-controlled device submitting a binding ballot.
+- A voter-controlled device submitting a binding ballot. It is planned as a React Native app and is not designed yet. See [system.md](./docs/system.md).
 - Coercion resistance. An in-person access code is a bearer token. Anyone with that slip can open that ballot.
 - A networked voting machine. Polling-place machines stay offline and write ballots to local media.
-- A ledger-level proof that every ballot came from an eligible voter exactly once. That check is private and is still an open decision in [system.md](./docs/system.md).
+- A ledger-level proof that every ballot came from an eligible voter exactly once. SureVote will add a cryptographic spend for it. The design is not specified. See [system.md](./docs/system.md).
 - A parent chain per precinct, district, state, or nation. Geographic totals are the canvass statement.
 - Provisional ballots. A voter who is not accepted is not recorded.
 
