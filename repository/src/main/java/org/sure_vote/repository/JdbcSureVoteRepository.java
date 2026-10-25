@@ -163,6 +163,15 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
     }
 
+    public <T> T inTenant(final UUID tenantId, final Supplier<T> body) {
+        if (tenantId == null) {
+            throw new IllegalArgumentException("tenantId is required");
+        }
+        else {
+            return this.transaction(() -> this.scoped(tenantId, body));
+        }
+    }
+
     void clear() {
         final var names = RowBinding.tables(TABLES);
         final var joined = String.join(", ", names);
@@ -177,6 +186,67 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
         else {
             return this.findJoined(joined, type, id);
+        }
+    }
+
+    private <T> T scoped(final UUID tenantId, final Supplier<T> body) {
+        final var session = this.work.get();
+        if (session.tenantId != null && !session.tenantId.equals(tenantId)) {
+            throw new IllegalArgumentException("A transaction serves one tenant");
+        }
+        else {
+            return this.within(session, tenantId, body);
+        }
+    }
+
+    private <T> T within(final Work session, final UUID tenantId, final Supplier<T> body) {
+        final var previous = session.tenantId;
+        this.setTenant(session, tenantId);
+        try {
+            final var result = body.get();
+            this.restoreTenant(session, previous);
+            return result;
+        }
+        catch (final RuntimeException failure) {
+            session.tenantId = previous;
+            throw failure;
+        }
+    }
+
+    private void restoreTenant(final Work session, final UUID previous) {
+        if (previous == null) {
+            this.clearTenant(session);
+        }
+    }
+
+    private void clearTenant(final Work session) {
+        try {
+            this.selectTenant(session.connection, "");
+            session.tenantId = null;
+        }
+        catch (final SQLException failure) {
+            throw new IllegalStateException(failure.getMessage(), failure);
+        }
+    }
+
+    private void setTenant(final Work session, final UUID tenantId) {
+        try {
+            this.selectTenant(session.connection, tenantId.toString());
+            session.tenantId = tenantId;
+        }
+        catch (final SQLException failure) {
+            throw new IllegalStateException(failure.getMessage(), failure);
+        }
+    }
+
+    private void selectTenant(final Connection connection, final String tenantId) throws SQLException {
+        final var statement = connection.prepareStatement("select set_config('app.tenant_id', ?, true)");
+        try {
+            statement.setString(1, tenantId);
+            statement.execute();
+        }
+        finally {
+            statement.close();
         }
     }
 
@@ -480,6 +550,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     private static final class Work {
         private final Connection connection;
         private int depth;
+        private UUID tenantId;
 
         private Work(final Connection connection) {
             this.connection = connection;
