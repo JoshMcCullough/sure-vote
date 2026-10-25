@@ -29,10 +29,10 @@ There is exactly one `VoteChain` with `status = active` per `Race`. A race may k
 `Ballot.recordingDevice.kind` is `polling-place-machine` when `type` is `in-person`, and `central-workstation` when `type` is `mail-in` or `absentee`. `recordingPlace.kind` matches that split: `polling-place` or `central-office`. The ballot signature verifies under `recordingDevice.publicKey`. `payload.recordedBy`, `recordingDeviceId`, and `recordingPlaceId` match the columns.
 
 ### Import count
-For each recording place, the canvass statement publishes the number of `accepted` `BallotIssuance` rows and the number of ballots recorded at that place. Voided issuances are not counted. The two numbers may differ. A surplus of issuances includes voters who left after check-in without a sealed ballot. A surplus of ballots includes a void that happened after a ballot was sealed. Either difference is investigated. It is not resolved by linking a voter to a ballot. The issuance row still has no ballot id.
+For each recording place, the canvass statement publishes the number of `issued` and `received` `BallotIssuance` rows and the number of ballots recorded at that place. Voided issuances are not counted. The two numbers may differ. A surplus of issuances includes voters who left after check-in without a sealed ballot. A surplus of ballots includes a void that happened after a ballot was sealed. Either difference is investigated. It is not resolved by linking a voter to a ballot. The issuance row still has no ballot id.
 
 ### Issuance void
-At most one `accepted` `BallotIssuance` exists for a person and election. An official may mark it `voided`, with a reason, only while attesting that the voter has not started a machine session. The voided row remains. A new `accepted` row may then be written.
+At most one `issued` or `received` `BallotIssuance` exists for a person and election. An official may mark it `voided`, with a reason, only while attesting that the voter has not started a machine session. The voided row remains. A new `issued` row may then be written. A row becomes `received` only through the batched mark or the in-person place reconciliation, never from the ballot transaction.
 
 ### Access hash uniqueness
 `Ballot.voterAccessHash` is unique across all elections and tenants, so a code opens at most one ballot. Import refuses a hash that is already in use. The stored value is the lookup hash in [verification.md](./verification.md). The access code is not a column. The voter receives it as a QR code and as text. A mail-in or absentee hash also uses the viewing passphrase, which is not a column on the ballot.
@@ -68,4 +68,4 @@ A row's `tenant` equals the tenant of the parent it belongs to. `VoteChainValida
 
 ## Not a ledger constraint yet
 
-One accepted ballot per voter per election is required and is not checkable from ledger columns. The ledger has no voter foreign key. Mail-in recording writes `BallotIssuance` in the same transaction as the ballot. In person the pollbook writes it and the machine never sees it. Do not fake this rule with a trigger on `Ballot` alone.
+One accepted ballot per voter per election is required and is not checkable from ledger columns. The ledger has no voter foreign key. Mail-in recording writes `BallotIssuance` as `issued` in its own transaction just before the ballot. In person the pollbook writes it and the machine never sees it. Do not fake this rule with a trigger on `Ballot` alone.

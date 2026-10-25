@@ -85,7 +85,7 @@ A locality object uses `localityId`, `ballots`, `undervotes`, `candidates`, sort
 
 `results` is sorted by `raceCandidateId`. Each uses `raceCandidateId`, `votes`, `rank`, `outcome`. `votes` is the race-wide count, using the same meaning as a precinct `votes`. `rank` is the number 1 for a winner and `null` otherwise. `outcome` is `won`, `lost`, `eliminated`, or `tied`. The counting rules are in [system.md](./system.md).
 
-`places` is sorted by `recordingPlaceId`. Each uses `recordingPlaceId`, `acceptedIssuances`, `ballots`. A place appears when either count is greater than zero. `acceptedIssuances` counts `BallotIssuance` rows with status `accepted`. Voided issuances are omitted. The two counts may differ.
+`places` is sorted by `recordingPlaceId`. Each uses `recordingPlaceId`, `acceptedIssuances`, `ballots`. A place appears when either count is greater than zero. `acceptedIssuances` counts `BallotIssuance` rows with status `issued` or `received`. The field keeps its name. Voided issuances are omitted. The two counts may differ.
 
 `CanvassStatement.hash` is SHA-256 of that payload. `CanvassStatement.signature` is the operator signature over the raw hash bytes.
 

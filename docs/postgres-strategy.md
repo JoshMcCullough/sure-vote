@@ -23,7 +23,7 @@ Storage plan for the operating model in [system.md](./system.md), the fields in 
 - `candidate`
 - `elected_official`
 - `voter_registration`
-- `ballot_issuance` (private; at most one `accepted` row per person and election; voided rows remain; no ballot id and no access code)
+- `ballot_issuance` (private; at most one `issued` or `received` row per person and election; voided rows remain; no ballot id and no access code)
 - `ballot_dispute` (private; references `ballot`; does not modify the ledger)
 
 ### Elections / Configuration (mutable before election, locked later)
@@ -74,7 +74,7 @@ Every table except `vote_chain_validator` has `tenant_id`. The column is immutab
 - `vote(ballot_id)`
 - `vote(race_candidate_id)`
 - `ballot(voter_access_hash)` unique
-- `ballot_issuance(person_id, election_id)` unique where `status = 'accepted'`
+- `ballot_issuance(person_id, election_id)` unique where `status in ('issued', 'received')`
 - `vote_chain(race_id)` unique where `status = 'active'`
 - `vote_chain_entry(previous_entry_id)`
 - `vote_chain_entry(vote_id)` unique
@@ -121,7 +121,7 @@ Enforcement: unique index on `ballot(voter_access_hash)` (`V8__unique_access_has
 
 ### One ballot per voter
 
-Not enforced on ledger tables. Those tables have no voter foreign key. The service consults the private issuance mark in [system.md](./system.md) before insert. A partial unique index enforces one `accepted` issuance per person and election.
+Not enforced on ledger tables. Those tables have no voter foreign key. The service consults the private issuance mark in [system.md](./system.md) before insert. A partial unique index enforces one `issued` or `received` issuance per person and election.
 
 ### One entry per vote, on that race's chain
 
@@ -191,4 +191,5 @@ On `vote_chain_validation_result`, block changes to the payload, hash, signature
 - At close, persist each signed head, freeze tally caches, and insert the signed canvass statement. Full ledger bodies, including that statement, become readable to the public verifier role. Keep the locked election snapshot for 22 months, or longer when the agreement says so.
 - The db runs on Amazon RDS for PostgreSQL. A restore is an RDS point-in-time restore of the whole database into a new instance in quarantine, with no route from the application. Promotion is decided per election: an election whose heads match the latest outside witness is promoted, and a divergent one stays frozen until it has a signed `restore_incident`.
 - `ballot_issuance` has no foreign key to `ballot` and `ballot` has none to it. The planned batched `received` mark in [system.md](./system.md) keeps it that way.
+- `V11__received_marks.sql` renames `accepted` issuances to `issued`, adds `received` and `received_at`, and replaces the unique index with one on (`person_id`, `election_id`) where `status` is `issued` or `received`. A check keeps `received_at` set exactly when the row is `received`. `mark_issuances_received(ids uuid[], marked_at timestamptz)` is a security-definer function that marks only `issued` rows, leaves `updated_at` and `version` alone, returns the count, and rejects a timestamp that is not a whole UTC day.
 - `V10__sign_in.sql` adds the sign-in tables from [auth-proposal.md](./auth-proposal.md). `tenant_official` has row-level security on `tenant_id`. `session`, `credential`, `enrollment`, `auth_ceremony`, and `request_nonce` do not, because they are read before a tenant is known. They store hashes and public keys only. A check keeps a system-admin row without a tenant and every other row with one.
