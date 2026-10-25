@@ -131,7 +131,7 @@ Enforcement: unique index on `vote_chain_entry(vote_id)`, plus an insert trigger
 ### Legal selections and seal time
 
 Constraint: selection rules and the inclusive voting window in [constraints.md](./constraints.md).
-Enforcement: service checks before seal, and an insert trigger on `ballot` and `vote` rejects a row that breaks them.
+Enforcement: service checks before seal, and insert triggers on `ballot` and `vote` (`V9__database_rules.sql`) reject a row that breaks them. A ballot needs a timestamp inside its election's window. A vote's race needs a method. A unique index on `vote(ballot_id, race_candidate_id)` stops a repeated candidate. Ranked contiguity is a deferred constraint trigger checked at commit, because one rank is inserted at a time. An election's `voting_start` is not after `voting_end`.
 
 ### Canvass statement
 
@@ -141,12 +141,12 @@ Enforcement: unique index on `canvass_statement(election_id)`. The service write
 ### Race Round Lineage / Method Consistency
 
 Constraint: `round = previousRace.round + 1` and `method = previousRace.method`
-Enforcement: insert/update validation on `race` when `previous_race_id` is present.
+Enforcement: a trigger on `race` insert and on update of `previous_race_id`, `round`, or `method` (`V9__database_rules.sql`). A race without a previous race must be round 1.
 
 ### Term Non-overlap
 
 Constraint: no overlapping term windows for same seat.
-Enforcement: exclusion-style constraint over seat identity and date range.
+Enforcement: `term_no_overlap`, an exclusion constraint with `btree_gist` on `seat_id` and `daterange(term_start, term_end, '[]')`, for live terms with both dates. `term_dates_ordered` keeps the start on or before the end.
 
 ### Tenancy
 

@@ -49,7 +49,7 @@ A `historical` election has one `CanvassStatement`. Its payload matches a fresh 
 ## Race / round lineage
 
 ### Race round lineage
-`Race.round` must equal `Race.previousRace.round + 1` when `previousRace` is present. The first or only round is `1`.
+`Race.round` must equal `Race.previousRace.round + 1` when `previousRace` is present. The first or only round is `1`. The service sets the round when a race is created and refuses a round that does not follow. The previous race is in the same tenant.
 
 ### Race method consistency
 `Race.method` must equal `Race.previousRace.method` when `previousRace` is present.
@@ -60,7 +60,7 @@ Once `Election.status` is `active` or `historical`, races, race candidates, thei
 ## Terms
 
 ### Term non-overlap
-No two `Term` records for the same `Seat` may have overlapping `termStart` / `termEnd`.
+No two live `Term` records for the same `Seat` may have overlapping `termStart` / `termEnd`. Both dates are inclusive, so a term may start the day after the previous one ends. A term with either date empty, or a deleted term, is not compared. A term ends on or after it starts.
 
 ## Tenancy
 

@@ -472,6 +472,7 @@ class PostgresRepositoryTest {
         ballot.setElectionId(electionId);
         ballot.setVotingPrecinctId(this.rows.precinctId);
         ballot.setVoterAccessHash(hash);
+        ballot.setTimestamp(ParentRows.START);
         return ballot;
     }
 

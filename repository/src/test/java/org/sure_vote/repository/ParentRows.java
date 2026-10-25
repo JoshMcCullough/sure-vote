@@ -1,17 +1,20 @@
 package org.sure_vote.repository;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import org.sure_vote.entity.AssignmentStatus;
 import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.Candidate;
 import org.sure_vote.entity.Election;
+import org.sure_vote.entity.ElectionMethod;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
+import org.sure_vote.entity.RaceType;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
@@ -21,6 +24,8 @@ import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.VotingPrecinct;
 
 final class ParentRows {
+    static final Instant START = Instant.parse("2026-11-03T11:00:00Z");
+    static final Instant END = Instant.parse("2026-11-04T01:00:00Z");
     final UUID tenantId;
     final UUID localityId;
     final UUID precinctId;
@@ -57,6 +62,8 @@ final class ParentRows {
         election.setLocalityId(this.localityId);
         election.setName("General");
         election.setStatus(ElectionStatus.UPCOMING);
+        election.setVotingStart(START);
+        election.setVotingEnd(END);
         this.repository.insert(election);
         assignment.setId(UUID.randomUUID());
         assignment.setTenantId(this.tenantId);
@@ -78,6 +85,9 @@ final class ParentRows {
         race.setElectionId(electionId);
         race.setTermId(this.termId);
         race.setName("Mayor");
+        race.setRound(1);
+        race.setMethod(ElectionMethod.FIRST_PAST_THE_POST);
+        race.setType(RaceType.GENERAL);
         this.repository.insert(race);
         return race.getId();
     }
@@ -104,6 +114,7 @@ final class ParentRows {
         ballot.setTenantId(this.tenantId);
         ballot.setElectionId(electionId);
         ballot.setVotingPrecinctId(this.precinctId);
+        ballot.setTimestamp(START);
         ballot.setVoterAccessHash("access-" + this.ballots + "-" + UUID.randomUUID());
         this.repository.insert(ballot);
         return ballot.getId();

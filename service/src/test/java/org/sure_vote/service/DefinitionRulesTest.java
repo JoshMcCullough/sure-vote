@@ -1,6 +1,7 @@
 package org.sure_vote.service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import org.sure_vote.entity.SeatType;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
+import org.sure_vote.entity.Term;
 import org.sure_vote.entity.VotingPrecinct;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -187,6 +189,63 @@ class DefinitionRulesTest {
             () -> world.app.voidIssuance(first, "again", world.actor),
             "Only an accepted issuance can be voided"
         );
+    }
+
+    @Test
+    void aRaceRoundFollowsItsPreviousRace() {
+        final var world = SampleElection.upcomingFptp();
+        final var runoff = this.nextRound(world, ElectionMethod.FIRST_PAST_THE_POST, 0);
+        final var otherMethod = this.nextRound(world, ElectionMethod.RANKED_CHOICE, 0);
+        final var skipped = this.nextRound(world, ElectionMethod.FIRST_PAST_THE_POST, 3);
+        final var orphan = this.nextRound(world, ElectionMethod.FIRST_PAST_THE_POST, 2);
+        final var created = world.app.createRace(runoff, world.actor);
+        final var first = world.repository
+            .find(Race.class, world.raceId)
+            .orElseThrow();
+        orphan.setPreviousRaceId(null);
+        assertEquals(1, first.getRound());
+        assertEquals(2, created.getRound());
+        this.assertMessage(
+            () -> world.app.createRace(otherMethod, world.actor),
+            "A race keeps the method of its previous race"
+        );
+        this.assertMessage(() -> world.app.createRace(skipped, world.actor), "A race round follows its previous race");
+        this.assertMessage(() -> world.app.createRace(orphan, world.actor), "The first round of a race is 1");
+    }
+
+    @Test
+    void termsForASeatDoNotOverlap() {
+        final var world = SampleElection.upcomingFptp();
+        final var held = this.term(world, "2025-01-01", "2028-12-31");
+        final var overlapping = this.term(world, "2028-12-31", "2032-12-31");
+        final var backwards = this.term(world, "2034-01-01", "2033-12-31");
+        final var next = this.term(world, "2029-01-01", "2032-12-31");
+        world.app.createTerm(held, world.actor);
+        this.assertMessage(() -> world.app.createTerm(overlapping, world.actor), "terms for a seat may not overlap");
+        this.assertMessage(() -> world.app.createTerm(backwards, world.actor), "a term ends on or after it starts");
+        world.app.createTerm(next, world.actor);
+    }
+
+    private Race nextRound(final SampleElection world, final ElectionMethod method, final int round) {
+        final var race = new Race();
+        race.setTenantId(world.tenantId);
+        race.setElectionId(world.electionId);
+        race.setTermId(world.termId);
+        race.setName("Mayor runoff");
+        race.setMethod(method);
+        race.setType(RaceType.GENERAL);
+        race.setPreviousRaceId(world.raceId);
+        race.setRound(round);
+        return race;
+    }
+
+    private Term term(final SampleElection world, final String start, final String end) {
+        final var term = new Term();
+        term.setTenantId(world.tenantId);
+        term.setSeatId(world.seatId);
+        term.setTermStart(LocalDate.parse(start));
+        term.setTermEnd(LocalDate.parse(end));
+        return term;
     }
 
     @Test

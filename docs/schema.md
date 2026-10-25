@@ -235,7 +235,7 @@ Represents an election for a seat.
 - `previousRace` (Reference to Race, Optional): The previous race in a multi-round race.
 - `type` (Enum): The type of race: general, primary, special, etc.
 - `method` (Enum): `first-past-the-post`, `referendum`, or `ranked-choice`. Counting rules are in [system.md](./system.md).
-- `round` (Integer): The number of the round in the race.
+- `round` (Integer): The number of the round in the race. `1` without a `previousRace`, otherwise one more than the previous race's round. The service sets it.
 - `description` (String): A description of the race.
 
 ### RaceCandidate

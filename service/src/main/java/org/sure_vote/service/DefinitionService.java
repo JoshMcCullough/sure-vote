@@ -2,6 +2,7 @@ package org.sure_vote.service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -92,8 +93,44 @@ final class DefinitionService {
 
     Term createTerm(final Term term, final UUID actor) {
         final var seat = this.stores.require(Seat.class, term.getSeatId());
+        final var start = term.getTermStart();
+        final var end = term.getTermEnd();
+        final var ordered = start == null || end == null || !start.isAfter(end);
         this.stores.sameTenant(term.getTenantId(), seat.getTenantId(), "Seat");
+        this.stores.require(ordered, "a term ends on or after it starts");
+        this.stores.require(!this.overlaps(term), "terms for a seat may not overlap");
         return this.stores.add(term, actor);
+    }
+
+    private boolean overlaps(final Term term) {
+        final var terms = this.repository.list(Term.class);
+        var found = false;
+        for (final var existing : terms) {
+            found = found || this.overlap(existing, term);
+        }
+        return found;
+    }
+
+    private boolean overlap(final Term existing, final Term term) {
+        final var seat = term.getSeatId();
+        final var sameSeat = seat.equals(existing.getSeatId());
+        final var live = existing.getDeletedAt() == null;
+        final var dated = this.dated(existing) && this.dated(term);
+        if (sameSeat && live && dated) {
+            return this.intersects(existing.getTermStart(), existing.getTermEnd(), term);
+        }
+        else {
+            return false;
+        }
+    }
+
+    private boolean intersects(final LocalDate start, final LocalDate end, final Term term) {
+        final var otherStart = term.getTermStart();
+        return !start.isAfter(term.getTermEnd()) && !otherStart.isAfter(end);
+    }
+
+    private boolean dated(final Term term) {
+        return term.getTermStart() != null && term.getTermEnd() != null;
     }
 
     Election createElection(final Election election, final UUID actor) {
@@ -256,7 +293,28 @@ final class DefinitionService {
         final var election = this.stores.require(Election.class, race.getElectionId());
         this.stores.sameTenant(race.getTenantId(), election.getTenantId(), "Race");
         this.requireUpcoming(election, "Races lock when the election is activated");
+        this.requireLineage(race);
         return this.saveRace(race, actor);
+    }
+
+    private void requireLineage(final Race race) {
+        final var previousId = race.getPreviousRaceId();
+        if (previousId == null) {
+            this.stores.require(race.getRound() == 0 || race.getRound() == 1, "The first round of a race is 1");
+            race.setRound(1);
+        }
+        else {
+            this.followPrevious(race, this.stores.require(Race.class, previousId));
+        }
+    }
+
+    private void followPrevious(final Race race, final Race previous) {
+        final var round = previous.getRound() + 1;
+        final var given = race.getRound();
+        this.stores.sameTenant(race.getTenantId(), previous.getTenantId(), "Previous race");
+        this.stores.require(given == 0 || given == round, "A race round follows its previous race");
+        this.stores.require(race.getMethod() == previous.getMethod(), "A race keeps the method of its previous race");
+        race.setRound(round);
     }
 
     private Race saveRace(final Race race, final UUID actor) {

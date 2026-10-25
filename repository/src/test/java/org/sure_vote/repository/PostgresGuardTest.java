@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterAll;
@@ -215,9 +216,12 @@ class PostgresGuardTest {
     @Test
     void anAccessHashIsOnOneBallotInTheDatabase() throws SQLException {
         final var other = this.rows.election();
-        final var ballot = "insert into ballot (id, tenant_id, election_id, voting_precinct_id, voter_access_hash)"
-            + " values (?, ?, ?, ?, ?)";
-        this.run(ballot, UUID.randomUUID(), this.rows.tenantId, this.rows.electionId, this.rows.precinctId, "shared");
+        final var ballot = "insert into ballot"
+            + " (id, tenant_id, election_id, voting_precinct_id, voter_access_hash, timestamp)"
+            + " values (?, ?, ?, ?, ?, ?)";
+        final var at = Timestamp.from(ParentRows.START);
+        final var tenant = this.rows.tenantId;
+        this.run(ballot, UUID.randomUUID(), tenant, this.rows.electionId, this.rows.precinctId, "shared", at);
         this.refusedInsert(
             ballot,
             "ballot_access_hash",
@@ -225,7 +229,8 @@ class PostgresGuardTest {
             this.rows.tenantId,
             other,
             this.rows.precinctId,
-            "shared"
+            "shared",
+            at
         );
     }
 
