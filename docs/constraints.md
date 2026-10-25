@@ -49,7 +49,7 @@ A `historical` election has one `CanvassStatement`. Its payload matches a fresh 
 ## Race / round lineage
 
 ### Race round lineage
-`Race.round` must equal `Race.previousRace.round + 1` when `previousRace` is present. The first or only round is `1`. The service sets the round when a race is created and refuses a round that does not follow. The previous race is in the same tenant.
+`Race.round` must equal `Race.previousRace.round + 1` when `previousRace` is present. The first or only round is `1`. The service sets the round when a race is created and refuses a round that does not follow. The previous race is in the same tenant. While the election is `upcoming`, `PATCH /races/{id}` may change a race's `name`, `method`, and `previousRaceId`. The edit recomputes the round, refuses a race that follows itself, and refuses an edit that leaves a later round no longer one round after it or on a different method.
 
 ### Race method consistency
 `Race.method` must equal `Race.previousRace.method` when `previousRace` is present.

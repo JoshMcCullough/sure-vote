@@ -214,6 +214,37 @@ class DefinitionRulesTest {
     }
 
     @Test
+    void anEditReChecksTheLineage() {
+        final var world = SampleElection.upcomingFptp();
+        final var draft = this.nextRound(world, ElectionMethod.FIRST_PAST_THE_POST, 0);
+        final var runoff = world.app.createRace(draft, world.actor);
+        final var parentMethod = new RaceEdit(world.raceId, null, ElectionMethod.RANKED_CHOICE, null);
+        final var selfLoop = new RaceEdit(runoff.getId(), null, null, runoff.getId());
+        final var detached = new RaceEdit(runoff.getId(), "Mayor special", null, null);
+        final var renamed = world.app.updateRace(detached, world.actor);
+        final var reattached = world.app.updateRace(
+            new RaceEdit(runoff.getId(), null, null, world.raceId),
+            world.actor
+        );
+        this.assertMessage(
+            () -> world.app.updateRace(parentMethod, world.actor),
+            "A later round no longer follows this race"
+        );
+        this.assertMessage(() -> world.app.updateRace(selfLoop, world.actor), "A race cannot follow itself");
+        assertEquals("Mayor special", renamed.getName());
+        assertEquals(1, renamed.getRound());
+        assertEquals(2, reattached.getRound());
+        assertEquals(ElectionMethod.FIRST_PAST_THE_POST, reattached.getMethod());
+    }
+
+    @Test
+    void aRaceLocksOnActivation() {
+        final var world = SampleElection.fptp();
+        final var edit = new RaceEdit(world.raceId, "Renamed", null, null);
+        this.assertMessage(() -> world.app.updateRace(edit, world.actor), "Races lock when the election is activated");
+    }
+
+    @Test
     void termsForASeatDoNotOverlap() {
         final var world = SampleElection.upcomingFptp();
         final var held = this.term(world, "2025-01-01", "2028-12-31");

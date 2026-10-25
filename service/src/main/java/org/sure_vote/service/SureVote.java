@@ -346,6 +346,10 @@ public final class SureVote {
         return this.definitions.createElection(election, actor);
     }
 
+    public Race updateRace(final RaceEdit edit, final UUID actor) {
+        return this.definitions.updateRace(edit, actor);
+    }
+
     public Race createRace(final Race race, final UUID actor) {
         return this.definitions.createRace(race, actor);
     }

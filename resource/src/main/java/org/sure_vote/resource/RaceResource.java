@@ -17,6 +17,10 @@ public final class RaceResource {
 
     private String method;
 
+    private UUID previousRaceId;
+
+    private int round;
+
     public UUID getId() {
         return this.id;
     }
@@ -71,5 +75,21 @@ public final class RaceResource {
 
     public void setMethod(final String method) {
         this.method = method;
+    }
+
+    public UUID getPreviousRaceId() {
+        return this.previousRaceId;
+    }
+
+    public void setPreviousRaceId(final UUID previousRaceId) {
+        this.previousRaceId = previousRaceId;
+    }
+
+    public int getRound() {
+        return this.round;
+    }
+
+    public void setRound(final int round) {
+        this.round = round;
     }
 }

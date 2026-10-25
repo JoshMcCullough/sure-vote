@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.sure_vote.entity.Address;
@@ -158,6 +159,10 @@ final class DefinitionService {
         return this.repository.transaction(() -> this.createRaceLocked(race, actor));
     }
 
+    Race updateRace(final RaceEdit edit, final UUID actor) {
+        return this.repository.transaction(() -> this.updateRaceLocked(edit, actor));
+    }
+
     Candidate createCandidate(final Candidate candidate, final UUID actor) {
         final var person = this.stores.require(Person.class, candidate.getPersonId());
         this.stores.sameTenant(candidate.getTenantId(), person.getTenantId(), "Person");
@@ -295,6 +300,42 @@ final class DefinitionService {
         this.requireUpcoming(election, "Races lock when the election is activated");
         this.requireLineage(race);
         return this.saveRace(race, actor);
+    }
+
+    private Race updateRaceLocked(final RaceEdit edit, final UUID actor) {
+        final var existing = this.stores.require(Race.class, edit.raceId());
+        final var election = this.stores.require(Election.class, existing.getElectionId());
+        final var next = Copies.race(existing);
+        final var raceId = edit.raceId();
+        this.requireUpcoming(election, "Races lock when the election is activated");
+        this.stores.require(!raceId.equals(edit.previousRaceId()), "A race cannot follow itself");
+        this.edited(next, edit);
+        this.requireLineage(next);
+        this.requireSuccessors(next);
+        next.setUpdatedAt(Instant.now());
+        next.setUpdatedBy(actor);
+        next.setVersion(this.stores.nextVersion(existing.getVersion()));
+        return this.stores.replace(next);
+    }
+
+    private void edited(final Race race, final RaceEdit edit) {
+        race.setName(Objects.requireNonNullElse(edit.name(), race.getName()));
+        race.setMethod(Objects.requireNonNullElse(edit.method(), race.getMethod()));
+        race.setPreviousRaceId(edit.previousRaceId());
+        race.setRound(0);
+    }
+
+    private void requireSuccessors(final Race race) {
+        final var races = this.repository.list(Race.class);
+        for (final var later : races) {
+            this.requireSuccessor(race, later);
+        }
+    }
+
+    private void requireSuccessor(final Race race, final Race later) {
+        final var follows = Objects.equals(race.getId(), later.getPreviousRaceId());
+        final var fits = later.getRound() == race.getRound() + 1 && later.getMethod() == race.getMethod();
+        this.stores.require(!follows || fits, "A later round no longer follows this race");
     }
 
     private void requireLineage(final Race race) {

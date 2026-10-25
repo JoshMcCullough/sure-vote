@@ -190,6 +190,16 @@ class ImportRulesTest {
     }
 
     @Test
+    void aWriteInNameCountsCodePoints() {
+        final var world = SampleElection.fptp();
+        final var name = "\uD83D\uDE00".repeat(80);
+        final var ballot = world.castOne(world.writeIn, name);
+        this.assertWriteIn("\uD83D\uDE00".repeat(81), "A write-in name is 1 to 80 characters");
+        assertEquals(160, name.length());
+        assertNotNull(ballot.getId());
+    }
+
+    @Test
     void aWriteInNameIsChecked() {
         this.assertWriteIn(Normalizer.normalize("\u00e9", Normalizer.Form.NFD), "A write-in name is Unicode NFC");
         this.assertWriteIn(" Pat", "A write-in name has no extra whitespace");

@@ -60,6 +60,7 @@ Creates require a session and return the saved resource. Workspace creates and `
 - `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`
 - `POST /seats`, `/terms`, `/races`, `/candidates`, `/race-candidates`, `/ballot-styles`
 - `POST /places`, `/devices`, `/precinct-assignments`
+- `PATCH /races/{id}` with `{name, method, previousRaceId}` for an official while the election is `upcoming`. `previousRaceId` is always applied, and `null` makes the race a first round. The React app does not call it yet.
 - `GET /workspace` lists the session tenant's rows. It does not include `HeldKey` or person secrets.
 - `POST /elections` when the caller brings operator, import, and viewing public keys
 - `POST /elections/{id}/activate` and `POST /elections/{id}/close` with signatures made outside the app

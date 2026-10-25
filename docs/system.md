@@ -266,7 +266,7 @@ A recorded vote must name a race in the ballot style for the ballot's precinct. 
 The machine, the mail-in workstation, and import all reject a ballot that breaks these rules. The public check rejects it too. A rejected ballot is not sealed and is not given an access code.
 
 - A race may be left blank. That is an undervote. It creates no `Vote` and no chain entry.
-- `first-past-the-post` allows at most one vote for the race. `value` is `Y`, or, on the race's single write-in slot, the name the voter entered. That name is Unicode NFC, 1 to 80 characters, with no leading or trailing whitespace and no control characters. Ranked-choice and referendum races have no write-in slot.
+- `first-past-the-post` allows at most one vote for the race. `value` is `Y`, or, on the race's single write-in slot, the name the voter entered. That name is Unicode NFC, 1 to 80 Unicode code points (not UTF-16 units, so the service and PostgreSQL count the same way), with no leading or trailing whitespace and no control characters. Ranked-choice and referendum races have no write-in slot.
 - `referendum` has exactly two candidates, one `yes` and one `no`. At most one vote, and `value` is `Y`.
 - `ranked-choice` elects one winner, so `appointments` is 1. Ranks are `1`, `2`, `3`, with no gaps and no duplicates, and at most one rank per candidate. Multi-winner ranked choice is rejected when the definition is signed. A later round linked by `previousRace` is a separate race, not an instant-runoff round.
 - Primary races on one ballot must all use candidates with the same `partyAffiliation`. Races whose type is not `primary` do not count toward that check.

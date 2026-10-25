@@ -14,6 +14,8 @@ import org.sure_vote.entity.ElectionMethod;
 import org.sure_vote.entity.RaceType;
 
 final class SelectionRules {
+    static final int MAX_WRITE_IN = 80;
+
     void check(final List<PreparedVote> votes) {
         this.requireDistinct(votes);
         this.checkRaces(votes);
@@ -105,9 +107,10 @@ final class SelectionRules {
         else {
             final var normalized = Normalizer.normalize(value, Normalizer.Form.NFC);
             final var stripped = value.strip();
+            final var length = value.codePointCount(0, value.length());
             this.require(value.equals(normalized), "A write-in name is Unicode NFC");
             this.require(value.equals(stripped), "A write-in name has no extra whitespace");
-            this.require(value.length() >= 1 && value.length() <= 80, "A write-in name is 1 to 80 characters");
+            this.require(length >= 1 && length <= MAX_WRITE_IN, "A write-in name is 1 to 80 characters");
             this.require(this.noControls(value), "A write-in name has no control characters");
         }
     }

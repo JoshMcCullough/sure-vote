@@ -68,6 +68,7 @@ import org.sure_vote.service.ConstraintException;
 import org.sure_vote.service.DemoCast;
 import org.sure_vote.service.DemoSelection;
 import org.sure_vote.service.LookupResult;
+import org.sure_vote.service.RaceEdit;
 import org.sure_vote.service.SureVote;
 import org.sure_vote.service.WorkspaceView;
 
@@ -103,7 +104,7 @@ final class WorkspaceHttp {
         final var collection = this.collection(method, parts);
         final var workspace = this.tenantWorkspace(method, parts);
         final var showcase = this.showcase(method, parts);
-        return collection || workspace || showcase;
+        return collection || workspace || showcase || this.raceEdit(method, parts);
     }
 
     void handle(final HttpExchange exchange, final String method, final List<String> parts) throws IOException {
@@ -115,6 +116,9 @@ final class WorkspaceHttp {
         }
         else if (this.showcase(method, parts)) {
             this.showcase(exchange, parts);
+        }
+        else if (this.raceEdit(method, parts)) {
+            this.updateRace(exchange, parts.get(1));
         }
         else {
             this.writeJson(exchange, 404, new ErrorResource("not found"));
@@ -129,6 +133,30 @@ final class WorkspaceHttp {
         }
         else {
             return false;
+        }
+    }
+
+    private boolean raceEdit(final String method, final List<String> parts) {
+        final var patch = "PATCH".equals(method);
+        return patch && parts.size() == 2 && "races".equals(parts.getFirst());
+    }
+
+    private void updateRace(final HttpExchange exchange, final String id) throws IOException {
+        final var actor = this.requests.official(exchange);
+        final var body = this.read(exchange, RaceEditBody.class);
+        final var method = this.optionalMethod(body.method);
+        final var edit = new RaceEdit(UUID.fromString(id), body.name, method, body.previousRaceId);
+        final var raceId = edit.raceId();
+        final var saved = this.app.asTenantRow(actor, Race.class, raceId, () -> this.app.updateRace(edit, actor.id()));
+        this.writeJson(exchange, 200, this.raceResource(saved));
+    }
+
+    private ElectionMethod optionalMethod(final String value) {
+        if (value == null) {
+            return null;
+        }
+        else {
+            return this.wire(ElectionMethod.values(), value, "election method");
         }
     }
 
@@ -507,6 +535,7 @@ final class WorkspaceHttp {
         race.setName(body.name);
         race.setType(this.wire(RaceType.values(), body.type, "race type"));
         race.setMethod(this.wire(ElectionMethod.values(), body.method, "election method"));
+        race.setPreviousRaceId(body.previousRaceId);
         return race;
     }
 
@@ -911,6 +940,8 @@ final class WorkspaceHttp {
         resource.setName(race.getName());
         resource.setType(this.wireText(type));
         resource.setMethod(this.wireText(method));
+        resource.setPreviousRaceId(race.getPreviousRaceId());
+        resource.setRound(race.getRound());
         return resource;
     }
 
@@ -1160,7 +1191,14 @@ final class WorkspaceHttp {
         public UUID seatId;
     }
 
+    static final class RaceEditBody {
+        public String name;
+        public String method;
+        public UUID previousRaceId;
+    }
+
     static final class RaceBody {
+        public UUID previousRaceId;
         public UUID electionId;
         public UUID termId;
         public String name;

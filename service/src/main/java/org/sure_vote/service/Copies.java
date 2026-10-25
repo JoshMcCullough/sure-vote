@@ -5,6 +5,7 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Entity;
 import org.sure_vote.entity.Person;
+import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.Tenant;
@@ -64,6 +65,20 @@ final class Copies {
         copy.setLength(source.getLength());
         copy.setHash(source.getHash());
         copy.setSignature(source.getSignature());
+        return copy;
+    }
+
+    static Race race(final Race source) {
+        final var copy = new Race();
+        audit(source, copy);
+        copy.setName(source.getName());
+        copy.setElectionId(source.getElectionId());
+        copy.setTermId(source.getTermId());
+        copy.setPreviousRaceId(source.getPreviousRaceId());
+        copy.setType(source.getType());
+        copy.setMethod(source.getMethod());
+        copy.setRound(source.getRound());
+        copy.setDescription(source.getDescription());
         return copy;
     }
 
