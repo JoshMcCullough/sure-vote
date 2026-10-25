@@ -16,6 +16,7 @@ import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.postgresql.ds.PGSimpleDataSource;
 import org.sure_vote.entity.Address;
+import org.sure_vote.entity.AuthCeremony;
 import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.BallotIssuance;
@@ -23,10 +24,12 @@ import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.Candidate;
 import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.ContentFile;
+import org.sure_vote.entity.Credential;
 import org.sure_vote.entity.ElectedOfficial;
 import org.sure_vote.entity.Election;
-import org.sure_vote.entity.HeldKey;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
+import org.sure_vote.entity.Enrollment;
+import org.sure_vote.entity.HeldKey;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.Person;
@@ -35,10 +38,13 @@ import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingPlace;
+import org.sure_vote.entity.RequestNonce;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.Seat;
+import org.sure_vote.entity.Session;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantOfficial;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.Vote;
@@ -57,6 +63,7 @@ import org.sure_vote.entity.VotingPrecinct;
 public final class JdbcSureVoteRepository implements SureVoteRepository {
     private static final List<Class<?>> TABLES = List.of(
         Address.class,
+        AuthCeremony.class,
         Ballot.class,
         BallotDispute.class,
         BallotIssuance.class,
@@ -64,8 +71,10 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         Candidate.class,
         CanvassStatement.class,
         ContentFile.class,
+        Credential.class,
         ElectedOfficial.class,
         Election.class,
+        Enrollment.class,
         ElectionVotingPrecinctAssignment.class,
         HeldKey.class,
         Locality.class,
@@ -75,10 +84,13 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         RaceCandidate.class,
         RecordingDevice.class,
         RecordingPlace.class,
+        RequestNonce.class,
         RestoreIncident.class,
         Seat.class,
+        Session.class,
         SystemAdmin.class,
         Tenant.class,
+        TenantOfficial.class,
         TenantValidator.class,
         Term.class,
         Vote.class,

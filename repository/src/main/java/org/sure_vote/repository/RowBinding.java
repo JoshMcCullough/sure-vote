@@ -186,6 +186,9 @@ final class RowBinding {
         else if (field.getType() == Double.class) {
             return result.getObject(name, Double.class);
         }
+        else if (field.getType() == Long.class) {
+            return result.getObject(name, Long.class);
+        }
         else if (field.getType() == int.class) {
             return Integer.valueOf(result.getInt(name));
         }

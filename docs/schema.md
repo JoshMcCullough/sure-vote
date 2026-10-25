@@ -402,6 +402,63 @@ A public record that a restored chain head differs from the latest head an outsi
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
 - `signature` (String): Operator signature over the raw bytes of `hash`.
 
+### TenantOfficial
+A person who acts for one tenant. Row-level security on `tenant_id`. See [auth-proposal.md](./auth-proposal.md).
+
+- Administrative audit fields
+- `tenant` (Reference to Tenant)
+- `name` (String): Trimmed, not blank.
+- `status` (Enum): `active` or `disabled`. A disabled official's sessions are refused at once.
+
+### Session
+A signed-in principal. No row-level security, because it is read before the tenant is known.
+
+- Administrative audit fields
+- `tokenHash` (String): SHA-256 hex of the cookie token. Unique. The token is not stored.
+- `principalKind` (Enum): `system-admin`, `official`, or `visitor`.
+- `principalId` (UUID)
+- `tenant` (Reference to Tenant): Empty exactly when the principal is a system admin.
+- `expiresAt` (Timestamp): 12 hours after sign-in.
+- `lastSeenAt` (Timestamp): The session ends after 1 hour without a request.
+- `revokedAt` (Timestamp): Set by sign-out.
+
+### Credential
+A WebAuthn passkey. Holds the public key only.
+
+- Administrative audit fields
+- `principalKind`, `principalId`, `tenant`: As on `Session`.
+- `credentialId` (String): Base64url. Unique.
+- `userHandle` (String): Base64url of the principal id.
+- `publicKeyCose` (String): Base64url COSE public key.
+- `signatureCount` (Long): The authenticator counter.
+- `lastUsedAt` (Timestamp)
+
+### Enrollment
+A one-time token that lets a principal register a passkey. 24 hours.
+
+- Administrative audit fields
+- `tokenHash` (String): SHA-256 hex. Unique.
+- `principalKind`, `principalId`, `tenant`: As on `Session`.
+- `expiresAt`, `usedAt` (Timestamp)
+
+### AuthCeremony
+A pending WebAuthn registration or sign-in. 5 minutes, used once.
+
+- Administrative audit fields
+- `kind` (Enum): `registration` or `assertion`.
+- `request` (String): The options JSON sent to the browser.
+- `enrollment` (Reference to Enrollment): Set when the registration came from a token.
+- `principalKind`, `principalId`, `tenant`: Set for a registration.
+- `expiresAt`, `usedAt` (Timestamp)
+
+### RequestNonce
+A nonce seen on a signed machine request. Unique per key id, so a repeat is refused.
+
+- Administrative audit fields
+- `keyId` (String)
+- `nonce` (String)
+- `requestTimestamp` (Timestamp)
+
 ### File
 Represents a file stored in the system, such as a candidate photo or election document.
 

@@ -58,6 +58,7 @@ import org.sure_vote.resource.ValidationResource;
 import org.sure_vote.resource.ValidatorListResource;
 import org.sure_vote.resource.ValidatorResource;
 import org.sure_vote.resource.VoteResource;
+import org.sure_vote.service.AccessException;
 import org.sure_vote.service.CanonicalJson;
 import org.sure_vote.service.ConstraintException;
 import org.sure_vote.service.Digests;
@@ -75,12 +76,16 @@ public final class ApiServer implements HttpHandler {
     private final ObjectMapper json = new ObjectMapper();
     private final WorkspaceHttp workspace;
     private final SystemHttp system;
+    private final Requests requests;
+    private final AuthHttp auth;
 
     private ApiServer(final SureVote app, final HttpServer server) {
         this.app = app;
         this.server = server;
+        this.requests = new Requests(app);
         this.workspace = new WorkspaceHttp(app, this.json);
-        this.system = new SystemHttp(app, this.json);
+        this.system = new SystemHttp(app, this.json, this.requests);
+        this.auth = new AuthHttp(app, this.json, this.requests);
     }
 
     public static ApiServer start(final SureVote app) {
@@ -149,6 +154,9 @@ public final class ApiServer implements HttpHandler {
         catch (final ConstraintException failure) {
             this.writeQuiet(exchange, 400, failure.getMessage());
         }
+        catch (final AccessException failure) {
+            this.writeQuiet(exchange, failure.status(), failure.getMessage());
+        }
         catch (final JsonProcessingException failure) {
             this.writeQuiet(exchange, 400, "invalid json");
         }
@@ -162,7 +170,11 @@ public final class ApiServer implements HttpHandler {
         final var path = uri.getPath();
         final var method = exchange.getRequestMethod();
         final var parts = this.parts(path);
-        if ("GET".equals(method) && this.named(parts, "health")) {
+        final var origin = Requests.header(exchange, "Origin");
+        if (Requests.unsafe(method) && origin != null && !this.app.allowedOrigin(origin)) {
+            this.writeJson(exchange, 403, new ErrorResource("origin not allowed"));
+        }
+        else if ("GET".equals(method) && this.named(parts, "health")) {
             this.health(exchange);
         }
         else if ("GET".equals(method) && this.demoTenantPath(parts)) {
@@ -245,6 +257,9 @@ public final class ApiServer implements HttpHandler {
         }
         else if ("GET".equals(method) && this.electionAction(parts, "restore-incidents")) {
             this.listRestoreIncidents(exchange, parts);
+        }
+        else if (this.auth.handles(parts)) {
+            this.auth.handle(exchange, method, parts);
         }
         else if (this.system.handles(parts)) {
             this.system.handle(exchange, method, parts);

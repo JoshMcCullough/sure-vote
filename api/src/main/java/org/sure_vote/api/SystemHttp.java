@@ -12,6 +12,7 @@ import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
+import org.sure_vote.entity.TenantOfficialStatus;
 import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.WireValue;
 import org.sure_vote.entity.Wires;
@@ -29,15 +30,17 @@ import org.sure_vote.service.SureVote;
 final class SystemHttp {
     private final SureVote app;
     private final ObjectMapper json;
+    private final Requests requests;
 
-    SystemHttp(final SureVote app, final ObjectMapper json) {
+    SystemHttp(final SureVote app, final ObjectMapper json, final Requests requests) {
         this.app = app;
         this.json = json;
+        this.requests = requests;
     }
 
     boolean handles(final List<String> parts) {
         final var size = parts.size();
-        if (size == 2 || size == 3) {
+        if (size >= 2 && size <= 6) {
             return "system".equals(parts.get(0)) && this.known(parts.get(1));
         }
         else {
@@ -48,12 +51,59 @@ final class SystemHttp {
     void handle(final HttpExchange exchange, final String method, final List<String> parts) throws IOException {
         final var collection = parts.get(1);
         final var item = parts.size() == 3;
-        if ("tenants".equals(collection)) {
+        if (parts.size() > 3) {
+            this.nested(exchange, method, parts);
+        }
+        else if ("tenants".equals(collection)) {
             this.tenants(exchange, method, item, parts);
         }
         else {
             this.admins(exchange, method, item, parts);
         }
+    }
+
+    private void nested(final HttpExchange exchange, final String method, final List<String> parts) throws IOException {
+        final var tenants = "tenants".equals(parts.get(1)) && "officials".equals(parts.get(3));
+        final var size = parts.size();
+        final var adminEnrollment = size == 4 && "admins".equals(parts.get(1)) && "enrollments".equals(parts.get(3));
+        if (tenants && size == 4 && "POST".equals(method)) {
+            this.createOfficial(exchange, this.id(parts.get(2)));
+        }
+        else if (tenants && size == 4 && "GET".equals(method)) {
+            final var actor = this.requests.admin(exchange);
+            this.writeJson(exchange, 200, AuthHttp.officialList(this.app.officials(this.id(parts.get(2)), actor)));
+        }
+        else if (tenants && size == 5 && "PATCH".equals(method)) {
+            this.updateOfficial(exchange, this.id(parts.get(2)), this.id(parts.get(4)));
+        }
+        else if (tenants && size == 6 && "POST".equals(method) && "enrollments".equals(parts.get(5))) {
+            final var actor = this.requests.admin(exchange);
+            final var token = this.app.officialEnrollment(this.id(parts.get(2)), this.id(parts.get(4)), actor);
+            this.writeJson(exchange, 201, AuthHttp.tokenResource(token));
+        }
+        else if (adminEnrollment && "POST".equals(method)) {
+            final var actor = this.requests.admin(exchange);
+            final var token = this.app.adminEnrollment(this.id(parts.get(2)), actor);
+            this.writeJson(exchange, 201, AuthHttp.tokenResource(token));
+        }
+        else {
+            this.writeJson(exchange, 404, new ErrorResource("not found"));
+        }
+    }
+
+    private void createOfficial(final HttpExchange exchange, final UUID tenantId) throws IOException {
+        final var actor = this.requests.admin(exchange);
+        final var body = this.read(exchange, AdminBody.class);
+        final var created = this.app.createOfficial(tenantId, body.name, actor);
+        this.writeJson(exchange, 201, AuthHttp.enrollmentResource(created));
+    }
+
+    private void updateOfficial(final HttpExchange exchange, final UUID tenantId, final UUID id) throws IOException {
+        final var actor = this.requests.admin(exchange);
+        final var body = this.read(exchange, AdminChangeBody.class);
+        final var status = this.wire(TenantOfficialStatus.values(), body.status, "official status");
+        final var saved = this.app.setOfficialStatus(tenantId, id, status, actor);
+        this.writeJson(exchange, 200, AuthHttp.officialResource(saved));
     }
 
     private boolean known(final String collection) {

@@ -94,7 +94,7 @@ final class SystemAdminService {
         }
     }
 
-    private <T> T asAdmin(final UUID actor, final Supplier<T> body) {
+    <T> T asAdmin(final UUID actor, final Supplier<T> body) {
         this.stores.require(actor != null, "actor is required");
         return this.repository.asSystemAdmin(actor, () -> this.checked(actor, body));
     }

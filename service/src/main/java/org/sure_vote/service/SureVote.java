@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Address;
@@ -18,6 +19,7 @@ import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.Person;
+import org.sure_vote.entity.PrincipalKind;
 import org.sure_vote.entity.PrecinctDistrict;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
@@ -28,6 +30,8 @@ import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantOfficial;
+import org.sure_vote.entity.TenantOfficialStatus;
 import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
@@ -48,7 +52,12 @@ public final class SureVote {
     private final ValidatorService validators;
     private final RestoreService restores;
     private final SystemAdminService system;
+    private final SessionService sessions;
+    private final OfficialService officials;
+    private final PasskeyService passkeys;
+    private final SignedRequests signedRequests;
     private final SureVoteRepository repository;
+    private volatile boolean devSignIn;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -63,6 +72,10 @@ public final class SureVote {
         this.validators = new ValidatorService(repository, stores);
         this.restores = new RestoreService(repository, stores, this.validators);
         this.system = new SystemAdminService(repository, stores);
+        this.sessions = new SessionService(repository, stores);
+        this.officials = new OfficialService(repository, stores, this.system);
+        this.passkeys = new PasskeyService(repository, stores, this.sessions);
+        this.signedRequests = new SignedRequests(repository, stores);
         this.repository = repository;
     }
 
@@ -78,6 +91,149 @@ public final class SureVote {
 
     public SystemAdmin bootstrapSystemAdmin(final SystemAdmin admin) {
         return this.system.bootstrap(admin);
+    }
+
+    public SystemAdmin bootstrapSystemAdmin(final SystemAdmin admin, final String enrollmentToken) {
+        final var saved = this.system.bootstrap(admin);
+        this.officials.bootstrap(saved.getId(), enrollmentToken);
+        return saved;
+    }
+
+    public void configurePasskeys(final PasskeySettings settings) {
+        this.passkeys.configure(settings);
+    }
+
+    public boolean allowedOrigin(final String origin) {
+        return this.passkeys.allowedOrigin(origin);
+    }
+
+    public void enableDevSignIn() {
+        this.devSignIn = true;
+    }
+
+    public boolean devSignInEnabled() {
+        return this.devSignIn;
+    }
+
+    public Principal session(final String token) {
+        return this.sessions.resolve(token);
+    }
+
+    public void signOut(final String token) {
+        this.sessions.revoke(token);
+    }
+
+    public String devSignIn(final PrincipalKind kind, final UUID id, final UUID tenantId) {
+        if (!this.devSignIn) {
+            throw new AccessException(403, "dev sign-in is disabled");
+        }
+        else {
+            this.stores(kind != null && kind != PrincipalKind.VISITOR && id != null, "principal is required");
+            return this.sessions.open(this.sessions.principal(kind, id, tenantId));
+        }
+    }
+
+    public String visitorSession() {
+        final var tenant = this.system.demoTenant();
+        final var demo = tenant.orElseThrow(() -> new ConstraintException("no demo tenant"));
+        return this.sessions.open(this.sessions.visitor(demo.getId()));
+    }
+
+    public PasskeyChallenge startEnrollment(final String token) {
+        return this.passkeys.startEnrollment(token);
+    }
+
+    public PasskeyChallenge startAddingPasskey(final Principal principal) {
+        return this.passkeys.startAdding(principal);
+    }
+
+    public String finishPasskeyRegistration(final UUID ceremonyId, final String response) {
+        return this.passkeys.finishRegistration(ceremonyId, response);
+    }
+
+    public PasskeyChallenge startSignIn() {
+        return this.passkeys.startSignIn();
+    }
+
+    public String finishSignIn(final UUID ceremonyId, final String response) {
+        return this.passkeys.finishSignIn(ceremonyId, response);
+    }
+
+    public OfficialEnrollment createOfficial(final UUID tenantId, final String name, final Principal actor) {
+        return this.officials.create(tenantId, name, actor);
+    }
+
+    public List<TenantOfficial> officials(final UUID tenantId, final Principal actor) {
+        return this.officials.list(tenantId, actor);
+    }
+
+    public TenantOfficial setOfficialStatus(
+        final UUID tenantId,
+        final UUID id,
+        final TenantOfficialStatus status,
+        final Principal actor
+    ) {
+        return this.officials.setStatus(tenantId, id, status, actor);
+    }
+
+    public String officialEnrollment(final UUID tenantId, final UUID id, final Principal actor) {
+        return this.officials.enroll(tenantId, id, actor);
+    }
+
+    public String adminEnrollment(final UUID adminId, final Principal actor) {
+        return this.officials.enrollAdmin(adminId, actor);
+    }
+
+    public <T> T asTenant(final Principal principal, final Supplier<T> work) {
+        if (principal == null || !principal.inTenant()) {
+            throw AccessException.denied();
+        }
+        else {
+            return this.repository.inTenant(principal.tenantId(), work);
+        }
+    }
+
+    public <T> T asImport(final SignedRequest request, final UUID electionId, final Function<UUID, T> work) {
+        final var tenant = this.repository.electionTenant(this.present(electionId));
+        final var tenantId = tenant.orElseThrow(() -> new ConstraintException("Missing Election"));
+        return this.repository.inTenant(tenantId, () -> this.imported(request, electionId, tenantId, work));
+    }
+
+    public <T> T asValidator(
+        final SignedRequest request,
+        final UUID electionId,
+        final UUID validatorId,
+        final Supplier<T> work
+    ) {
+        final var validator = this.repository.find(VoteChainValidator.class, this.present(validatorId));
+        final var live = validator.filter(row -> row.getDeletedAt() == null);
+        final var key = live.map(VoteChainValidator::getPublicKey);
+        this.signedRequests.verify(request, "validator:" + validatorId, key.orElseThrow(AccessException::signIn));
+        return this.published(electionId, work);
+    }
+
+    private <T> T imported(
+        final SignedRequest request,
+        final UUID electionId,
+        final UUID tenantId,
+        final Function<UUID, T> work
+    ) {
+        final var found = this.repository.find(Election.class, electionId);
+        final var election = found.orElseThrow(() -> new ConstraintException("Missing Election"));
+        final var key = election.getImportPublicKey();
+        this.signedRequests.verify(request, "import:" + electionId, key);
+        return work.apply(tenantId);
+    }
+
+    private UUID present(final UUID id) {
+        this.stores(id != null, "id is required");
+        return id;
+    }
+
+    private void stores(final boolean condition, final String message) {
+        if (!condition) {
+            throw new ConstraintException(message);
+        }
     }
 
     public SystemAdmin createSystemAdmin(final SystemAdmin admin, final UUID actor) {

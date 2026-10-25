@@ -1,6 +1,6 @@
 # Request identity
 
-Status: people's sign-in is decided: WebAuthn passkeys and PostgreSQL-backed server-side sessions. Machine request signing is still a recommendation. Nothing here is built. Today every official and system-admin request names its principal with an unsigned `SureVote-Actor-Id` header, and an official request names its tenant with a `tenantId` in the body or path. That is enough to build and test locally. It is not enough for a production console, and [system.md](./system.md) says a client-supplied tenant id is not the source.
+Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed server-side sessions, described in [Built](#built). The election and workspace routes do not use the session yet. Machine request signing is still a recommendation. Today every official and system-admin request names its principal with an unsigned `SureVote-Actor-Id` header, and an official request names its tenant with a `tenantId` in the body or path. That is enough to build and test locally. It is not enough for a production console, and [system.md](./system.md) says a client-supplied tenant id is not the source.
 
 ## What has to be proven
 
@@ -65,6 +65,17 @@ Sign-in needs only WebAuthn, so any FIDO2 key or platform passkey works. A FIDO-
 Operator and viewing keys need Ed25519 and X25519 on the token. Examples: a YubiKey 5 series key through OpenPGP (firmware 5.2.3 and later) or PIV (firmware 5.7 and later), or a Nitrokey 3. The host's backup key uses a YubiHSM 2, AWS CloudHSM, or AWS KMS.
 
 Every signing step must also run with a software key, so tests, development, and the showcase never need hardware. A production tenant does not accept a software operator or viewing key held by the host.
+
+## Built
+
+- `V10__sign_in.sql` adds `tenant_official`, `session`, `credential`, `enrollment`, `auth_ceremony`, and `request_nonce`. Only `tenant_official` has row-level security, because a session is looked up before its tenant is known. The other tables hold hashes, public keys, and ceremony state, never a token or a private key. A row's id is derived from the hash it is looked up by, so each lookup is a primary-key read.
+- A session names a `system-admin`, an `official`, or a `visitor`. A system-admin session has no tenant, and the other two have exactly one. It lasts 12 hours and ends after 1 hour idle. Each request hashes the `surevote_session` cookie, loads the row, and checks expiry, revocation, and the principal again: a disabled admin, a disabled official, or a suspended showcase tenant for a visitor is refused with 401 on the next request. An official of a suspended tenant keeps the session, and the suspended-tenant write rules still refuse their writes.
+- The cookie is `HttpOnly; Secure; SameSite=Strict; Path=/`. An unsafe method that sends an `Origin` not in `SUREVOTE_ORIGINS` is refused with 403.
+- Passkeys use Yubico `java-webauthn-server`. Registration and sign-in require user verification, and the passkey is discoverable, so sign-in asks for no username. The relying party id comes from `SUREVOTE_RP_ID` (default `localhost`) and the allowed origins from `SUREVOTE_ORIGINS` (default `http://localhost:8080,http://localhost:5173`). A ceremony lasts 5 minutes and is used once.
+- A system admin adds an official with `POST /system/tenants/{tenantId}/officials` and gets a one-time enrollment token, valid for 24 hours. An active official adds, lists, disables, and re-enrolls officials of their own tenant through `/officials`. An official cannot change their own status. A new enrollment token replaces a lost passkey. `POST /system/admins/{id}/enrollments` does the same for an admin.
+- The first admin enrolls with `SUREVOTE_SYSTEM_ADMIN_ENROLLMENT_TOKEN`. The service stores its hash once, and the token works once.
+- `POST /auth/enrollments/start` and `POST /auth/passkeys/finish` enroll a passkey. `POST /auth/passkeys/start` adds another for the signed-in person. `POST /auth/sign-in/start` and `/finish` sign in. `GET /auth/session` names the principal, and `POST /auth/sign-out` revokes the row and clears the cookie.
+- The software path: `SUREVOTE_DEV_SIGN_IN=true` turns on `POST /auth/dev/sign-in` with `{kind, id, tenantId}`, which opens a session for an active admin or official without a passkey. It is off by default, `GET /auth/config` reports it, and it never opens a visitor session. Tests also enroll and sign in with a software authenticator. `POST /showcase/session` opens a visitor session in the demo tenant.
 
 ## What changes when it is chosen
 

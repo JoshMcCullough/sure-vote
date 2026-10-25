@@ -2,11 +2,13 @@ package org.sure_vote.api;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.UUID;
 
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.repository.InMemorySureVoteRepository;
 import org.sure_vote.repository.JdbcSureVoteRepository;
+import org.sure_vote.service.PasskeySettings;
 import org.sure_vote.service.SureVote;
 
 public final class Main {
@@ -34,14 +36,42 @@ public final class Main {
 
     private static SureVote memory() {
         final var repository = new InMemorySureVoteRepository();
-        return provisioned(bootstrapped(new SureVote(repository)));
+        return configured(provisioned(bootstrapped(new SureVote(repository))));
     }
 
     private static SureVote database(final String url) {
         final var user = text("SUREVOTE_JDBC_USER");
         final var password = text("SUREVOTE_JDBC_PASSWORD");
         final var repository = open(url, user, password);
-        return provisioned(bootstrapped(new SureVote(repository)));
+        return configured(provisioned(bootstrapped(new SureVote(repository))));
+    }
+
+    private static SureVote configured(final SureVote app) {
+        final var rpId = or(text("SUREVOTE_RP_ID"), "localhost");
+        final var origins = text("SUREVOTE_ORIGINS");
+        app.configurePasskeys(settings(rpId, origins));
+        return developer(app);
+    }
+
+    private static PasskeySettings settings(final String rpId, final String origins) {
+        final var local = PasskeySettings.local();
+        if (origins.isBlank()) {
+            return new PasskeySettings(rpId, local.rpName(), local.origins());
+        }
+        else {
+            return new PasskeySettings(rpId, local.rpName(), Set.of(origins.split(",")));
+        }
+    }
+
+    private static SureVote developer(final SureVote app) {
+        if ("true".equals(text("SUREVOTE_DEV_SIGN_IN"))) {
+            System.out.println("SureVote dev sign-in is enabled. Do not enable it in production.");
+            app.enableDevSignIn();
+            return app;
+        }
+        else {
+            return app;
+        }
     }
 
     private static SureVote provisioned(final SureVote app) {
@@ -75,8 +105,17 @@ public final class Main {
             final var admin = new SystemAdmin();
             admin.setId(UUID.fromString(id));
             admin.setName(text("SUREVOTE_SYSTEM_ADMIN_NAME"));
-            app.bootstrapSystemAdmin(admin);
+            enrolled(app, admin, text("SUREVOTE_SYSTEM_ADMIN_ENROLLMENT_TOKEN"));
             return app;
+        }
+    }
+
+    private static void enrolled(final SureVote app, final SystemAdmin admin, final String token) {
+        if (token.isBlank()) {
+            app.bootstrapSystemAdmin(admin);
+        }
+        else {
+            app.bootstrapSystemAdmin(admin, token);
         }
     }
 
