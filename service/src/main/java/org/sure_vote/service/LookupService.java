@@ -50,7 +50,7 @@ final class LookupService {
     }
 
     private LookupResult result(final Ballot ballot) {
-        final var votes = this.votesFor(ballot.getId());
+        final var votes = this.repository.inTenant(ballot.getTenantId(), () -> this.votesFor(ballot.getId()));
         return new LookupResult(ballot, votes);
     }
 
@@ -81,30 +81,16 @@ final class LookupService {
     }
 
     private Ballot findOrNull(final UUID electionId, final String hash) {
-        final var matched = new ArrayList<Ballot>();
-        final var ballots = this.repository.list(Ballot.class);
-        for (final var ballot : ballots) {
-            this.collectBallot(matched, ballot, electionId, hash);
-        }
-        if (matched.isEmpty()) {
-            return null;
-        }
-        else {
+        final var ballots = this.repository.ballotsByAccessHash(hash);
+        final var stream = ballots.stream();
+        final var matched = stream
+            .filter(ballot -> electionId == null || electionId.equals(ballot.getElectionId()))
+            .toList();
+        if (matched.size() == 1) {
             return matched.getFirst();
         }
-    }
-
-    private void collectBallot(
-        final List<Ballot> matched,
-        final Ballot ballot,
-        final UUID electionId,
-        final String hash
-    ) {
-        final var ballotElection = ballot.getElectionId();
-        final var accessHash = ballot.getVoterAccessHash();
-        final var matches = electionId.equals(ballotElection) && hash.equals(accessHash);
-        if (matches) {
-            matched.add(ballot);
+        else {
+            return null;
         }
     }
 

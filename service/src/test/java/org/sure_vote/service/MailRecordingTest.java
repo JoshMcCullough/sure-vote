@@ -105,11 +105,13 @@ class MailRecordingTest {
         final var delivery = capture.delivery;
         final var code = delivery.code();
         final var found = world.app.lookup(world.electionId, code, PASSPHRASE);
+        final var byCode = world.app.lookup(code, PASSPHRASE);
         final var missed = assertThrows(
             ConstraintException.class,
             () -> world.app.lookup(world.electionId, code)
         );
         final var lookedUp = found.ballot();
+        final var byCodeBallot = byCode.ballot();
         final var votes = found.votes();
         final var vote = votes.getFirst();
         final var storedPerson = world.repository.find(Person.class, personId);
@@ -127,6 +129,7 @@ class MailRecordingTest {
         final var entry = entries.getFirst();
         final var storedVotes = world.repository.list(Vote.class);
         final var storedVote = storedVotes.getFirst();
+        assertEquals(lookedUp.getId(), byCodeBallot.getId());
         assertEquals(ballotId, lookedUp.getId());
         assertEquals("Y", vote.getValue());
         assertEquals("no ballot for that code", missed.getMessage());

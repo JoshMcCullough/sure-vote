@@ -2,6 +2,7 @@ package org.sure_vote.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
@@ -73,6 +74,21 @@ class ElectionFlowTest {
         world.assertImported(first, second);
         this.assertMessage(() -> world.app.lookup(world.electionId, missing), "no ballot for that code");
         this.assertMessage(() -> world.app.lookup(world.electionId, "not-a-code"), "no ballot for that code");
+    }
+
+    @Test
+    void theCodeAloneOpensItsBallot() {
+        final var world = SampleElection.fptp();
+        final var ballot = world.castOne(world.slotA, "Y");
+        final var code = world.lastCode;
+        final var found = world.app.lookup(code, null);
+        final var votes = found.votes();
+        final var opened = found.ballot();
+        final var missing = AccessCodes.encode(AccessCodes.generate());
+        assertEquals(ballot.getId(), opened.getId());
+        assertEquals(1, votes.size());
+        this.assertMessage(() -> world.app.lookup(missing, null), "no ballot for that code");
+        this.assertMessage(() -> world.app.election(UUID.randomUUID()), "Missing Election");
     }
 
     @Test

@@ -484,6 +484,8 @@ class HttpElectionTest {
         final var posted = this.send("POST", postedPath, postedJson);
         final var postedBody = posted.body();
         final var postedValue = this.voteValue(postedBody);
+        final var byCode = this.send("POST", "/lookup", postedJson);
+        final var byCodeValue = this.voteValue(byCode.body());
         assertEquals(201, imported.statusCode());
         assertEquals("in-person", type);
         assertFalse(payload.contains(code));
@@ -491,6 +493,8 @@ class HttpElectionTest {
         assertEquals("Y", value);
         assertEquals(200, posted.statusCode());
         assertEquals("Y", postedValue);
+        assertEquals(200, byCode.statusCode());
+        assertEquals("Y", byCodeValue);
         assertFalse(lookedUpBody.contains(code));
         assertEquals(200, closed.statusCode());
         assertEquals("historical", status);

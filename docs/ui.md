@@ -12,7 +12,7 @@ A voter, or a person the voter asked to type the code, opens one ballot. A mail-
 
 Routes:
 
-- `/` explains the two areas and opens a lookup by election id.
+- `/` explains the two areas. It opens a ballot from the code and passphrase alone with `POST /lookup`, then opens that ballot's election page with the code and passphrase in router state, not in the address. It can also open a lookup by election id.
 - `/elections/:electionId` is the lookup.
 
 The lookup page:

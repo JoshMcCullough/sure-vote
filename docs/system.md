@@ -38,7 +38,7 @@ The normal deployment is one multi-tenant service run by Sure Vote Systems. A sm
 
 A tenant is one election authority: the customer that holds the operator key and owns the legal result. A county that runs elections for its towns is one tenant, and those towns are localities inside it. A town that runs its own elections is its own tenant on the shared host. It still does not run a separate installation.
 
-People, rolls, devices, places, and elections belong to one tenant. The same human in two authorities is two `Person` rows. Rows are not linked across tenants. Every table except the global `VoteChainValidator` carries `tenant_id`, copied from its parent and not changed afterward. The service sets the active tenant from the authenticated official, or from the election a public request names. A client-supplied tenant id is not the source.
+People, rolls, devices, places, and elections belong to one tenant. The same human in two authorities is two `Person` rows. Rows are not linked across tenants. Every table except the global `VoteChainValidator` carries `tenant_id`, copied from its parent and not changed afterward. The service sets the active tenant from the authenticated official. A public request does not name a tenant: the tenant comes from the ballot the voter's code opens, or from the election the request names. A client-supplied tenant id is not the source.
 
 The db enforces the boundary with row-level security on `tenant_id`. The recording service uses a writer role that cannot see another tenant. The public lookup service is a separate process and uses a read-only role. That role can read published definitions and, on the schedule below, public ledger rows. It cannot read the private roll, issuances, disputes, or sealed passphrases. Officials of one tenant cannot record into another tenant's election.
 
@@ -109,6 +109,8 @@ Sure Vote Systems patches the hosted service. A self-hosted instance's host patc
 ## Access code
 
 The voter receives an access code when their ballot is recorded. It is 32 random bytes, shown as base64url text without padding, and as a QR code of that same text. `Ballot.voterAccessHash` stores a one-way result defined in [verification.md](./verification.md). The code is not stored. The QR payload is the text code, not `voterAccessHash`, and not the ballot's integrity `hash`.
+
+Lookup needs only the voter's input: the code, plus the passphrase for mail-in. It does not need the election id or the tenant. `POST /lookup` finds the one ballot whose `voterAccessHash` matches, and the election-scoped routes also require that ballot to be in the named election. If more than one ballot matches, the lookup is a miss.
 
 An unknown submission gets "no ballot for that code." The page does not reveal whether a different submission would have matched.
 

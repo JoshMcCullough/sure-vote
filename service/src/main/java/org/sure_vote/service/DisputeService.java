@@ -35,13 +35,13 @@ final class DisputeService {
         final var found = this.lookup.lookup(electionId, code, passphrase);
         final var ballot = found.ballot();
         final var text = this.statement(statement);
-        return this.insert(ballot, text);
+        return this.repository.inTenant(ballot.getTenantId(), () -> this.insert(ballot, text));
     }
 
     List<BallotDispute> forCode(final UUID electionId, final String code, final String passphrase) {
         final var found = this.lookup.lookup(electionId, code, passphrase);
         final var ballot = found.ballot();
-        return this.forBallot(ballot.getId());
+        return this.repository.inTenant(ballot.getTenantId(), () -> this.forBallot(ballot.getId()));
     }
 
     int count(final UUID electionId) {

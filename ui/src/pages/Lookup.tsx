@@ -37,8 +37,8 @@ export function Lookup() {
   const electionId = params.electionId ?? ''
   const [election, setElection] = useState<Election | null>(null)
   const [count, setCount] = useState<number | null>(null)
-  const [code, setCode] = useState(codeFrom(location.state))
-  const [passphrase, setPassphrase] = useState('')
+  const [code, setCode] = useState(secretFrom(location.state, 'code'))
+  const [passphrase, setPassphrase] = useState(secretFrom(location.state, 'passphrase'))
   const [statement, setStatement] = useState('')
   const [result, setResult] = useState<LookupResult | null>(null)
   const [claims, setClaims] = useState<Dispute[]>([])
@@ -174,9 +174,9 @@ export function Lookup() {
   )
 }
 
-function codeFrom(state: unknown): string {
-  if (state && typeof state === 'object' && 'code' in state) {
-    const value = (state as { code?: unknown }).code
+function secretFrom(state: unknown, name: 'code' | 'passphrase'): string {
+  if (state && typeof state === 'object' && name in state) {
+    const value = (state as Record<string, unknown>)[name]
     if (typeof value === 'string') {
       return value
     }

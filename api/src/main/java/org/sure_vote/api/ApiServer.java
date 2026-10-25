@@ -200,6 +200,9 @@ public final class ApiServer implements HttpHandler {
         else if ("GET".equals(method) && this.electionAction(parts, "ballots")) {
             this.lookup(exchange, parts, uri);
         }
+        else if ("POST".equals(method) && this.named(parts, "lookup")) {
+            this.lookupByCode(exchange);
+        }
         else if ("POST".equals(method) && this.electionAction(parts, "lookup")) {
             this.lookupPosted(exchange, parts);
         }
@@ -341,6 +344,12 @@ public final class ApiServer implements HttpHandler {
         final var id = this.id(parts.get(1));
         final var code = this.query(uri, "code");
         final var result = this.app.lookup(id, code);
+        this.writeJson(exchange, 200, this.lookupResource(result));
+    }
+
+    private void lookupByCode(final HttpExchange exchange) throws IOException {
+        final var body = this.read(exchange, LookupBody.class);
+        final var result = this.app.lookup(body.code, body.passphrase);
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 

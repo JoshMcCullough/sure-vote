@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.Identifiable;
 
 public interface SureVoteRepository {
@@ -17,6 +18,10 @@ public interface SureVoteRepository {
     <T extends Identifiable> List<T> list(final Class<T> type);
 
     <T> T transaction(final Supplier<T> work);
+
+    List<Ballot> ballotsByAccessHash(final String voterAccessHash);
+
+    Optional<UUID> electionTenant(final UUID electionId);
 
     <T> T inTenant(final UUID tenantId, final Supplier<T> work);
 

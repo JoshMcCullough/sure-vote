@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import org.sure_vote.entity.Address;
 import org.sure_vote.entity.Ballot;
@@ -46,6 +47,7 @@ public final class SureVote {
     private final ValidatorService validators;
     private final RestoreService restores;
     private final SystemAdminService system;
+    private final SureVoteRepository repository;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -60,6 +62,17 @@ public final class SureVote {
         this.validators = new ValidatorService(repository, stores);
         this.restores = new RestoreService(repository, stores, this.validators);
         this.system = new SystemAdminService(repository, stores);
+        this.repository = repository;
+    }
+
+    private <T> T published(final UUID electionId, final Supplier<T> body) {
+        final var tenant = this.repository.electionTenant(electionId);
+        if (tenant.isEmpty()) {
+            throw new ConstraintException("Missing Election");
+        }
+        else {
+            return this.repository.inTenant(tenant.get(), body);
+        }
     }
 
     public SystemAdmin bootstrapSystemAdmin(final SystemAdmin admin) {
@@ -178,11 +191,11 @@ public final class SureVote {
     }
 
     public Election election(final UUID id) {
-        return this.definitions.election(id);
+        return this.published(id, () -> this.definitions.election(id));
     }
 
     public boolean demonstration(final UUID electionId) {
-        return this.definitions.demonstration(electionId);
+        return this.published(electionId, () -> this.definitions.demonstration(electionId));
     }
 
     public WorkspaceView workspace(final UUID tenantId, final UUID actor) {
@@ -234,15 +247,15 @@ public final class SureVote {
     }
 
     public List<HeadNotice> heads(final UUID electionId) {
-        return this.validators.heads(electionId);
+        return this.published(electionId, () -> this.validators.heads(electionId));
     }
 
     public List<VoteChainValidationResult> validationResults(final UUID electionId) {
-        return this.validators.results(electionId);
+        return this.published(electionId, () -> this.validators.results(electionId));
     }
 
     public List<VoteChainValidator> electionValidators(final UUID electionId) {
-        return this.validators.validators(electionId);
+        return this.published(electionId, () -> this.validators.validators(electionId));
     }
 
     public String restoreIncidentPayload(final UUID electionId, final String reason, final Instant timestamp) {
@@ -258,7 +271,7 @@ public final class SureVote {
     }
 
     public List<RestoreIncident> restoreIncidents(final UUID electionId) {
-        return this.restores.incidents(electionId);
+        return this.published(electionId, () -> this.restores.incidents(electionId));
     }
 
     public Ballot importBallot(final ImportBallot request) {
@@ -272,6 +285,10 @@ public final class SureVote {
         final UUID actor
     ) {
         return this.definitions.sealViewingPassphrase(personId, plaintext, viewingPublicKey, actor);
+    }
+
+    public LookupResult lookup(final String code, final String passphrase) {
+        return this.lookup.lookup(null, code, passphrase);
     }
 
     public LookupResult lookup(final UUID electionId, final String code) {
@@ -304,7 +321,7 @@ public final class SureVote {
     }
 
     public int disputeCount(final UUID electionId) {
-        return this.disputes.count(electionId);
+        return this.published(electionId, () -> this.disputes.count(electionId));
     }
 
     public List<BallotDispute> listDisputes(final UUID electionId, final UUID actor) {

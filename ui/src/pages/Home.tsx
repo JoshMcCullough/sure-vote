@@ -1,9 +1,30 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { api, messageOf } from '../api'
+
+type Found = {
+  ballot: {
+    electionId: string
+  }
+}
 
 export function Home() {
   const navigate = useNavigate()
+  const [code, setCode] = useState('')
+  const [passphrase, setPassphrase] = useState('')
   const [electionId, setElectionId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  async function openBallot(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    try {
+      const found = await api<Found>('POST', '/lookup', { code, passphrase })
+      navigate('/elections/' + found.ballot.electionId, { state: { code, passphrase } })
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
+  }
 
   function openLookup(event: FormEvent) {
     event.preventDefault()
@@ -26,9 +47,28 @@ export function Home() {
           Open one ballot with its access code. A mail-in ballot also needs the viewing passphrase.
           The page does not change the ballot. Checking a published chain does not require this app.
         </p>
+        {error ? <p className="banner" role="alert">{error}</p> : null}
+        <form onSubmit={(event) => void openBallot(event)}>
+          <label>
+            Access code
+            <input value={code} autoComplete="off" onChange={(event) => setCode(event.target.value)} />
+          </label>
+          <label>
+            Viewing passphrase
+            <input
+              value={passphrase}
+              type="password"
+              autoComplete="off"
+              onChange={(event) => setPassphrase(event.target.value)}
+            />
+          </label>
+          <div className="actions">
+            <button type="submit">Open my ballot</button>
+          </div>
+        </form>
         <form onSubmit={openLookup}>
           <label>
-            Election id
+            Or open an election by id
             <input value={electionId} onChange={(event) => setElectionId(event.target.value)} />
           </label>
           <div className="actions">

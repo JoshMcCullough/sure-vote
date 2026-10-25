@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.Election;
 import org.sure_vote.entity.HeldKey;
 import org.sure_vote.entity.HeldKeyPurpose;
 import org.sure_vote.entity.BallotIssuance;
@@ -82,6 +83,21 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
                 throw failure;
             }
         }
+    }
+
+    @Override
+    public List<Ballot> ballotsByAccessHash(final String voterAccessHash) {
+        final var ballots = this.list(Ballot.class);
+        final var stream = ballots.stream();
+        final var matched = stream.filter(ballot -> voterAccessHash.equals(ballot.getVoterAccessHash()));
+        return matched.toList();
+    }
+
+    @Override
+    public Optional<UUID> electionTenant(final UUID electionId) {
+        final var election = this.find(Election.class, electionId);
+        final var live = election.filter(row -> row.getDeletedAt() == null);
+        return live.map(Election::getTenantId);
     }
 
     @Override

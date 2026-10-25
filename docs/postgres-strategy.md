@@ -153,6 +153,8 @@ Enforcement: exclusion-style constraint over seat identity and date range.
 Constraint: a row's `tenant_id` matches its parent, and a production election is not `active` without an outside validator.
 Enforcement: row-level security on the writer role, `tenant_id = current_setting('app.tenant_id')::uuid`, plus insert triggers that copy `tenant_id` from the parent and reject a mismatch. The service sets `app.tenant_id`. It does not take the tenant from the client. The migration role bypasses row-level security, is logged, and is not used by the API.
 
+The public lookup sets no tenant. `lookup_ballots(voter_access_hash)` returns only the ballots with that hash, and `election_tenant(election_id)` returns only the tenant id of one election. Both are `security definer`. The service then reads that ballot's votes and disputes, and an election's public rows, inside that one tenant.
+
 A system admin request sets `app.system_admin_id` instead. `is_system_admin()` is true when that id is an active `system_admin` row. Under it the writer role reads and writes every `tenant` row and the `system_admin` rows, and no other tenant table. The first `system_admin` row may be inserted while the table is empty.
 
 ## 7) Immutability Rules for Ledger Tables

@@ -174,6 +174,16 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     }
 
     @Override
+    public List<Ballot> ballotsByAccessHash(final String voterAccessHash) {
+        return this.query(connection -> this.lookupBallots(connection, voterAccessHash));
+    }
+
+    @Override
+    public Optional<UUID> electionTenant(final UUID electionId) {
+        return this.query(connection -> this.tenantOf(connection, electionId));
+    }
+
+    @Override
     public <T> T inTenant(final UUID tenantId, final Supplier<T> body) {
         return this.scope(TENANT, tenantId, body);
     }
@@ -462,6 +472,59 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
         else {
             return Optional.empty();
+        }
+    }
+
+    private <T> T query(final SqlWork<T> body) {
+        final var joined = this.joined();
+        if (joined == null) {
+            return this.alone(body);
+        }
+        else {
+            return this.joinedQuery(joined, body);
+        }
+    }
+
+    private <T> T joinedQuery(final Connection connection, final SqlWork<T> body) {
+        try {
+            return body.run(connection);
+        }
+        catch (final SQLException failure) {
+            throw new IllegalStateException(failure.getMessage(), failure);
+        }
+    }
+
+    private List<Ballot> lookupBallots(final Connection connection, final String voterAccessHash)
+        throws SQLException {
+        final var statement = connection.prepareStatement("select * from lookup_ballots(?)");
+        try {
+            statement.setString(1, voterAccessHash);
+            return this.readList(statement, Ballot.class);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private Optional<UUID> tenantOf(final Connection connection, final UUID electionId) throws SQLException {
+        final var statement = connection.prepareStatement("select election_tenant(?)");
+        try {
+            statement.setObject(1, electionId);
+            return this.firstUuid(statement);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private Optional<UUID> firstUuid(final java.sql.PreparedStatement statement) throws SQLException {
+        final var result = statement.executeQuery();
+        try {
+            result.next();
+            return Optional.ofNullable(result.getObject(1, UUID.class));
+        }
+        finally {
+            result.close();
         }
     }
 
