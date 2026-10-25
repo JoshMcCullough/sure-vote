@@ -60,7 +60,7 @@ The service runs as several containers. Sessions live in PostgreSQL, not in a co
 
 ## Keys and hardware
 
-Sign-in needs only WebAuthn, so any FIDO2 key or platform passkey works. A FIDO-only key such as a Google Titan key is for sign-in only.
+Sign-in needs only WebAuthn, so any FIDO2 key or platform passkey works. A FIDO-only key such as a Google Titan key is a fine sign-in passkey for an official or admin who does not hold an operator or viewing key. A custody officer needs a signing-capable token.
 
 Operator and viewing keys need Ed25519 and X25519 on the token. Examples: a YubiKey 5 series key through OpenPGP (firmware 5.2.3 and later) or PIV (firmware 5.7 and later), or a Nitrokey 3. The host's backup key uses a YubiHSM 2, AWS CloudHSM, or AWS KMS.
 

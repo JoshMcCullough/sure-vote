@@ -157,7 +157,7 @@ Represents a specific voter registration event, which may include changes to the
 - `assignmentStatus` (Enum): The current status of the voting precinct assignment: current, historical, etc.
 
 ### BallotIssuance
-Private mark that this voter has already had a ballot accepted for this election. Mail-in recording writes it in the same transaction as the ballot. In person the pollbook writes it, and the voting machine never sees it. It is how decision 1 in [system.md](./system.md) is enforced today. The decided design, not built, marks it `issued` before recording and `received` later in a shuffled batch with a coarse timestamp. See [Marking a ballot received](./system.md#marking-a-ballot-received).
+Private mark that this voter has already had a ballot accepted for this election. Mail-in recording writes it in the same transaction as the ballot. In person the pollbook writes it, and the voting machine never sees it. It is how decision 1 in [system.md](./system.md) is enforced today. The decided design, not built, marks it `issued` before recording and, after the ballot commits, `received` in a shuffled in-memory batch of issuance ids with a coarse timestamp. See [Marking a ballot received](./system.md#marking-a-ballot-received).
 
 - Administrative audit fields
 - `person` (Reference to Person): The voter the ballot was accepted for.
