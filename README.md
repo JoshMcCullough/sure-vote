@@ -2,7 +2,7 @@
 
 SureVote is an election authority's system of record and a public ballot ledger. Officials keep the voter roll and record in-person and mail ballots. Each recorded vote is appended to a hash chain for its race. A voter can open their ballot with an access code only they hold. Anyone can recompute the chain and check a published result against it.
 
-The chain lives in PostgreSQL. A copy of the chain head held outside that db is what makes a later rewrite detectable. [system.md](./docs/system.md) is the operating model: who does what, what is public, how a ballot is recorded, and which decisions are still open.
+The chain lives in PostgreSQL. A copy of the chain head held outside that db is what makes a later rewrite detectable. [system.md](./docs/system.md) is the operating model: who does what, what is public, how a ballot is recorded, and which decisions are still open. [auth-proposal.md](./docs/auth-proposal.md) proposes how a request will prove who sent it.
 
 ## Goals
 
