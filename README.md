@@ -45,7 +45,7 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 
 ## Code
 
-`./gradlew check` compiles the modules, runs Checkstyle, and runs the tests. The HTTP API is the JDK server with Jackson for JSON. Lombok remains only on the administrative `Resource` base. Response types do not extend it.
+`./gradlew check` compiles the modules, runs Checkstyle, and runs the tests. It needs JDK 25, which the Gradle toolchain targets, and Docker for the PostgreSQL tests. The HTTP API is the JDK server with Jackson for JSON. Lombok remains only on the administrative `Resource` base. Response types do not extend it.
 
 The in-person path is implemented: seal a ballot, import it, append one chain entry per vote, and look the ballot up with the access code. The plaintext code is not stored. `ballotHash` inside a vote is the SHA-256 of that ballot's payload with `voteHashes` set to `[]`. It is not `Ballot.hash`. See [verification.md](./docs/verification.md).
 

@@ -23,6 +23,7 @@
 
 ## Build and Test Workflows
 - Use Gradle wrapper from repo root (`./gradlew`), not system Gradle.
+- Java: JDK 25. Every module's Gradle toolchain is `JavaLanguageVersion.of(25)`, and Gradle must run on JDK 25 (wrapper 9.5.0 supports it).
 - Check command: `./gradlew check --console=plain`. That runs Checkstyle, the tests, and the JaCoCo report. Checkstyle is `14.3.0` with `config/checkstyle/checkstyle.xml` and `maxWarnings = 0`. The `checkstyle` configuration needs both the Checkstyle tool jar and `project(':style-checks')`. The aggregate coverage report is `testCodeCoverageReport`. `check` also runs `coverageVerification`, which fails below 85% instruction coverage on that same aggregate. The minimum is 85% because unused schema types stay in the denominator.
 - Run a single module with a task-qualified path, for example `./gradlew :service:test --console=plain`.
 
