@@ -2,7 +2,7 @@
 
 Status: design only. Nothing here is built. This is decision 3 in [system.md](./system.md#open-decisions): a voter casts a binding ballot from their own phone through a React Native app. The mail and in-person paths do not change and keep their `BallotIssuance` rows.
 
-Decided: device voting **requires** a blind-signed one-time token. The voter signs in only to get that token. The ballot is cast later, separately, with the token and nothing that names the voter or the device. Without the token there is no device channel.
+Decided: device voting **requires** a blind-signed one-time token. Also decided: a lost token is unrecoverable ([Lost tokens](#lost-tokens)), issuance opens a configurable number of days before voting and closes when polls close ([Issuance window](#issuance-window)), and there is one RFC 9474 key per ballot style per election ([Keys](#keys)). The voter signs in only to get that token. The ballot is cast later, separately, with the token and nothing that names the voter or the device. Without the token there is no device channel.
 
 ## Goals
 
@@ -39,7 +39,12 @@ A lost phone before issuance is a new enrollment code from the clerk, which revo
 
 ## Keys
 
-- **Token issuing key.** RSA-3072, one per election and ballot style, used with RSA blind signatures, `RSABSSA-SHA384-PSS-Randomized` from RFC 9474. One key per style lets the token prove which ballot the voter may cast without carrying a voter id; the anonymity set is everyone with that style who got a token. The public keys are listed in the election definition, so the operator signature freezes them before activate. The private key signs on demand during the window, so it sits in an HSM that can do raw RSA on a blinded message, such as AWS CloudHSM or a YubiHSM 2. AWS KMS signs only whole messages and cannot do this. The key is destroyed after close.
+- **Token issuing key.** Decided: one RSA blind-signature key per ballot style per election, RSA-3072 with `RSABSSA-SHA384-PSS-Randomized` from RFC 9474. Why one per style:
+  - The token has to bind to the voter's ballot style, so the casting endpoint can refuse a ballot for races the voter may not vote in, without learning who the voter is. The key that signed the token is that binding.
+  - RFC 9474 signs a fully blind message and cannot carry public metadata. A single key per election would need partially blind signatures (`draft-irtf-cfrg-partially-blind-rsa`), which is not yet an RFC and has fewer reviewed implementations.
+  - The style is already visible on the ballot: the payload names the precinct, and the races it holds show the style. A per-style key therefore narrows the anonymity set no further than the ballot itself does.
+  - Small styles are still a risk, because the style alone can come close to naming a voter. See [Small styles](#small-styles).
+  - Lifecycle: the public keys are listed in the election definition, so the operator signature publishes and freezes them at activate, before any issuance window opens. The private keys sign on demand only while issuance is open, in an HSM that can do raw RSA on a blinded message, such as AWS CloudHSM or a YubiHSM 2. AWS KMS signs only whole messages and cannot do this. After polls close the keys sign nothing. After certification (the signed close), each private key is destroyed, or archived offline under the two-officer rule when the authority's retention rules require it. The public keys stay in the definition for good.
 - **Voter passkey.** Ordinary WebAuthn, used only at the issuer.
 - **Token secret.** 32 random bytes generated in the app, never sent to the issuer.
 - **Access code.** 32 random bytes generated in the app at cast, with `voterAccessHash` computed in the app as for in person (SHA-256 over the raw bytes; see [verification.md](./verification.md)). The code is never sent.
@@ -48,17 +53,42 @@ A lost phone before issuance is a new enrollment code from the clerk, which revo
 ## Getting a token
 
 1. The app signs in at `https://issue.<host>` with the passkey.
-2. The issuer checks the voter is eligible, the election is `active` or in its token window, and the voter has no accepted `BallotIssuance` for the election. It answers with the voter's ballot style key id. A voter with no party in a primary picks a slate here, which fixes the style.
+2. The issuer checks the voter is eligible, the election is `active`, now is inside the voter's [issuance window](#issuance-window), and the voter has no accepted `BallotIssuance` for the election. It answers with the voter's ballot style key id. A voter with no party in a primary picks a slate here, which fixes the style.
 3. The app draws the token secret `t` and builds the message `m = "SureVote-device-token-v1" || electionId || styleKeyId || t`. It blinds `m` under the style's public key and sends only the blinded message.
 4. In one transaction the issuer writes a `BallotIssuance` with channel `device` and status `issued`, then signs the blinded message. If the transaction fails, nothing is signed. A second request for the same voter is refused, like a second in-person acceptance.
-5. The app unblinds the signature to `s`, checks `s` verifies on `m`, and keeps `(t, s)` in the platform keystore. The sign-in session ends. The app drops its cookies for the issuer host.
+5. The app unblinds the signature to `s`, checks `s` verifies on `m`, and keeps `(t, s)` in the platform's secure storage (iOS Keychain with this-device-only access, Android Keystore-backed encrypted storage), excluded from cloud backup. The sign-in session ends. The app drops its cookies for the issuer host.
+6. The app then shows, before the voter can leave the screen: "This token is your ballot. SureVote does not keep a copy. If you lose this phone or delete the app before you vote, the token cannot be replaced." The voter must acknowledge it. The same sentence is on any printout or email about device voting, such as the enrollment letter. No printout ever carries the token.
 
 The device `BallotIssuance` is never marked `received`. The issuer does not know when, or whether, the token is spent, and must not. It is the issuer's spend of that voter's eligibility. Mail and in-person paths see an accepted row and refuse a second ballot.
+
+## Issuance window
+
+Decided: issuance opens a configurable number of days before voting starts and closes when polls close.
+
+- `Election.deviceTokenLeadDays` (Integer, optional) is the default. Empty means device voting is off for that election. The window opens at `votingStartDate` minus that many days and closes at `votingEndDate`, the existing polls-close instant.
+- An override can be set per district or per precinct. The most specific one wins: precinct, then district, then election.
+  - Precinct: `ElectionVotingPrecinctAssignment.deviceTokenLeadDays`, on the row that already ties a precinct to the election.
+  - District: a new `ElectionDistrictSetting` row (`election`, `votingDistrict`, `deviceTokenLeadDays`), unique on (`election`, `votingDistrict`). A precinct reaches its districts through `PrecinctDistrict`.
+  - A precinct in two districts with different overrides and no precinct override is ambiguous. The service refuses to activate until a precinct override settles it.
+- The resolved opening for each precinct goes into the signed election definition, so validators and voters see the same window the issuer enforces. Changing it after activate is not possible, like every other part of the definition.
+- Issuance needs the election `active`, because the style keys are only published by the signed definition. Officials therefore activate before the earliest opening. Ballots are still refused before `votingStartDate`: a token fetched early is held in the app until voting starts, and the random delay below runs from the later of issuance and voting start.
+- Casting closes at `votingEndDate` too. A token that is not spent by then is never spent.
+
+Opening earlier widens the anonymity set for timing, because more tokens are outstanding when the first device ballots arrive.
+
+## Lost tokens
+
+Decided: a lost token is unrecoverable by design. The server never stores the unblinded token or its signature. It cannot tell a lost token from a spent one, and it cannot issue a replacement without letting one voter cast twice.
+
+- The token is a bearer credential: whoever holds `(t, s)` can cast that style's ballot once. The app keeps it only in secure device storage, never shows it as plain text, and never puts it on a printout.
+- The app offers an optional backup: an export file or a QR code, behind a warning that anyone with the backup can cast the ballot and that the voter should keep it like cash. The backup is the voter's to keep. SureVote does not store it and does not offer a cloud copy.
+- If the token is lost, the voter's fallback is the jurisdiction's normal in-person provisional ballot, under its existing provisional-ballot rules. The pollbook sees the device `BallotIssuance` and routes the voter to a provisional ballot instead of a regular one.
+- The tradeoff: the system cannot say whether that lost token was spent without linking the voter to a ballot, which the design exists to prevent. Officials adjudicate the provisional ballot with what they have: the device issuance, the voter's statement, and, at close, the style's issued and spent counts. If a style has as many spent tokens as issued, every device token in it was used, and a provisional from that style is a likely second ballot. Otherwise it is not decidable for one voter. This is the same position as a mailed ballot that the voter says never arrived.
 
 ## Casting
 
 1. The voter fills in the ballot in the app from the signed definition, which the app fetched and verified against the operator key. The app enforces the style and the rules in [What may be on a ballot](./system.md#what-may-be-on-a-ballot).
-2. The app waits a random delay before sending. It schedules the cast for a uniformly random time between 10 and 60 minutes after token issuance, but never later than a safety margin before the window ends. If the voter casts more than an hour after issuance, the delay already exists and the app sends at once. The voter sees "your ballot will be sent at about 14:20" and can leave the app; the cast runs as a background task, and runs at next open if the OS killed it.
+2. The app waits a random delay before sending. It schedules the cast for a uniformly random time between 10 and 60 minutes after the later of token issuance and `votingStartDate`, but never later than a safety margin before the window ends. If the voter casts more than an hour after issuance, the delay already exists and the app sends at once. The voter sees "your ballot will be sent at about 14:20" and can leave the app; the cast runs as a background task, and runs at next open if the OS killed it.
 3. The app sends `POST https://cast.<host>/device-ballots` with the ballot payload, the vote payloads, `t`, `s`, and `styleKeyId`. The request uses a separate HTTP client: no cookie jar, no `Authorization`, no custom headers beyond `Content-Type`, a generic user agent, and no TLS session resumption shared with the issuer host. It goes through an Oblivious HTTP relay (RFC 9458) run by a party other than the host when one is available, so the casting host sees the relay's address, not the voter's.
 4. The casting endpoint, in one transaction:
    - verifies `s` on `m` under the named style key, and that the key belongs to this election and is still in its window;
@@ -92,14 +122,18 @@ A validator checks every proof under the right key, that no `tokenHash` repeats,
 ## Privacy limits
 
 - **Timing.** The host sees issuance times and, truncated to the hour, cast times. The random delay, the hour truncation, and a relay make a match a guess among everyone of that style who got a token earlier. Early in the window, or in a small style, that guess can be good.
-- **Small styles.** The anonymity set is per style. A style with very few device voters can be close to identifying. Below a threshold the authority should not offer device voting for that style.
+- <a id="small-styles"></a>**Small styles.** The anonymity set is per style, and a style with very few voters can be close to identifying, with or without device voting. Mitigations, chosen per election when the definition is built:
+  - a minimum style size: device voting is off for a style whose eligible voters are below the threshold;
+  - merging: a tiny precinct shares a style key and is reported with a neighboring precinct that has the same races, so its device ballots name the merged group, not the precinct;
+  - flagging: the definition marks the style as small, the issuer warns the voter that their ballot may be identifiable, and the canvass statement lists the flagged styles.
 - **The app is a trusted client.** It sees the selections and the code. Open source and reproducible builds help. A voter can check the result by looking the ballot up on another device with the code.
 - **Coercion.** Same as in person: the access code is a bearer token, and someone standing over the voter sees the ballot. This design adds no coercion resistance.
-- **Lost token.** If the phone dies after issuance and before cast, the token is gone with it. The issuer cannot tell whether it was spent, so it cannot safely issue another.
+- **Lost token.** Unrecoverable by design; see [Lost tokens](#lost-tokens). The provisional fallback cannot be decided for one voter without linking.
 
 ## Data model changes (proposed, not built)
 
-- `ElectionDeviceKey`: `electionId`, `ballotStyleKey` (the precinct and party it covers), `keyId`, `publicKey`, listed in the signed definition.
+- `ElectionDeviceKey`: `electionId`, `ballotStyleKey` (the precinct, or merged precinct group, and party it covers), `keyId`, `publicKey`, `small` (Boolean), listed in the signed definition.
+- `Election.deviceTokenLeadDays`, `ElectionVotingPrecinctAssignment.deviceTokenLeadDays`, and `ElectionDistrictSetting` for the [issuance window](#issuance-window).
 - `SpentToken`: `electionId`, `keyId`, `tokenHash`, `tokenSignature`, `ballotId`. Insert-only, unique on `(electionId, tokenHash)`, published at close.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row has the style key id and no recording place.
 - `BallotType.DEVICE`.
@@ -107,18 +141,18 @@ A validator checks every proof under the right key, that no `tokenHash` repeats,
 
 ## Open questions for Josh
 
-1. **Lost token after issuance.** Strand the voter, or allow a provisional in-person ballot that is counted only if, at close, the voter's style has fewer spent tokens than issued? The second leaks a little and needs officials to adjudicate.
-2. **Token window.** Issue only while the election is `active`, or open issuance earlier so tokens can be fetched days before casting, which widens the anonymity set a lot?
-3. **Key granularity.** One key per ballot style, or partially blind RSA with public metadata (`draft-irtf-cfrg-partially-blind-rsa`), which uses one key per election but is not yet an RFC?
-4. **Relay.** Require an Oblivious HTTP relay run by an outside party, make it best-effort, or offer Tor as an option?
-5. **Minimum anonymity set.** What threshold of eligible device voters per style turns device voting off for that style?
-6. **Delay bounds.** Is 10 to 60 minutes the right default, and should the voter be able to shorten it near the end of the window?
-7. **Timestamp truncation.** Hour, or day? Day loses the ordering within a day that a validator might want for a witness gap.
-8. **Enrollment.** Mailed code only, in person only, or both? Identity proofing beyond the roll is the authority's call; the system needs to know which it supports.
-9. **Coercion and re-voting.** Accept bearer-code semantics for version one, or plan for a later scheme where a voter can recast and only the last counts?
-10. **Import cadence.** How often the import workstation appends device batches during the window, and what minimum batch size it waits for. More often means fresher heads for validators; bigger batches hide arrival order better.
-11. **HSM.** CloudHSM in the host account, or a YubiHSM 2 in the authority's custody connected to the issuer? The second fits the custody rules better but is harder to run online for a whole window.
+Decided and moved into the sections above: lost tokens, the issuance window, and key granularity.
+
+1. **Relay.** Require an Oblivious HTTP relay run by an outside party, make it best-effort, or offer Tor as an option?
+2. **Small-style threshold.** What minimum eligible voters per style, and which mitigation is the default: turn device voting off, merge, or flag?
+3. **Delay bounds.** Is 10 to 60 minutes the right default, and should the voter be able to shorten it near the end of the window?
+4. **Timestamp truncation.** Hour, or day? Day loses the ordering within a day that a validator might want for a witness gap.
+5. **Enrollment.** Mailed code only, in person only, or both? Identity proofing beyond the roll is the authority's call; the system needs to know which it supports.
+6. **Coercion and re-voting.** Accept bearer-code semantics for version one, or plan for a later scheme where a voter can recast and only the last counts?
+7. **Import cadence.** How often the import workstation appends device batches during the window, and what minimum batch size it waits for. More often means fresher heads for validators; bigger batches hide arrival order better.
+8. **HSM.** CloudHSM in the host account, or a YubiHSM 2 in the authority's custody connected to the issuer? The second fits the custody rules better but is harder to run online for a whole window.
+9. **Ambiguous district overrides.** Refusing activation (the current design) or a fixed rule such as "the latest opening wins"?
 
 ## Not in this design
 
-The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added, because questions 1, 2, and 3 change the API and the schema.
+The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added. The decided parts fix the token, key, and window shapes, but the relay, enrollment, and HSM questions still change the services' API and deployment.
