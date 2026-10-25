@@ -1,0 +1,19 @@
+{
+  "name": "sure-vote-infra",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Infrastructure as code for SureVote. Synth only. Nothing here deploys.",
+  "scripts": {
+    "build": "tsc",
+    "synth": "tsc && node dist/bin/surevote.js",
+    "test": "tsc && node --test dist/test/"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.274.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.3"
+  }
+}
