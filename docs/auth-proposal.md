@@ -83,5 +83,5 @@ Every signing step must also run with a software key, so tests, development, and
 
 - New `Session` and `Credential` tables. A `Session` names either one tenant or the system scope, never both.
 - The API resolves the session before routing and replaces `SureVote-Actor-Id`. The service opens each request with `inTenant` or `asSystemAdmin` from the session.
-- The app connects as a non-owner writer role. The owner stays the migration role.
+- The app connects as a non-owner writer role. The owner stays the migration role. Built, through `SUREVOTE_JDBC_APP_USER`.
 - The first system admin is still created from the host configuration, then enrolls a key.

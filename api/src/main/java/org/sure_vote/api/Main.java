@@ -120,8 +120,17 @@ public final class Main {
     }
 
     private static JdbcSureVoteRepository open(final String url, final String user, final String password) {
+        final var writer = text("SUREVOTE_JDBC_APP_USER");
         JdbcSureVoteRepository.migrate(url, user, password);
-        return JdbcSureVoteRepository.open(url, user, password);
+        if (writer.isBlank()) {
+            System.out.println("SureVote connects as the table owner, which bypasses row-level security. "
+                + "Set SUREVOTE_JDBC_APP_USER outside local development.");
+            return JdbcSureVoteRepository.open(url, user, password);
+        }
+        else {
+            JdbcSureVoteRepository.grantWriter(url, user, password, writer);
+            return JdbcSureVoteRepository.open(url, writer, text("SUREVOTE_JDBC_APP_PASSWORD"));
+        }
     }
 
     private static String text(final String name) {

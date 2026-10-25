@@ -182,7 +182,7 @@ On `vote_chain_validation_result`, block changes to the payload, hash, signature
 
 - Use migration tooling from day one (Flyway).
 - Use separate db roles:
-  - app writer role (limited DML, used by the recording service, row-level security on `tenant_id`)
+  - app writer role (limited DML, used by the recording service, row-level security on `tenant_id`). Built: `SUREVOTE_JDBC_APP_USER` names an existing role, and startup grants it `usage` on the schema and `select`, `insert`, `update` on every table after migrating. It has no `delete`. The public lookup runs through the same role and the `security definer` functions in `V7__public_lookup.sql`; a separate read-only public role is not built.
   - public verifier role (`SELECT` on the published-definition tables, chain headers, validator rows, and validation results; `SELECT` on ballot, vote, and chain-entry bodies only when the election is `historical`; no access to `person`, `voter_registration`, issuance, dispute, or passphrase columns; no access to an `address` row that is a person's address)
   - read-only analytics role for officials, still scoped by row-level security to one tenant
   - migration/admin role (bypasses row-level security, logged, not used by the API)

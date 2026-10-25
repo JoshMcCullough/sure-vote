@@ -123,6 +123,24 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         flyway.migrate();
     }
 
+    public static void grantWriter(final String url, final String user, final String password, final String role) {
+        if (role == null || !role.matches("[a-z_][a-z0-9_]{0,62}")) {
+            throw new IllegalArgumentException("writer role must be a lowercase postgres identifier");
+        }
+        else {
+            final var owner = open(url, user, password);
+            owner.alone(connection -> owner.granted(connection, role));
+        }
+    }
+
+    private Integer granted(final Connection connection, final String role) throws SQLException {
+        final var sql = "do $$ begin "
+            + "execute format('grant usage on schema %I to " + role + "', current_schema()); "
+            + "execute format('grant select, insert, update on all tables in schema %I to " + role + "', "
+            + "current_schema()); end $$";
+        return this.execute(connection, sql);
+    }
+
     public static JdbcSureVoteRepository open(final String url, final String user, final String password) {
         final var source = new PGSimpleDataSource();
         source.setURL(url);

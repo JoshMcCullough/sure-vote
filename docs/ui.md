@@ -81,7 +81,7 @@ Create a recording device before activate. Devices lock once any election of the
 
 Vite, React, and TypeScript. No second state library. The dev server proxies the API prefixes to `http://127.0.0.1:8080`. Production serves `ui/dist` from the JDK API at `/app`. Do not add CORS until a separate host requires it.
 
-`./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_STATIC` overrides the static root. The default root is `ui/dist`, and it is mounted only when `index.html` is there.
+`./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_JDBC_APP_USER` and `SUREVOTE_JDBC_APP_PASSWORD` name the writer role the API connects as: the process migrates as the owner, grants that existing role `select`, `insert`, and `update` on every table, and opens the store as the role, so row-level security applies. Without them it connects as the owner and prints a warning. `SUREVOTE_STATIC` overrides the static root. The default root is `ui/dist`, and it is mounted only when `index.html` is there.
 
 From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run build` writes `ui/dist`.
 
