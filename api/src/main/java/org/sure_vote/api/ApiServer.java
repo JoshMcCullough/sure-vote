@@ -66,6 +66,7 @@ import org.sure_vote.service.HeadNotice;
 import org.sure_vote.service.ImportBallot;
 import org.sure_vote.service.ImportVote;
 import org.sure_vote.service.LookupResult;
+import org.sure_vote.service.PlaceReconciliation;
 import org.sure_vote.service.RestoreRequest;
 import org.sure_vote.service.SureVote;
 import org.sure_vote.service.ValidationRequest;
@@ -204,6 +205,9 @@ public final class ApiServer implements HttpHandler {
         else if ("POST".equals(method) && this.electionAction(parts, "close")) {
             this.closeElection(exchange, parts);
         }
+        else if ("GET".equals(method) && this.electionAction(parts, "reconciliation")) {
+            this.reconciliation(exchange, parts);
+        }
         else if ("POST".equals(method) && this.issuanceVoid(parts)) {
             this.voidIssuance(exchange, parts);
         }
@@ -321,7 +325,7 @@ public final class ApiServer implements HttpHandler {
         final var saved = this.app.asImport(
             signed,
             body.electionId,
-            (tenantId, actor) -> this.app.importBallot(this.importRequest(body, tenantId, actor))
+            (tenantId, actor) -> this.app.importBallot(this.importRequest(body, tenantId, this.recorder(body, actor)))
         );
         this.writeJson(exchange, 201, this.ballotResource(saved));
     }
@@ -357,6 +361,27 @@ public final class ApiServer implements HttpHandler {
             () -> this.app.close(id, signatures, body.canvassSignature, actor.id())
         );
         this.writeJson(exchange, 200, this.electionResource(saved));
+    }
+
+    private void reconciliation(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.requests.official(exchange);
+        final var id = this.id(parts.get(1));
+        final var rows = this.app.inElection(actor, id, () -> this.app.reconciliation(id));
+        final var body = new ArrayList<Map<String, Object>>();
+        for (final var row : rows) {
+            body.add(this.reconciliationResource(row));
+        }
+        this.writeJson(exchange, 200, body);
+    }
+
+    private Map<String, Object> reconciliationResource(final PlaceReconciliation row) {
+        final var body = new LinkedHashMap<String, Object>();
+        body.put("recordingPlaceId", row.recordingPlaceId());
+        body.put("issued", row.issued());
+        body.put("received", row.received());
+        body.put("ballots", row.ballots());
+        body.put("matched", row.matched());
+        return body;
     }
 
     private void voidIssuance(final HttpExchange exchange, final List<String> parts) throws IOException {
@@ -638,6 +663,15 @@ public final class ApiServer implements HttpHandler {
         issuance.setElectionId(body.electionId);
         issuance.setRecordingPlaceId(body.recordingPlaceId);
         return issuance;
+    }
+
+    private UUID recorder(final BallotBody body, final UUID keyActor) {
+        if (body.recordedBy == null) {
+            return keyActor;
+        }
+        else {
+            return body.recordedBy;
+        }
     }
 
     private ImportBallot importRequest(final BallotBody body, final UUID tenantId, final UUID actor) {

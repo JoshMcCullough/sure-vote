@@ -49,7 +49,7 @@ class ElectionFlowTest {
         final var world = SampleElection.fptp();
         final var voter = world.person("Vera", "Voter");
         final var first = world.accept(voter);
-        this.assertMessage(() -> world.accept(voter), "Voter already has an accepted issuance");
+        this.assertMessage(() -> world.accept(voter), "Voter already has an issued ballot");
         assertNotNull(first);
     }
 

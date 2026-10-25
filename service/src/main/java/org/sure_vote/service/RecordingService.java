@@ -7,7 +7,6 @@ import java.util.UUID;
 
 import org.sure_vote.entity.AssignmentStatus;
 import org.sure_vote.entity.Ballot;
-import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.Candidate;
@@ -15,8 +14,6 @@ import org.sure_vote.entity.ChainStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
-import org.sure_vote.entity.IssuanceStatus;
-import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.RecordingDevice;
@@ -51,12 +48,14 @@ final class RecordingService {
         return this.repository.transaction(() -> this.importLocked(request));
     }
 
+    void check(final ImportBallot request) {
+        this.repository.transaction(() -> this.checked(request));
+    }
+
     private Ballot importLocked(final ImportBallot request) {
         final var context = this.checked(request);
         final var prepared = this.prepare(context.election, request);
-        final var ballot = this.storeBallot(context, request, prepared);
-        this.issueMail(request);
-        return ballot;
+        return this.storeBallot(context, request, prepared);
     }
 
     private ImportContext checked(final ImportBallot request) {
@@ -164,28 +163,6 @@ final class RecordingService {
         else if (!recordedBy.equals(actorId)) {
             throw new ConstraintException("mail-in recordedBy is the staff principal");
         }
-    }
-
-    private void issueMail(final ImportBallot request) {
-        if (request.type() == BallotType.MAIL_IN || request.type() == BallotType.ABSENTEE) {
-            this.insertIssuance(request);
-        }
-    }
-
-    private void insertIssuance(final ImportBallot request) {
-        final var person = this.stores.require(Person.class, request.personId());
-        final var personTenant = person.getTenantId();
-        final var issuance = new BallotIssuance();
-        this.stores.sameTenant(request.tenantId(), personTenant, "Person");
-        this.stores.require(person.getDeletedAt() == null, "Person is deleted");
-        issuance.setId(UUID.randomUUID());
-        issuance.setTenantId(request.tenantId());
-        issuance.setPersonId(request.personId());
-        issuance.setElectionId(request.electionId());
-        issuance.setRecordingPlaceId(request.recordingPlaceId());
-        issuance.setStatus(IssuanceStatus.ACCEPTED);
-        issuance.setAcceptedAt(Instant.now());
-        this.stores.add(issuance, request.actorId());
     }
 
     private void requireAssignment(final UUID electionId, final UUID precinctId) {

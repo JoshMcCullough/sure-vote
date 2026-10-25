@@ -14,6 +14,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.sure_vote.api.ApiServer;
+import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.VoteChain;
@@ -46,6 +47,12 @@ class HttpElectionTest {
     void importLookupAndClose() throws Exception {
         final var world = SampleElection.fptp();
         this.use(world, () -> this.record(world));
+    }
+
+    @Test
+    void aSignedMailImportLeavesTheIssuanceIssued() throws Exception {
+        final var world = SampleElection.hostedMail();
+        this.use(world, () -> this.mailImport(world));
     }
 
     @Test
@@ -451,11 +458,42 @@ class HttpElectionTest {
         final var stored = world.repository.find(org.sure_vote.entity.BallotIssuance.class, UUID.fromString(id));
         final var issuance = stored.orElseThrow();
         assertEquals(201, created.statusCode());
-        assertEquals("accepted", this.text(createdBody, "status"));
+        assertEquals("issued", this.text(createdBody, "status"));
         assertEquals(voter.toString(), this.text(createdBody, "personId"));
         assertEquals(200, voided.statusCode());
         assertEquals("voided", status);
         assertEquals(IssuanceStatus.VOIDED, issuance.getStatus());
+    }
+
+    private void mailImport(final SampleElection world) throws Exception {
+        final var personId = world.person("Mae", "Voter");
+        final var sealed = world.sealedMail(BallotType.MAIL_IN, personId, world.actor);
+        final var keyId = "import:" + world.electionId;
+        final var body = this.ballotJson(sealed, "mail-in");
+        final var imported = this.signed("/ballots", body, keyId, world.importKey.seed(), NONCE);
+        final var path = "/elections/" + world.electionId + "/reconciliation";
+        final var report = this.send("GET", path, null);
+        final var visitor = this.sendUnsigned("GET", path, null);
+        final var rows = this.json.readTree(report.body());
+        final var row = rows.get(0);
+        final var issuances = world.repository.list(org.sure_vote.entity.BallotIssuance.class);
+        final var issuance = issuances.getFirst();
+        final var place = row.get("recordingPlaceId");
+        final var matched = row.get("matched");
+        assertEquals(201, imported.statusCode());
+        assertEquals(IssuanceStatus.ISSUED, issuance.getStatus());
+        assertEquals(200, report.statusCode());
+        assertEquals(world.officeId.toString(), place.asText());
+        assertEquals(1, this.count(row, "issued"));
+        assertEquals(0, this.count(row, "received"));
+        assertEquals(1, this.count(row, "ballots"));
+        assertTrue(matched.asBoolean());
+        assertEquals(401, visitor.statusCode());
+    }
+
+    private int count(final com.fasterxml.jackson.databind.JsonNode row, final String field) {
+        final var node = row.get(field);
+        return node.asInt();
     }
 
     private void record(final SampleElection world) throws Exception {
@@ -669,7 +707,10 @@ class HttpElectionTest {
     }
 
     private String ballotJson(final SampleElection world) throws Exception {
-        final var sealed = world.sealed(world.slotA, "Y");
+        return this.ballotJson(world.sealed(world.slotA, "Y"), "in-person");
+    }
+
+    private String ballotJson(final ImportBallot sealed, final String wireType) throws Exception {
         final var votes = sealed.votes();
         final var vote = votes.getFirst();
         final var candidateId = vote.raceCandidateId();
@@ -691,7 +732,7 @@ class HttpElectionTest {
         voteRow.put("entrySignature", vote.entrySignature());
         body.put("electionId", electionId.toString());
         body.put("votingPrecinctId", precinctId.toString());
-        body.put("type", "in-person");
+        body.put("type", wireType);
         body.put("recordingDeviceId", deviceId.toString());
         body.put("recordingPlaceId", placeId.toString());
         body.put("recordedBy", recordedBy.toString());
@@ -699,7 +740,14 @@ class HttpElectionTest {
         body.put("voterAccessHash", sealed.voterAccessHash());
         body.put("signature", sealed.signature());
         body.put("votes", rows);
+        this.putPerson(body, sealed.personId());
         return this.json.writeValueAsString(body);
+    }
+
+    private void putPerson(final LinkedHashMap<String, Object> body, final UUID personId) {
+        if (personId != null) {
+            body.put("personId", personId.toString());
+        }
     }
 
     private String closeJson(final SampleElection world) throws Exception {

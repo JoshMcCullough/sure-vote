@@ -187,7 +187,7 @@ class DefinitionRulesTest {
         world.app.voidIssuance(first, "machine not started", world.actor);
         this.assertMessage(
             () -> world.app.voidIssuance(first, "again", world.actor),
-            "Only an accepted issuance can be voided"
+            "Only an issued ballot can be voided"
         );
     }
 

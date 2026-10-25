@@ -83,7 +83,7 @@ class InMemorySureVoteRepositoryTest {
     @Test
     void oneAcceptedIssuancePerVoter() {
         final var failure = assertThrows(IllegalArgumentException.class, this::twoIssuances);
-        assertEquals("Voter already has an accepted issuance", failure.getMessage());
+        assertEquals("Voter already has an issued ballot", failure.getMessage());
     }
 
     @Test
@@ -356,7 +356,7 @@ class InMemorySureVoteRepositoryTest {
         row.setTenantId(UUID.randomUUID());
         row.setPersonId(personId);
         row.setElectionId(electionId);
-        row.setStatus(IssuanceStatus.ACCEPTED);
+        row.setStatus(IssuanceStatus.ISSUED);
         return row;
     }
 

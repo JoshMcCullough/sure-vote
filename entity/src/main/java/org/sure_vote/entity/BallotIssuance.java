@@ -10,6 +10,7 @@ public final class BallotIssuance extends TenantEntity {
     private Instant acceptedAt;
     private IssuanceStatus status;
     private String voidReason;
+    private Instant receivedAt;
 
     public UUID getPersonId() {
         return this.personId;
@@ -57,5 +58,13 @@ public final class BallotIssuance extends TenantEntity {
 
     public void setVoidReason(final String voidReason) {
         this.voidReason = voidReason;
+    }
+
+    public Instant getReceivedAt() {
+        return this.receivedAt;
+    }
+
+    public void setReceivedAt(final Instant receivedAt) {
+        this.receivedAt = receivedAt;
     }
 }

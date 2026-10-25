@@ -12,7 +12,6 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionMethod;
-import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.Outcome;
 import org.sure_vote.entity.PrecinctDistrict;
@@ -535,7 +534,8 @@ final class CanvassStatements {
         final BallotIssuance issuance
     ) {
         final var matches = electionId.equals(issuance.getElectionId());
-        final var accepted = issuance.getStatus() == IssuanceStatus.ACCEPTED;
+        final var status = issuance.getStatus();
+        final var accepted = status != null && status.spends();
         final var kept = issuance.getDeletedAt() == null;
         if (matches && accepted && kept) {
             final var count = place(counts, issuance.getRecordingPlaceId());

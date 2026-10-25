@@ -4,11 +4,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.repository.InMemorySureVoteRepository;
 import org.sure_vote.repository.JdbcSureVoteRepository;
+import org.sure_vote.service.InMemoryReceivedQueue;
 import org.sure_vote.service.PasskeySettings;
+import org.sure_vote.service.SqsReceivedQueue;
 import org.sure_vote.service.SureVote;
 
 public final class Main {
@@ -50,7 +54,38 @@ public final class Main {
         final var rpId = or(text("SUREVOTE_RP_ID"), "localhost");
         final var origins = text("SUREVOTE_ORIGINS");
         app.configurePasskeys(settings(rpId, origins));
-        return developer(app);
+        return scheduled(queued(developer(app)));
+    }
+
+    private static SureVote queued(final SureVote app) {
+        final var url = text("SUREVOTE_RECEIVED_QUEUE_URL");
+        final var size = Integer.parseInt(or(text("SUREVOTE_RECEIVED_BATCH_SIZE"), "25"));
+        if (url.isBlank()) {
+            app.configureReceivedQueue(new InMemoryReceivedQueue(), size);
+            return app;
+        }
+        else {
+            final var region = or(text("SUREVOTE_RECEIVED_QUEUE_REGION"), "us-east-1");
+            app.configureReceivedQueue(SqsReceivedQueue.create(url, region), size);
+            return app;
+        }
+    }
+
+    private static SureVote scheduled(final SureVote app) {
+        final var seconds = Long.parseLong(or(text("SUREVOTE_RECEIVED_FLUSH_SECONDS"), "300"));
+        final var threads = Thread.ofVirtual();
+        final var executor = Executors.newSingleThreadScheduledExecutor(threads.factory());
+        executor.scheduleWithFixedDelay(() -> flushed(app), seconds, seconds, TimeUnit.SECONDS);
+        return app;
+    }
+
+    private static void flushed(final SureVote app) {
+        try {
+            app.flushReceivedBatch();
+        }
+        catch (final RuntimeException failure) {
+            System.out.println("SureVote could not flush received marks. They stay issued until the next flush.");
+        }
     }
 
     private static PasskeySettings settings(final String rpId, final String origins) {

@@ -8,7 +8,6 @@ import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotType;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.ElectionStatus;
-import org.sure_vote.entity.IssuanceStatus;
 import org.sure_vote.entity.Person;
 import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingDeviceKind;
@@ -61,26 +60,25 @@ public final class MailRecorder {
         final SigningKey importKey,
         final DeliveryHandoff handoff
     ) {
-        return repository.transaction(
-            () -> write(app, repository, request, destination, code, hash, deviceKey, importKey, handoff)
+        final var sealed = seal(repository, request, hash, deviceKey, importKey);
+        final var withPerson = sealed.withPerson(request.personId());
+        return app.recorded(
+            withPerson,
+            () -> repository.transaction(() -> write(app, withPerson, request.channel(), destination, code, handoff))
         );
     }
 
     private static UUID write(
         final SureVote app,
-        final SureVoteRepository repository,
-        final MailRecord request,
+        final ImportBallot sealed,
+        final DeliveryChannel channel,
         final String destination,
         final byte[] code,
-        final String hash,
-        final SigningKey deviceKey,
-        final SigningKey importKey,
         final DeliveryHandoff handoff
     ) {
-        final var sealed = seal(repository, request, hash, deviceKey, importKey);
-        final var ballot = app.importBallot(sealed.withPerson(request.personId()));
+        final var ballot = app.storeBallot(sealed);
         final var codeText = AccessCodes.encode(code);
-        final var delivery = new Delivery(request.channel(), destination, codeText, Delivery.INSTRUCTIONS);
+        final var delivery = new Delivery(channel, destination, codeText, Delivery.INSTRUCTIONS);
         final var accepted = handoff.accept(delivery);
         if (accepted) {
             return ballot.getId();
@@ -220,9 +218,10 @@ public final class MailRecorder {
     private static void rejectAccepted(final BallotIssuance row, final UUID personId, final UUID electionId) {
         final var samePerson = personId.equals(row.getPersonId());
         final var sameElection = electionId.equals(row.getElectionId());
-        final var accepted = row.getStatus() == IssuanceStatus.ACCEPTED;
+        final var status = row.getStatus();
+        final var accepted = status != null && status.spends();
         if (samePerson && sameElection && accepted) {
-            throw new ConstraintException("Voter already has an accepted issuance");
+            throw new ConstraintException("Voter already has an issued ballot");
         }
     }
 

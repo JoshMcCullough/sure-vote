@@ -120,6 +120,7 @@ final class Copies {
         copy.setAcceptedAt(source.getAcceptedAt());
         copy.setStatus(source.getStatus());
         copy.setVoidReason(source.getVoidReason());
+        copy.setReceivedAt(source.getReceivedAt());
         return copy;
     }
 

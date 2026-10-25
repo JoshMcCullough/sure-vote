@@ -1,8 +1,12 @@
 package org.sure_vote.repository;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Savepoint;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -204,6 +208,17 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     }
 
     @Override
+    public void afterCommit(final Runnable action) {
+        final var session = this.work.get();
+        if (session == null) {
+            action.run();
+        }
+        else {
+            session.after.add(action);
+        }
+    }
+
+    @Override
     public List<Ballot> ballotsByAccessHash(final String voterAccessHash) {
         return this.query(connection -> this.lookupBallots(connection, voterAccessHash));
     }
@@ -211,6 +226,11 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     @Override
     public Optional<UUID> electionTenant(final UUID electionId) {
         return this.query(connection -> this.tenantOf(connection, electionId));
+    }
+
+    @Override
+    public int markReceived(final List<UUID> issuanceIds, final Instant receivedAt) {
+        return this.query(connection -> this.marked(connection, issuanceIds, receivedAt));
     }
 
     @Override
@@ -331,6 +351,12 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     private <T> T outer(final Supplier<T> body) {
         final var connection = this.open();
         final var session = new Work(connection);
+        final var result = this.committed(connection, session, body);
+        session.after.forEach(Runnable::run);
+        return result;
+    }
+
+    private <T> T committed(final Connection connection, final Work session, final Supplier<T> body) {
         this.work.set(session);
         try {
             return this.commitSupplier(connection, body);
@@ -344,12 +370,15 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     private <T> T nested(final Work session, final Supplier<T> body) {
         final var name = "sv" + session.depth;
         final var savepoint = this.mark(session.connection, name);
+        final var pending = session.after.size();
         session.depth = session.depth + 1;
         try {
             return body.get();
         }
         catch (final RuntimeException failure) {
+            final var added = session.after.subList(pending, session.after.size());
             this.rollback(session.connection, savepoint, failure);
+            added.clear();
             throw failure;
         }
         finally {
@@ -536,6 +565,31 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         }
     }
 
+    private int marked(final Connection connection, final List<UUID> ids, final Instant receivedAt)
+        throws SQLException {
+        final var statement = connection.prepareStatement("select mark_issuances_received(?, ?)");
+        final var array = connection.createArrayOf("uuid", ids.toArray());
+        try {
+            statement.setArray(1, array);
+            statement.setObject(2, OffsetDateTime.ofInstant(receivedAt, ZoneOffset.UTC));
+            return this.firstInt(statement);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private int firstInt(final PreparedStatement statement) throws SQLException {
+        final var result = statement.executeQuery();
+        try {
+            result.next();
+            return result.getInt(1);
+        }
+        finally {
+            result.close();
+        }
+    }
+
     private Optional<UUID> tenantOf(final Connection connection, final UUID electionId) throws SQLException {
         final var statement = connection.prepareStatement("select election_tenant(?)");
         try {
@@ -671,6 +725,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     private static final class Work {
         private final Connection connection;
         private final Map<String, UUID> scopes = new HashMap<>();
+        private final List<Runnable> after = new ArrayList<>();
         private int depth;
 
         private Work(final Connection connection) {

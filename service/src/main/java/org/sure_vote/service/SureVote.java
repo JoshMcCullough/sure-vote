@@ -57,6 +57,7 @@ public final class SureVote {
     private final OfficialService officials;
     private final PasskeyService passkeys;
     private final SignedRequests signedRequests;
+    private final ReceivedMarks marks;
     private final SureVoteRepository repository;
     private volatile boolean devSignIn;
 
@@ -77,6 +78,7 @@ public final class SureVote {
         this.officials = new OfficialService(repository, stores, this.system);
         this.passkeys = new PasskeyService(repository, stores, this.sessions);
         this.signedRequests = new SignedRequests(repository, stores);
+        this.marks = new ReceivedMarks(repository, stores);
         this.repository = repository;
     }
 
@@ -227,7 +229,8 @@ public final class SureVote {
     public <T> T asImport(final SignedRequest request, final UUID electionId, final BiFunction<UUID, UUID, T> work) {
         final var tenant = this.repository.electionTenant(this.present(electionId));
         final var tenantId = tenant.orElseThrow(() -> new ConstraintException("Missing Election"));
-        return this.repository.inTenant(tenantId, () -> this.imported(request, electionId, tenantId, work));
+        final var actor = this.repository.inTenant(tenantId, () -> this.imported(request, electionId));
+        return work.apply(tenantId, actor);
     }
 
     public <T> T asValidator(
@@ -253,18 +256,13 @@ public final class SureVote {
         return work.get();
     }
 
-    private <T> T imported(
-        final SignedRequest request,
-        final UUID electionId,
-        final UUID tenantId,
-        final BiFunction<UUID, UUID, T> work
-    ) {
+    private UUID imported(final SignedRequest request, final UUID electionId) {
         final var found = this.repository.find(Election.class, electionId);
         final var election = found.orElseThrow(() -> new ConstraintException("Missing Election"));
         final var key = election.getImportPublicKey();
         final var keyId = "import:" + electionId;
         this.signedRequests.verify(request, keyId, key);
-        return work.apply(tenantId, Tokens.derived("key", keyId));
+        return Tokens.derived("key", keyId);
     }
 
     private UUID present(final UUID id) {
@@ -478,7 +476,58 @@ public final class SureVote {
     }
 
     public Ballot importBallot(final ImportBallot request) {
-        return this.recording.importBallot(request);
+        return this.recorded(request, () -> this.storeBallot(request));
+    }
+
+    public void configureReceivedQueue(final ReceivedQueue queue, final int batchSize) {
+        this.marks.configure(queue, batchSize);
+    }
+
+    public int flushReceived() {
+        return this.marks.flush(true);
+    }
+
+    public int flushReceivedBatch() {
+        return this.marks.flush(false);
+    }
+
+    public List<PlaceReconciliation> reconciliation(final UUID electionId) {
+        return this.repository.transaction(() -> this.reconciled(electionId));
+    }
+
+    <T> T recorded(final ImportBallot request, final Supplier<T> work) {
+        final var issued = this.issued(request);
+        final var result = this.attempted(request, issued, work);
+        this.repository.afterCommit(() -> this.marks.committed(request, issued));
+        return result;
+    }
+
+    private Optional<UUID> issued(final ImportBallot request) {
+        this.repository.inTenant(request.tenantId(), () -> this.checkedImport(request));
+        return this.marks.issue(request);
+    }
+
+    private ImportBallot checkedImport(final ImportBallot request) {
+        this.recording.check(request);
+        return request;
+    }
+
+    Ballot storeBallot(final ImportBallot request) {
+        return this.repository.inTenant(request.tenantId(), () -> this.recording.importBallot(request));
+    }
+
+    private <T> T attempted(final ImportBallot request, final Optional<UUID> issued, final Supplier<T> work) {
+        try {
+            return work.get();
+        }
+        catch (final RuntimeException failure) {
+            issued.ifPresent(id -> this.marks.abandon(request.tenantId(), id, request.actorId()));
+            throw failure;
+        }
+    }
+
+    private List<PlaceReconciliation> reconciled(final UUID electionId) {
+        return this.marks.checkedReport(electionId);
     }
 
     public Person sealViewingPassphrase(
@@ -541,6 +590,7 @@ public final class SureVote {
         final String canvassSignature,
         final UUID actor
     ) {
+        this.marks.flush(true);
         return this.tally.close(electionId, signatures, canvassSignature, actor);
     }
 }

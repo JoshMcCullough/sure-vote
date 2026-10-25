@@ -1,5 +1,7 @@
 package org.sure_vote.repository;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,6 +43,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     );
 
     private final Object lock = new Object();
+    private final ThreadLocal<List<Runnable>> after = new ThreadLocal<>();
     private Map<Class<?>, Map<UUID, Identifiable>> rows = new LinkedHashMap<>();
 
     @Override
@@ -73,13 +76,54 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
 
     @Override
     public <T> T transaction(final Supplier<T> work) {
+        final var joined = this.after.get();
+        if (joined == null) {
+            return this.outer(work);
+        }
+        else {
+            return this.nested(joined, work);
+        }
+    }
+
+    @Override
+    public void afterCommit(final Runnable action) {
+        final var joined = this.after.get();
+        if (joined == null) {
+            action.run();
+        }
+        else {
+            joined.add(action);
+        }
+    }
+
+    private <T> T outer(final Supplier<T> work) {
+        final var pending = new ArrayList<Runnable>();
+        final var result = this.committed(pending, work);
+        pending.forEach(Runnable::run);
+        return result;
+    }
+
+    private <T> T committed(final List<Runnable> pending, final Supplier<T> work) {
+        this.after.set(pending);
+        try {
+            return this.nested(pending, work);
+        }
+        finally {
+            this.after.remove();
+        }
+    }
+
+    private <T> T nested(final List<Runnable> pending, final Supplier<T> work) {
         synchronized (this.lock) {
             final var snapshot = this.rows;
+            final var size = pending.size();
             try {
                 return work.get();
             }
             catch (final RuntimeException failure) {
+                final var added = pending.subList(size, pending.size());
                 this.rows = snapshot;
+                added.clear();
                 throw failure;
             }
         }
@@ -91,6 +135,59 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         final var stream = ballots.stream();
         final var matched = stream.filter(ballot -> voterAccessHash.equals(ballot.getVoterAccessHash()));
         return matched.toList();
+    }
+
+    @Override
+    public int markReceived(final List<UUID> issuanceIds, final Instant receivedAt) {
+        final var day = receivedAt.truncatedTo(ChronoUnit.DAYS);
+        if (!day.equals(receivedAt)) {
+            throw new IllegalArgumentException("received_at must be a whole UTC day");
+        }
+        else {
+            synchronized (this.lock) {
+                return this.markLocked(issuanceIds, receivedAt);
+            }
+        }
+    }
+
+    private int markLocked(final List<UUID> issuanceIds, final Instant receivedAt) {
+        final var counts = issuanceIds
+            .stream()
+            .mapToInt(id -> this.markOne(id, receivedAt));
+        return counts.sum();
+    }
+
+    private int markOne(final UUID id, final Instant receivedAt) {
+        final var found = this.findLocked(BallotIssuance.class, id);
+        final var issued = found.filter(row -> row.getStatus() == IssuanceStatus.ISSUED);
+        if (issued.isEmpty()) {
+            return 0;
+        }
+        else {
+            this.store(BallotIssuance.class, received(issued.get(), receivedAt));
+            return 1;
+        }
+    }
+
+    private static BallotIssuance received(final BallotIssuance source, final Instant receivedAt) {
+        final var copy = new BallotIssuance();
+        copy.setId(source.getId());
+        copy.setCreatedAt(source.getCreatedAt());
+        copy.setUpdatedAt(source.getUpdatedAt());
+        copy.setCreatedBy(source.getCreatedBy());
+        copy.setUpdatedBy(source.getUpdatedBy());
+        copy.setDeletedAt(source.getDeletedAt());
+        copy.setDeletedBy(source.getDeletedBy());
+        copy.setVersion(source.getVersion());
+        copy.setTenantId(source.getTenantId());
+        copy.setPersonId(source.getPersonId());
+        copy.setElectionId(source.getElectionId());
+        copy.setRecordingPlaceId(source.getRecordingPlaceId());
+        copy.setAcceptedAt(source.getAcceptedAt());
+        copy.setVoidReason(source.getVoidReason());
+        copy.setStatus(IssuanceStatus.RECEIVED);
+        copy.setReceivedAt(receivedAt);
+        return copy;
     }
 
     @Override
@@ -326,7 +423,8 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     }
 
     private void requireIssuance(final BallotIssuance issuance, final UUID ignoredId) {
-        if (issuance.getStatus() != IssuanceStatus.ACCEPTED) {
+        final var status = issuance.getStatus();
+        if (status == null || !status.spends()) {
             return;
         }
         else {
@@ -347,10 +445,11 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
             final var samePerson = personId.equals(issuance.getPersonId());
             final var electionId = existing.getElectionId();
             final var sameElection = electionId.equals(issuance.getElectionId());
-            final var accepted = existing.getStatus() == IssuanceStatus.ACCEPTED;
+            final var status = existing.getStatus();
+            final var accepted = status != null && status.spends();
             final var sameId = this.sameId(existing.getId(), ignoredId);
             if (!sameId && samePerson && sameElection && accepted) {
-                throw new IllegalArgumentException("Voter already has an accepted issuance");
+                throw new IllegalArgumentException("Voter already has an issued ballot");
             }
         }
     }

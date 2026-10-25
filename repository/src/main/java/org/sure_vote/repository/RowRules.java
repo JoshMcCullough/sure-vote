@@ -187,7 +187,8 @@ final class RowRules {
         final BallotIssuance issuance,
         final UUID ignoredId
     ) {
-        if (issuance.getStatus() == IssuanceStatus.ACCEPTED) {
+        final var status = issuance.getStatus();
+        if (status != null && status.spends()) {
             requireAccepted(connection, issuance, ignoredId);
         }
     }
@@ -202,14 +203,15 @@ final class RowRules {
         requirePresent(issuance.getElectionId(), "electionId");
         values.add(issuance.getPersonId());
         values.add(issuance.getElectionId());
-        values.add(IssuanceStatus.ACCEPTED.wire());
+        values.add(IssuanceStatus.ISSUED.wire());
+        values.add(IssuanceStatus.RECEIVED.wire());
         addIgnored(values, ignoredId);
-        rejectDuplicate(connection, issuanceSql(ignoredId), values, "Voter already has an accepted issuance");
+        rejectDuplicate(connection, issuanceSql(ignoredId), values, "Voter already has an issued ballot");
     }
 
     private static String issuanceSql(final UUID ignoredId) {
         final var sql = "select 1 from ballot_issuance where \"person_id\" = ? and \"election_id\" = ?"
-            + " and \"status\" = ?";
+            + " and \"status\" in (?, ?)";
         return sql + except(ignoredId);
     }
 

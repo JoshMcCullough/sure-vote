@@ -184,7 +184,7 @@ class MailRecordingTest {
         assertEquals(world.actor, storedVote.getCreatedBy());
         assertEquals(1, issuances.size());
         assertEquals(personId, issuance.getPersonId());
-        assertEquals(IssuanceStatus.ACCEPTED, issuance.getStatus());
+        assertEquals(IssuanceStatus.ISSUED, issuance.getStatus());
         assertEquals(world.officeId, issuance.getRecordingPlaceId());
         assertNotNull(issuance.getAcceptedAt());
         assertEquals(stored, sealedPerson.getViewingPassphrase());
@@ -227,7 +227,8 @@ class MailRecordingTest {
         assertEquals("delivery was refused", failure.getMessage());
         assertNotNull(sealedPerson.getViewingPassphrase());
         assertEquals(0, ballots.size());
-        assertEquals(0, issuances.size());
+        assertEquals(1, issuances.size());
+        assertEquals(IssuanceStatus.VOIDED, this.firstStatus(issuances));
         assertEquals("no ballot for that code", missed.getMessage());
     }
 
@@ -300,7 +301,7 @@ class MailRecordingTest {
             ConstraintException.class,
             () -> this.record(world, request, new Capture(true))
         );
-        assertEquals("Voter already has an accepted issuance", failure.getMessage());
+        assertEquals("Voter already has an issued ballot", failure.getMessage());
         assertNotNull(accepted);
     }
 
@@ -432,11 +433,11 @@ class MailRecordingTest {
         assertFalse(payload.contains(personId.toString()));
         assertEquals(1, issuances.size());
         assertEquals(personId, issuance.getPersonId());
-        assertEquals(IssuanceStatus.ACCEPTED, issuance.getStatus());
+        assertEquals(IssuanceStatus.ISSUED, issuance.getStatus());
         assertEquals(world.officeId, issuance.getRecordingPlaceId());
         assertEquals(1, entries.size());
         assertEquals(1, ballots.size());
-        assertEquals("Voter already has an accepted issuance", failure.getMessage());
+        assertEquals("Voter already has an issued ballot", failure.getMessage());
     }
 
     @Test
@@ -509,6 +510,11 @@ class MailRecordingTest {
             () -> world.app.importBallot(request),
             "recording place kind does not match the ballot type"
         );
+    }
+
+    private IssuanceStatus firstStatus(final List<BallotIssuance> issuances) {
+        final var first = issuances.getFirst();
+        return first.getStatus();
     }
 
     private UUID record(final SampleElection world, final MailRecord request, final Capture capture) {

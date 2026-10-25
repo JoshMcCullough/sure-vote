@@ -224,7 +224,7 @@ final class DefinitionService {
             election.getStatus() == ElectionStatus.ACTIVE,
             "Voters are accepted while the election is active"
         );
-        issuance.setStatus(IssuanceStatus.ACCEPTED);
+        issuance.setStatus(IssuanceStatus.ISSUED);
         issuance.setAcceptedAt(Instant.now());
         return this.stores.add(issuance, actor);
     }
@@ -232,7 +232,7 @@ final class DefinitionService {
     BallotIssuance voidIssuance(final UUID id, final String reason, final UUID actor) {
         final var existing = this.stores.require(BallotIssuance.class, id);
         final var blank = reason == null || reason.isBlank();
-        this.stores.require(existing.getStatus() == IssuanceStatus.ACCEPTED, "Only an accepted issuance can be voided");
+        this.stores.require(existing.getStatus() == IssuanceStatus.ISSUED, "Only an issued ballot can be voided");
         this.stores.require(!blank, "A void reason is required");
         return this.voided(existing, reason, actor);
     }

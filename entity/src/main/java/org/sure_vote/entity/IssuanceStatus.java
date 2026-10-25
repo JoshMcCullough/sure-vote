@@ -1,7 +1,8 @@
 package org.sure_vote.entity;
 
 public enum IssuanceStatus implements WireValue {
-    ACCEPTED("accepted"),
+    ISSUED("issued"),
+    RECEIVED("received"),
     VOIDED("voided");
 
     private final String wireValue;
@@ -13,5 +14,9 @@ public enum IssuanceStatus implements WireValue {
     @Override
     public String wire() {
         return this.wireValue;
+    }
+
+    public boolean spends() {
+        return this != VOIDED;
     }
 }
