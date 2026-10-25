@@ -113,6 +113,22 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
 
     private static final Map<String, String> LABELS = Map.of(TENANT, "tenant", SYSTEM_ADMIN, "system admin");
 
+    private static final List<String> PUBLIC_TABLES = List.of(
+        "tenant",
+        "election",
+        "race",
+        "race_candidate",
+        "candidate",
+        "vote_chain",
+        "vote_chain_entry",
+        "vote",
+        "vote_chain_validator",
+        "tenant_validator",
+        "vote_chain_validation_result",
+        "restore_incident",
+        "canvass_statement"
+    );
+
     private final DataSource source;
     private final ThreadLocal<Work> work = new ThreadLocal<>();
 
@@ -142,6 +158,25 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
             + "execute format('grant usage on schema %I to " + role + "', current_schema()); "
             + "execute format('grant select, insert, update on all tables in schema %I to " + role + "', "
             + "current_schema()); end $$";
+        return this.execute(connection, sql);
+    }
+
+    public static void grantReader(final String url, final String user, final String password, final String role) {
+        if (role == null || !role.matches("[a-z_][a-z0-9_]{0,62}")) {
+            throw new IllegalArgumentException("reader role must be a lowercase postgres identifier");
+        }
+        else {
+            final var owner = open(url, user, password);
+            owner.alone(connection -> owner.readable(connection, role));
+        }
+    }
+
+    private Integer readable(final Connection connection, final String role) throws SQLException {
+        final var tables = String.join(", ", PUBLIC_TABLES);
+        final var sql = "do $$ begin "
+            + "execute format('grant usage on schema %I to " + role + "', current_schema()); "
+            + "execute format('revoke all on all tables in schema %I from " + role + "', current_schema()); "
+            + "execute 'grant select on " + tables + " to " + role + "'; end $$";
         return this.execute(connection, sql);
     }
 

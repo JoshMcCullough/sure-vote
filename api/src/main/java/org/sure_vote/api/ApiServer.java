@@ -74,6 +74,7 @@ import org.sure_vote.service.ValidationRequest;
 
 public final class ApiServer implements HttpHandler {
     private final SureVote app;
+    private volatile SureVote reader;
     private final HttpServer server;
     private final ObjectMapper json = new ObjectMapper();
     private final WorkspaceHttp workspace;
@@ -83,11 +84,17 @@ public final class ApiServer implements HttpHandler {
 
     private ApiServer(final SureVote app, final HttpServer server) {
         this.app = app;
+        this.reader = app;
         this.server = server;
         this.requests = new Requests(app);
         this.workspace = new WorkspaceHttp(app, this.json, this.requests);
         this.system = new SystemHttp(app, this.json, this.requests);
         this.auth = new AuthHttp(app, this.json, this.requests);
+    }
+
+    public ApiServer withPublicReader(final SureVote publicReader) {
+        this.reader = publicReader;
+        return this;
     }
 
     public static ApiServer start(final SureVote app) {
@@ -350,7 +357,7 @@ public final class ApiServer implements HttpHandler {
 
     private void showElection(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
-        final var election = this.app.election(id);
+        final var election = this.reader.election(id);
         this.writeJson(exchange, 200, this.electionResource(election));
     }
 
@@ -419,20 +426,20 @@ public final class ApiServer implements HttpHandler {
     private void lookup(final HttpExchange exchange, final List<String> parts, final URI uri) throws IOException {
         final var id = this.id(parts.get(1));
         final var code = this.query(uri, "code");
-        final var result = this.app.lookup(id, code);
+        final var result = this.reader.lookup(id, code);
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 
     private void lookupByCode(final HttpExchange exchange) throws IOException {
         final var body = this.read(exchange, LookupBody.class);
-        final var result = this.app.lookup(body.code, body.passphrase);
+        final var result = this.reader.lookup(body.code, body.passphrase);
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 
     private void lookupPosted(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
         final var body = this.read(exchange, LookupBody.class);
-        final var result = this.app.lookup(id, body.code, body.passphrase);
+        final var result = this.reader.lookup(id, body.code, body.passphrase);
         this.writeJson(exchange, 200, this.lookupResource(result));
     }
 
@@ -497,19 +504,19 @@ public final class ApiServer implements HttpHandler {
 
     private void heads(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
-        final var notices = this.app.heads(id);
+        final var notices = this.reader.heads(id);
         this.writeJson(exchange, 200, this.headList(notices));
     }
 
     private void electionValidators(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
-        final var rows = this.app.electionValidators(id);
+        final var rows = this.reader.electionValidators(id);
         this.writeJson(exchange, 200, this.validatorList(rows));
     }
 
     private void listValidations(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
-        final var rows = this.app.validationResults(id);
+        final var rows = this.reader.validationResults(id);
         this.writeJson(exchange, 200, this.validationList(rows));
     }
 
@@ -548,7 +555,7 @@ public final class ApiServer implements HttpHandler {
 
     private void listRestoreIncidents(final HttpExchange exchange, final List<String> parts) throws IOException {
         final var id = this.id(parts.get(1));
-        final var rows = this.app.restoreIncidents(id);
+        final var rows = this.reader.restoreIncidents(id);
         final var resources = new ArrayList<RestoreIncidentResource>();
         final var list = new RestoreIncidentListResource();
         for (final var row : rows) {

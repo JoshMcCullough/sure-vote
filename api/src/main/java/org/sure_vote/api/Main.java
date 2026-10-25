@@ -24,7 +24,8 @@ public final class Main {
         final var port = port();
         final var root = staticRoot();
         final var server = ApiServer.start(app, port, root);
-        final var bound = server.port();
+        final var served = server.withPublicReader(reader(app));
+        final var bound = served.port();
         System.out.println("SureVote listening on " + bound);
     }
 
@@ -35,6 +36,18 @@ public final class Main {
         }
         else {
             return database(url);
+        }
+    }
+
+    private static SureVote reader(final SureVote app) {
+        final var url = text("SUREVOTE_JDBC_URL");
+        final var role = text("SUREVOTE_JDBC_PUBLIC_USER");
+        if (url.isBlank() || role.isBlank()) {
+            return app;
+        }
+        else {
+            JdbcSureVoteRepository.grantReader(url, text("SUREVOTE_JDBC_USER"), text("SUREVOTE_JDBC_PASSWORD"), role);
+            return new SureVote(JdbcSureVoteRepository.open(url, role, text("SUREVOTE_JDBC_PUBLIC_PASSWORD")));
         }
     }
 
