@@ -2,6 +2,7 @@ package org.sure_vote.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -9,6 +10,7 @@ import org.sure_vote.entity.Entity;
 import org.sure_vote.entity.SystemAdmin;
 import org.sure_vote.entity.SystemAdminStatus;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.repository.SureVoteRepository;
 
@@ -19,6 +21,7 @@ import org.sure_vote.repository.SureVoteRepository;
 final class SystemAdminService {
     private final SureVoteRepository repository;
     private final Stores stores;
+    private volatile UUID demoTenantId;
 
     SystemAdminService(final SureVoteRepository repository, final Stores stores) {
         this.repository = repository;
@@ -52,6 +55,43 @@ final class SystemAdminService {
 
     Tenant updateTenant(final UUID id, final String name, final TenantStatus status, final UUID actor) {
         return this.asAdmin(actor, () -> this.changedTenant(id, name, status, actor));
+    }
+
+    Tenant provisionDemo(final UUID id, final String name, final String residencyRegion) {
+        this.stores.require(id != null, "demo tenant id is required");
+        return this.remembered(this.repository.inTenant(id, () -> this.demo(id, name, residencyRegion)));
+    }
+
+    private Tenant remembered(final Tenant tenant) {
+        this.demoTenantId = tenant.getId();
+        return tenant;
+    }
+
+    Optional<Tenant> demoTenant() {
+        final var id = this.demoTenantId;
+        if (id == null) {
+            return Optional.empty();
+        }
+        else {
+            return this.repository.inTenant(id, () -> this.repository.find(Tenant.class, id));
+        }
+    }
+
+    private Tenant demo(final UUID id, final String name, final String residencyRegion) {
+        final var existing = this.repository.find(Tenant.class, id);
+        if (existing.isPresent()) {
+            final var row = existing.get();
+            this.stores.require(row.getKind() == TenantKind.SHOWCASE, "the demo tenant must be a showcase tenant");
+            return row;
+        }
+        else {
+            final var tenant = new Tenant();
+            tenant.setId(id);
+            tenant.setName(name);
+            tenant.setKind(TenantKind.SHOWCASE);
+            tenant.setResidencyRegion(residencyRegion);
+            return this.addTenant(tenant, id);
+        }
     }
 
     private <T> T asAdmin(final UUID actor, final Supplier<T> body) {

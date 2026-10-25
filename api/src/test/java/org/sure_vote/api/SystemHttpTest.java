@@ -21,8 +21,7 @@ class SystemHttpTest {
     private static final String COUNTY =
         "{\"name\":\"County\",\"kind\":\"production\",\"residencyRegion\":\"us-east\"}";
 
-    private static final String ACTIVE_COUNTY =
-        "{\"name\":\"County\",\"kind\":\"production\",\"residencyRegion\":\"us-east\",\"status\":\"active\"}";
+    private static final String BAD_KIND = "{\"name\":\"County\",\"kind\":\"nope\"}";
 
     private ApiServer server;
     private HttpClient client;
@@ -97,7 +96,7 @@ class SystemHttpTest {
         final var wrongMethod = this.send("DELETE", "/system/tenants", null, this.admin);
         final var wrongAdminMethod = this.send("GET", "/system/admins/" + this.admin, null, this.admin);
         final var unknown = this.send("GET", "/system/other", null, this.admin);
-        final var openProduction = this.send("POST", "/tenants", ACTIVE_COUNTY, this.admin);
+        final var badKind = this.send("POST", "/system/tenants", BAD_KIND, this.admin);
         assertEquals("not a system admin", this.error(stranger));
         assertEquals("SureVote-Actor-Id is required", this.error(anonymous));
         assertEquals("invalid id", this.error(badId));
@@ -108,7 +107,7 @@ class SystemHttpTest {
         assertEquals(404, wrongMethod.statusCode());
         assertEquals(404, wrongAdminMethod.statusCode());
         assertEquals(404, unknown.statusCode());
-        assertEquals("only a system admin creates a production tenant", this.error(openProduction));
+        assertEquals("Unknown tenant kind: nope", this.error(badKind));
     }
 
     private HttpResponse<String> send(

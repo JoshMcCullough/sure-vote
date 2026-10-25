@@ -47,12 +47,6 @@ final class DefinitionService {
         this.definitions = definitions;
     }
 
-    Tenant createTenant(final Tenant tenant, final UUID actor) {
-        final var production = tenant.getKind() == TenantKind.PRODUCTION;
-        this.stores.require(!production, "only a system admin creates a production tenant");
-        return this.stores.add(tenant, actor);
-    }
-
     Person createPerson(final Person person, final UUID actor) {
         final var tenant = this.stores.require(Tenant.class, person.getTenantId());
         this.rejectShowcase(tenant, person);

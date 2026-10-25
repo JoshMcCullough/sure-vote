@@ -91,12 +91,29 @@ class SystemAdminRulesTest {
     }
 
     @Test
-    void theOpenPathCreatesOnlyShowcaseTenants() {
-        final var world = SampleElection.showcase();
-        final var production = this.tenant(TenantKind.PRODUCTION, TenantStatus.ACTIVE);
+    void theDemoTenantIsProvisionedOnce() {
+        final var app = new SureVote(SampleStore.open());
+        final var id = UUID.randomUUID();
+        final var before = app.demoTenant();
+        final var created = app.provisionDemoTenant(id, "Demo", "us-east");
+        final var again = app.provisionDemoTenant(id, "Other", "us-west");
+        final var shown = app
+            .demoTenant()
+            .orElseThrow();
+        assertTrue(before.isEmpty());
+        assertEquals(TenantKind.SHOWCASE, created.getKind());
+        assertEquals(TenantStatus.ACTIVE, created.getStatus());
+        assertEquals("Demo", again.getName());
+        assertEquals(id, shown.getId());
+        this.refused("demo tenant id is required", () -> app.provisionDemoTenant(null, "Demo", "us-east"));
+    }
+
+    @Test
+    void theDemoTenantMustBeAShowcaseTenant() {
+        final var world = SampleElection.fptp();
         this.refused(
-            "only a system admin creates a production tenant",
-            () -> world.app.createTenant(production, world.actor)
+            "the demo tenant must be a showcase tenant",
+            () -> world.app.provisionDemoTenant(world.tenantId, "Demo", "us-east")
         );
     }
 

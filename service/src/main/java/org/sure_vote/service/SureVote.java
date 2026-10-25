@@ -3,6 +3,7 @@ package org.sure_vote.service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -103,8 +104,12 @@ public final class SureVote {
         return this.system.updateTenant(id, name, status, actor);
     }
 
-    public Tenant createTenant(final Tenant tenant, final UUID actor) {
-        return this.definitions.createTenant(tenant, actor);
+    public Tenant provisionDemoTenant(final UUID id, final String name, final String residencyRegion) {
+        return this.system.provisionDemo(id, name, residencyRegion);
+    }
+
+    public Optional<Tenant> demoTenant() {
+        return this.system.demoTenant();
     }
 
     public Person createPerson(final Person person, final UUID actor) {

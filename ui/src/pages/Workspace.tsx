@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, Created, messageOf, votingWindow } from '../api'
 import { Field, Step } from '../forms'
-import { rememberTenant, tenantId } from '../session'
 
 type Ids = {
   tenantId: string
@@ -24,6 +23,11 @@ type Ids = {
 
 type DemoCast = {
   code: string
+}
+
+type DemoTenant = {
+  id: string
+  name: string
 }
 
 const blank: Ids = {
@@ -57,7 +61,6 @@ type Draft = Ids & {
 function loadDraft(): Draft {
   const base: Draft = {
     ...blank,
-    tenantId: tenantId(),
     styled: false,
     assigned: false,
     active: false,
@@ -70,7 +73,7 @@ function loadDraft(): Draft {
       return base
     }
     const parsed = JSON.parse(text) as Partial<Draft>
-    return { ...base, ...parsed, tenantId: parsed.tenantId || base.tenantId }
+    return { ...base, ...parsed }
   } catch {
     return base
   }
@@ -88,7 +91,29 @@ export function Workspace() {
   const [assigned, setAssigned] = useState(draft.assigned)
   const [active, setActive] = useState(draft.active)
   const [castDone, setCastDone] = useState(draft.castDone)
+  const [demo, setDemo] = useState<DemoTenant | null>(null)
   const previousElection = useRef<string | null>(null)
+
+  useEffect(() => {
+    let gone = false
+    async function load() {
+      try {
+        const tenant = await api<DemoTenant>('GET', '/showcase/tenant')
+        if (!gone) {
+          setDemo(tenant)
+          setIds((current) => (current.tenantId === tenant.id ? current : { ...blank, tenantId: tenant.id }))
+        }
+      } catch (caught) {
+        if (!gone) {
+          setError(messageOf(caught))
+        }
+      }
+    }
+    void load()
+    return () => {
+      gone = true
+    }
+  }, [])
 
   useEffect(() => {
     if (previousElection.current === null) {
@@ -116,9 +141,6 @@ export function Workspace() {
     return (row) => {
       if (!row.id) {
         return
-      }
-      if (key === 'tenantId') {
-        rememberTenant(row.id)
       }
       setIds((current) => ({ ...current, [key]: row.id }))
     }
@@ -180,17 +202,15 @@ export function Workspace() {
       </p>
       {error ? <p className="banner" role="alert">{error}</p> : null}
 
-      <Step
-        title="Tenant"
-        detail={ids.tenantId
-          ? 'This browser already has tenant ' + ids.tenantId + '. Create another, or continue with the locality.'
-          : 'A showcase tenant can run a demonstration. A system admin creates production tenants.'}
-        path="/tenants"
-        submitLabel="Create tenant"
-        fields={tenantFields()}
-        onCreated={save('tenantId')}
-        onError={setError}
-      />
+      <section className="card">
+        <h2>Demo tenant</h2>
+        <p>
+          {demo
+            ? 'Everything here is created in the shared demo tenant ' + demo.name + '. It has no legal effect.'
+            : 'Loading the demo tenant.'}
+          {' '}A system admin creates every other tenant.
+        </p>
+      </section>
       <Step
         key={'locality-' + ids.tenantId}
         title="Locality"
@@ -481,15 +501,6 @@ export function Workspace() {
       />
     </>
   )
-}
-
-function tenantFields(): Field[] {
-  return [
-    { name: 'name', label: 'Name', value: 'Town' },
-    { name: 'kind', label: 'Kind', value: 'showcase', options: ['showcase'] },
-    { name: 'residencyRegion', label: 'Residency region', value: 'us-east' },
-    { name: 'status', label: 'Status', value: 'active', options: ['active', 'suspended'] },
-  ]
 }
 
 function localityFields(ids: Ids): Field[] {

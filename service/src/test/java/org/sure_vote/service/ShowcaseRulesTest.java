@@ -144,12 +144,7 @@ class ShowcaseRulesTest {
     }
 
     private Tenant tenant(final SureVote app, final UUID actor) {
-        final var tenant = new Tenant();
-        tenant.setName("Town");
-        tenant.setKind(TenantKind.SHOWCASE);
-        tenant.setResidencyRegion("us-east");
-        tenant.setStatus(TenantStatus.ACTIVE);
-        return app.createTenant(tenant, actor);
+        return app.provisionDemoTenant(actor, "Town", "us-east");
     }
 
     private Locality locality(final SureVote app, final UUID actor, final UUID tenantId) {

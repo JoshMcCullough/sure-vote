@@ -33,15 +33,15 @@ These official routes stay off the public page:
 
 ## Workspace
 
-`/workspace` edits the parts of an election: tenant, locality, address, precinct, district, precinct district, seat, term, election, race, person, candidate, race slot, ballot style, recording place, recording device, and precinct assignment.
+`/workspace` edits the parts of an election in the demo tenant: locality, address, precinct, district, precinct district, seat, term, election, race, person, candidate, race slot, ballot style, recording place, recording device, and precinct assignment.
 
-The same screens are used for a production tenant and a showcase tenant. The browser does not hold a production operator, import, viewing, or device private key. On a production tenant, activate and close take a signature made outside the app. The workspace only submits that signature.
+The workspace runs in the demo tenant. A production tenant uses the same screens once sign-in can name it. Until then the app does not reach a production tenant. The browser does not hold a production operator, import, viewing, or device private key. On a production tenant, activate and close take a signature made outside the app. The workspace only submits that signature.
 
 On a showcase tenant the host holds the operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. The workspace can activate, cast one in-person demonstration ballot, and close without a hardware token. The cast response returns the access code once. The page shows it and tells the voter to copy it before leaving. Refreshing or clearing the page drops it. The code is not stored.
 
 A demonstration cast is refused for a production tenant. Production recording stays on the air-gapped machine and the authority workstation.
 
-`SureVote-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The tenant id may be stored under `surevote.tenant`. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
+`SureVote-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The workspace reads the demo tenant from `GET /showcase/tenant` and creates every row in it. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
 
 Voter rolls, mail-in from the browser, dispute review, restore incidents, and row-level security stay out of this app for now.
 
@@ -49,7 +49,7 @@ Voter rolls, mail-in from the browser, dispute review, restore incidents, and ro
 
 Official creates require `SureVote-Actor-Id` and return the saved resource. They map onto the service. The app does not grow a second set of rules.
 
-- `POST /tenants` creates a showcase tenant. A production tenant is created by a system admin through `POST /system/tenants`. The app has no system-admin screens.
+- `GET /showcase/tenant` returns the demo tenant. There is no public tenant create. Every other tenant is created by a system admin through `POST /system/tenants`, and the app has no system-admin screens.
 - `POST /persons`
 - `POST /localities`, `/addresses`, `/precincts`, `/districts`, `/precinct-districts`
 - `POST /seats`, `/terms`, `/races`, `/candidates`, `/race-candidates`, `/ballot-styles`

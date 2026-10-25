@@ -34,14 +34,36 @@ public final class Main {
 
     private static SureVote memory() {
         final var repository = new InMemorySureVoteRepository();
-        return bootstrapped(new SureVote(repository));
+        return provisioned(bootstrapped(new SureVote(repository)));
     }
 
     private static SureVote database(final String url) {
         final var user = text("SUREVOTE_JDBC_USER");
         final var password = text("SUREVOTE_JDBC_PASSWORD");
         final var repository = open(url, user, password);
-        return bootstrapped(new SureVote(repository));
+        return provisioned(bootstrapped(new SureVote(repository)));
+    }
+
+    private static SureVote provisioned(final SureVote app) {
+        final var id = text("SUREVOTE_DEMO_TENANT_ID");
+        if (id.isBlank()) {
+            return app;
+        }
+        else {
+            final var name = or(text("SUREVOTE_DEMO_TENANT_NAME"), "SureVote demo");
+            final var region = or(text("SUREVOTE_DEMO_TENANT_REGION"), "us-east");
+            app.provisionDemoTenant(UUID.fromString(id), name, region);
+            return app;
+        }
+    }
+
+    private static String or(final String value, final String fallback) {
+        if (value.isBlank()) {
+            return fallback;
+        }
+        else {
+            return value;
+        }
     }
 
     private static SureVote bootstrapped(final SureVote app) {

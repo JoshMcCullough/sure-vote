@@ -28,8 +28,6 @@ import org.sure_vote.entity.DisputeStatus;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Tenant;
-import org.sure_vote.entity.TenantKind;
-import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.ValidationResultStatus;
@@ -167,8 +165,8 @@ public final class ApiServer implements HttpHandler {
         if ("GET".equals(method) && this.named(parts, "health")) {
             this.health(exchange);
         }
-        else if ("POST".equals(method) && this.named(parts, "tenants")) {
-            this.createTenant(exchange);
+        else if ("GET".equals(method) && this.demoTenantPath(parts)) {
+            this.demoTenant(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "persons")) {
             this.createPerson(exchange);
@@ -263,12 +261,18 @@ public final class ApiServer implements HttpHandler {
         this.writeJson(exchange, 200, new HealthResource("ok"));
     }
 
-    private void createTenant(final HttpExchange exchange) throws IOException {
-        final var actor = this.actor(exchange);
-        final var body = this.read(exchange, TenantBody.class);
-        final var tenant = this.tenant(body);
-        final var saved = this.app.createTenant(tenant, actor);
-        this.writeJson(exchange, 201, this.tenantResource(saved));
+    private boolean demoTenantPath(final List<String> parts) {
+        return parts.size() == 2 && "showcase".equals(parts.get(0)) && "tenant".equals(parts.get(1));
+    }
+
+    private void demoTenant(final HttpExchange exchange) throws IOException {
+        final var tenant = this.app.demoTenant();
+        if (tenant.isPresent()) {
+            this.writeJson(exchange, 200, this.tenantResource(tenant.get()));
+        }
+        else {
+            this.writeJson(exchange, 404, new ErrorResource("no demo tenant"));
+        }
     }
 
     private void createPerson(final HttpExchange exchange) throws IOException {
@@ -563,15 +567,6 @@ public final class ApiServer implements HttpHandler {
         if (!part.isEmpty()) {
             parts.add(part);
         }
-    }
-
-    private Tenant tenant(final TenantBody body) {
-        final var tenant = new Tenant();
-        tenant.setName(body.name);
-        tenant.setKind(this.wire(TenantKind.values(), body.kind, "tenant kind"));
-        tenant.setResidencyRegion(body.residencyRegion);
-        tenant.setStatus(this.wire(TenantStatus.values(), body.status, "tenant status"));
-        return tenant;
     }
 
     private Person person(final PersonBody body) {
@@ -1023,13 +1018,6 @@ public final class ApiServer implements HttpHandler {
 
     private String decode(final String text) {
         return URLDecoder.decode(text, StandardCharsets.UTF_8);
-    }
-
-    public static final class TenantBody {
-        public String name;
-        public String kind;
-        public String residencyRegion;
-        public String status;
     }
 
     public static final class PersonBody {

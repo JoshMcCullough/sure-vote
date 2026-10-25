@@ -23,7 +23,7 @@ Eligibility and the one-ballot rule are applied before recording, against the pr
 - **Official.** Identifies a voter on a trusted channel and records a finished ballot. In-person and mail ballots are the recording paths in this design.
 - **Voter.** Is authenticated against the private roll. Receives an access code when the ballot is recorded. Uses that code to open the ballot later.
 - **Verifier.** Recomputes the chain. A named verifier is a `VoteChainValidator` and publishes a signed `VoteChainValidationResult`. Anyone else may verify without an account.
-- **Sure Vote Systems.** The copyright holder. Publishes the source-available repository and runs the multi-tenant hosted service, including the free showcase tenants.
+- **Sure Vote Systems.** The copyright holder. Publishes the source-available repository and runs the multi-tenant hosted service, including the free demo tenant.
 - **System admin.** A host operator, global rather than in a tenant. Creates production tenants, renames and suspends tenants, and adds or disables other system admins. Reads no tenant's roll, definition, or ledger through the application. The first one is set in the host configuration.
 
 A voter-controlled device submitting a binding ballot is not built. It is planned as a React Native app, and it needs an eligibility proof, a coercion story, and a client the voter can trust. None of those are specified. See [Open decisions](#open-decisions). The showcase site lets someone record a non-binding demo ballot. That form is not the production casting path.
@@ -44,13 +44,13 @@ The db enforces the boundary with row-level security on `tenant_id`. The recordi
 
 A host administrator who uses the migration role can read every tenant. That use is logged and is not the application path. Tenant isolation stops a neighboring official, and an ordinary application request, from reading another tenant. It does not hide the private roll from the host. Outside copies of the chain heads, below, are what make a host rewrite of the ledger detectable.
 
-Only a system admin creates a production tenant. Anyone may create a showcase tenant. A system admin also suspends and reinstates tenants. Until request identity is chosen, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
+Only a system admin creates a tenant. The one exception is the demo tenant: the host names it in its configuration, and the service creates it at startup as a showcase tenant if it does not exist. A system admin also suspends and reinstates tenants. Until request identity is chosen, a system admin is named by the same unsigned `SureVote-Actor-Id` header as an official and is checked against `SystemAdmin`. See [auth-proposal.md](./auth-proposal.md).
 
 `Tenant.kind` is `production` or `showcase`. A showcase tenant rejects `Person.ssn` and `Person.voterId`. Officials must not load a real voter roll into it. The software cannot tell a fictional name from a real one. Suspending a tenant stops new recording. It does not delete the ledger.
 
 ### Showcase
 
-Showcase tenants live on the hosted service. Anyone can create a virtual election, record one demonstration ballot, and open it on the lookup page. The access code is shown once and is not stored. Virtual elections are labeled as demonstrations and have no legal effect. Sure Vote Systems is the operator for those elections. The host stores that tenant's operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. A production tenant's officials and keys are not used there, and production recording stays on the air-gapped machine and the authority workstation. See [ui.md](./ui.md).
+The hosted service has one demo tenant, a showcase tenant configured by the host. Anyone can create a virtual election in it, record one demonstration ballot, and open it on the lookup page. Visitors do not create tenants. A system admin may create other showcase tenants. The access code is shown once and is not stored. Virtual elections are labeled as demonstrations and have no legal effect. Sure Vote Systems is the operator for those elections. The host stores that tenant's operator, import, viewing, and device seeds in `HeldKey`. The API does not return them. A production tenant's officials and keys are not used there, and production recording stays on the air-gapped machine and the authority workstation. See [ui.md](./ui.md).
 
 ### Self-hosted instance
 

@@ -25,12 +25,15 @@ class ApiServerTest {
     private HttpClient client;
     private ObjectMapper json;
     private UUID actor;
+    private UUID demo;
     private String base;
 
     @BeforeEach
     void setUp() {
         final var repository = new InMemorySureVoteRepository();
         final var app = new SureVote(repository);
+        this.demo = UUID.randomUUID();
+        app.provisionDemoTenant(this.demo, "Demo", "us-east");
         this.server = ApiServer.start(app);
         this.client = HttpClient.newHttpClient();
         this.json = new ObjectMapper();
@@ -57,7 +60,7 @@ class ApiServerTest {
 
     @Test
     void showcasePersonRejectsSsnAndOmitsSecrets() throws Exception {
-        final var created = this.send("POST", "/tenants", this.tenantJson());
+        final var created = this.send("GET", "/showcase/tenant", null);
         final var tenantId = this.idOf(created.body());
         final var rejected = this.send("POST", "/persons", this.secretPerson(tenantId));
         final var accepted = this.send("POST", "/persons", this.plainPerson(tenantId));
@@ -65,7 +68,8 @@ class ApiServerTest {
         final var acceptedBody = accepted.body();
         final var message = this.error(rejectedBody);
         final var tree = this.json.readTree(acceptedBody);
-        assertEquals(201, created.statusCode());
+        assertEquals(200, created.statusCode());
+        assertEquals(this.demo, tenantId);
         assertEquals(400, rejected.statusCode());
         assertEquals("A showcase tenant rejects ssn and voter id", message);
         assertEquals(201, accepted.statusCode());
@@ -90,7 +94,7 @@ class ApiServerTest {
 
     @Test
     void writesRequireAnActor() throws Exception {
-        final var request = this.request("POST", "/tenants", this.tenantJson(), false);
+        final var request = this.request("POST", "/persons", this.plainPerson(this.demo), false);
         final var response = this.client.send(request, HttpResponse.BodyHandlers.ofString());
         final var message = this.error(response.body());
         assertEquals(400, response.statusCode());
@@ -107,7 +111,7 @@ class ApiServerTest {
 
     @Test
     void invalidJsonIsRejected() throws Exception {
-        final var response = this.send("POST", "/tenants", "{");
+        final var response = this.send("POST", "/persons", "{");
         final var message = this.error(response.body());
         assertEquals(400, response.statusCode());
         assertEquals("invalid json", message);
@@ -122,11 +126,17 @@ class ApiServerTest {
     }
 
     @Test
-    void invalidTenantKindIsRejected() throws Exception {
-        final var response = this.send("POST", "/tenants", this.badKind());
-        final var message = this.error(response.body());
-        assertEquals(400, response.statusCode());
-        assertEquals("Unknown tenant kind: nope", message);
+    void tenantsAreNotCreatedOnThePublicPath() throws Exception {
+        final var response = this.send("POST", "/tenants", this.tenantJson());
+        final var bare = ApiServer.start(new SureVote(new InMemorySureVoteRepository()));
+        final var uri = URI.create("http://127.0.0.1:" + bare.port() + "/showcase/tenant");
+        final var builder = HttpRequest.newBuilder(uri);
+        final var missing = this.client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+        final var message = this.error(missing.body());
+        bare.close();
+        assertEquals(404, response.statusCode());
+        assertEquals(404, missing.statusCode());
+        assertEquals("no demo tenant", message);
     }
 
     @Test
@@ -180,7 +190,7 @@ class ApiServerTest {
 
     @Test
     void aNullBodyIsAnInternalError() throws Exception {
-        final var response = this.send("POST", "/tenants", "null");
+        final var response = this.send("POST", "/persons", "null");
         final var message = this.error(response.body());
         assertEquals(500, response.statusCode());
         assertEquals("internal error", message);
@@ -410,10 +420,6 @@ class ApiServerTest {
             + "\",\"firstName\":\"Bea\",\"lastName\":\"Two\",\"voterId\":null}";
     }
 
-    private String badKind() {
-        return "{\"name\":\"Demo\",\"kind\":\"nope\",\"residencyRegion\":\"us-east\",\"status\":\"active\"}";
-    }
-
     private HttpResponse<String> sendAs(final String actor) throws Exception {
         final var request = this.actorRequest(actor);
         return this.client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -421,8 +427,8 @@ class ApiServerTest {
 
     private HttpRequest actorRequest(final String actor) {
         final var builder = HttpRequest.newBuilder();
-        final var uri = URI.create(this.base + "/tenants");
-        final var publisher = HttpRequest.BodyPublishers.ofString(this.tenantJson());
+        final var uri = URI.create(this.base + "/persons");
+        final var publisher = HttpRequest.BodyPublishers.ofString(this.plainPerson(this.demo));
         builder.uri(uri);
         builder.header("Content-Type", "application/json");
         builder.header("SureVote-Actor-Id", actor);
