@@ -76,6 +76,7 @@ final class RecordingService {
         this.stores.sameTenant(electionTenant, deviceTenant, "Recording device");
         this.stores.sameTenant(electionTenant, placeTenant, "Recording place");
         this.stores.require(election.getStatus() == ElectionStatus.ACTIVE, "Election is not active");
+        this.stores.requireUnfrozen(election);
         this.stores.require(inside, "Ballot timestamp is outside the voting window");
         this.stores.require(
             Digests.isLowerHex(request.voterAccessHash(), 64),

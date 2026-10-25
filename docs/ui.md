@@ -74,7 +74,7 @@ These routes are public and are not called by the workspace:
 - `GET /elections/{id}/heads` publishes each race head once the election is `active`
 - `GET /elections/{id}/validators` and `GET /elections/{id}/validations`
 - `POST /validators`, `POST /tenant-validators`, and `POST /elections/{id}/validations` record an outside validator and a signed result. The React app does not call them.
-- `GET /elections/{id}/restore-incidents`, `POST /elections/{id}/restore-incidents/hash`, and `POST /elections/{id}/restore-incidents` publish and file an operator-signed restore incident. The React app does not call them.
+- `GET /elections/{id}/restore-incidents`, `POST /elections/{id}/restore-incidents/hash`, and `POST /elections/{id}/restore-incidents` publish and file an operator-signed restore incident. `POST /system/restore-check` freezes divergent elections after a restore. The React app does not call them.
 
 `POST /showcase/elections/{id}/cast` takes `{votingPrecinctId, recordingDeviceId, recordingPlaceId, personId, selections: [{raceCandidateId, value}]}`. The response is `{code, ballot, votes}`. `value` for a first-past-the-post choice is `Y`.
 

@@ -54,6 +54,7 @@ final class TallyService {
     ) {
         final var election = this.stores.require(Election.class, electionId);
         final var races = this.races(electionId);
+        this.stores.requireUnfrozen(election);
         this.stores.require(election.getStatus() == ElectionStatus.ACTIVE, "Only an active election can close");
         this.stores.require(signatures != null, "chain signatures are required");
         this.closeRaces(election, races, signatures, actor);

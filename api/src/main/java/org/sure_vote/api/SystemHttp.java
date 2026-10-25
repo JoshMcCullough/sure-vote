@@ -3,6 +3,7 @@ package org.sure_vote.api;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,6 +54,9 @@ final class SystemHttp {
         final var item = parts.size() == 3;
         if (parts.size() > 3) {
             this.nested(exchange, method, parts);
+        }
+        else if ("restore-check".equals(collection) && "POST".equals(method)) {
+            this.restoreCheck(exchange);
         }
         else if ("tenants".equals(collection)) {
             this.tenants(exchange, method, item, parts);
@@ -106,8 +110,14 @@ final class SystemHttp {
         this.writeJson(exchange, 200, AuthHttp.officialResource(saved));
     }
 
+    private void restoreCheck(final HttpExchange exchange) throws IOException {
+        final var actor = this.requests.admin(exchange);
+        final var frozen = this.app.checkRestore(actor.id());
+        this.writeJson(exchange, 200, Map.of("frozenElectionIds", frozen));
+    }
+
     private boolean known(final String collection) {
-        return "tenants".equals(collection) || "admins".equals(collection);
+        return "tenants".equals(collection) || "admins".equals(collection) || "restore-check".equals(collection);
     }
 
     private void tenants(

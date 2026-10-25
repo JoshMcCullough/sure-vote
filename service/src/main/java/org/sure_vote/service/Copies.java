@@ -34,6 +34,7 @@ final class Copies {
         copy.setViewingPublicKey(source.getViewingPublicKey());
         copy.setHash(source.getHash());
         copy.setSignature(source.getSignature());
+        copy.setFrozenAt(source.getFrozenAt());
         return copy;
     }
 

@@ -485,6 +485,10 @@ final class SampleElection {
         assertEquals(true, payload.contains("\"ballotHash\":\"" + binding + "\""));
     }
 
+    String codeFor(final Ballot ballot) {
+        return this.codes.get(ballot.getId());
+    }
+
     private void assertLookup(final Ballot ballot) {
         final var code = this.codes.get(ballot.getId());
         final var found = this.app.lookup(this.electionId, code);

@@ -3,6 +3,7 @@ package org.sure_vote.service;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Entity;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.Tenant;
@@ -76,6 +77,10 @@ final class Stores {
         catch (final IllegalArgumentException failure) {
             throw new ConstraintException(failure.getMessage());
         }
+    }
+
+    void requireUnfrozen(final Election election) {
+        this.require(election.getFrozenAt() == null, "Election is frozen after a restore");
     }
 
     int nextVersion(final Integer version) {

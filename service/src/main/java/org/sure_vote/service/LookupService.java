@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.Election;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.repository.SureVoteRepository;
 
@@ -50,8 +51,14 @@ final class LookupService {
     }
 
     private LookupResult result(final Ballot ballot) {
-        final var votes = this.repository.inTenant(ballot.getTenantId(), () -> this.votesFor(ballot.getId()));
+        final var votes = this.repository.inTenant(ballot.getTenantId(), () -> this.unfrozenVotes(ballot));
         return new LookupResult(ballot, votes);
+    }
+
+    private List<Vote> unfrozenVotes(final Ballot ballot) {
+        final var election = this.stores.require(Election.class, ballot.getElectionId());
+        this.stores.requireUnfrozen(election);
+        return this.votesFor(ballot.getId());
     }
 
     private LookupResult byPassphrase(final UUID electionId, final byte[] raw, final String passphrase) {

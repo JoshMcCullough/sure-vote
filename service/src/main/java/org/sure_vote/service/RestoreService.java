@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.sure_vote.entity.Election;
+import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.VoteChain;
@@ -44,7 +45,48 @@ final class RestoreService {
         this.stores.require(actor != null, "actor is required");
         this.stores.require(this.diverged(witnessed), "the restored heads match the outside witnesses");
         this.stores.require(signed, "Operator signature does not match the restore incident");
+        this.thawed(election, actor);
         return this.insert(election, payload, hash, request.signature(), actor);
+    }
+
+    List<UUID> freezeDiverged(final UUID actor) {
+        final var elections = this.repository.list(Election.class);
+        final var frozen = new ArrayList<UUID>();
+        for (final var election : elections) {
+            this.freezeIfDiverged(frozen, election, actor);
+        }
+        return frozen;
+    }
+
+    private void freezeIfDiverged(final List<UUID> frozen, final Election election, final UUID actor) {
+        final var started = election.getStatus() != ElectionStatus.UPCOMING;
+        final var open = election.getFrozenAt() == null;
+        if (started && open && this.unfiledDivergence(election)) {
+            this.store(election, Instant.now(), actor);
+            frozen.add(election.getId());
+        }
+    }
+
+    private boolean unfiledDivergence(final Election election) {
+        final var filed = this.incidents(election.getId());
+        final var races = this.validators.races(election.getId());
+        final var witnessed = this.witnessedHeads(election, races);
+        return filed.isEmpty() && this.diverged(witnessed);
+    }
+
+    private void thawed(final Election election, final UUID actor) {
+        if (election.getFrozenAt() != null) {
+            this.store(election, null, actor);
+        }
+    }
+
+    private void store(final Election election, final Instant frozenAt, final UUID actor) {
+        final var next = Copies.election(election);
+        next.setFrozenAt(frozenAt);
+        next.setUpdatedAt(Instant.now());
+        next.setUpdatedBy(actor);
+        next.setVersion(this.stores.nextVersion(election.getVersion()));
+        this.stores.replace(next);
     }
 
     private boolean signed(final Election election, final byte[] raw, final String signature) {

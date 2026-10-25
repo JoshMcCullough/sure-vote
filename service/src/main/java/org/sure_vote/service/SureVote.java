@@ -1,6 +1,7 @@
 package org.sure_vote.service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,6 +61,7 @@ public final class SureVote {
     private final ReceivedMarks marks;
     private final MailIssuer mailIssuer;
     private final SureVoteRepository repository;
+    private final Stores stores;
     private volatile boolean devSignIn;
 
     public SureVote(final SureVoteRepository repository) {
@@ -82,6 +84,24 @@ public final class SureVote {
         this.mailIssuer = new MailIssuer(repository, stores);
         this.marks = new ReceivedMarks(repository, stores, this.mailIssuer);
         this.repository = repository;
+        this.stores = stores;
+    }
+
+    private <T> T unfrozen(final UUID electionId, final Supplier<T> body) {
+        return this.published(electionId, () -> this.thawedBody(electionId, body));
+    }
+
+    private <T> T thawedBody(final UUID electionId, final Supplier<T> body) {
+        this.stores.requireUnfrozen(this.stores.require(Election.class, electionId));
+        return body.get();
+    }
+
+    public List<UUID> checkRestore(final UUID adminId) {
+        final var frozen = new ArrayList<UUID>();
+        for (final var tenant : this.system.tenants(adminId)) {
+            frozen.addAll(this.repository.inTenant(tenant.getId(), () -> this.restores.freezeDiverged(adminId)));
+        }
+        return frozen;
     }
 
     private <T> T published(final UUID electionId, final Supplier<T> body) {
@@ -245,7 +265,7 @@ public final class SureVote {
         final var live = validator.filter(row -> row.getDeletedAt() == null);
         final var key = live.map(VoteChainValidator::getPublicKey);
         final var publicKey = key.orElseThrow(AccessException::signIn);
-        return this.published(this.present(electionId), () -> this.verified(request, validatorId, publicKey, work));
+        return this.unfrozen(this.present(electionId), () -> this.verified(request, validatorId, publicKey, work));
     }
 
     private <T> T verified(
@@ -454,7 +474,7 @@ public final class SureVote {
     }
 
     public List<HeadNotice> heads(final UUID electionId) {
-        return this.published(electionId, () -> this.validators.heads(electionId));
+        return this.unfrozen(electionId, () -> this.validators.heads(electionId));
     }
 
     public List<VoteChainValidationResult> validationResults(final UUID electionId) {

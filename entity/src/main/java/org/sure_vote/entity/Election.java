@@ -19,6 +19,7 @@ public final class Election extends TenantEntity {
     private String viewingPublicKey;
     private String hash;
     private String signature;
+    private Instant frozenAt;
 
     public UUID getLocalityId() {
         return this.localityId;
@@ -138,5 +139,13 @@ public final class Election extends TenantEntity {
 
     public void setSignature(final String signature) {
         this.signature = signature;
+    }
+
+    public Instant getFrozenAt() {
+        return this.frozenAt;
+    }
+
+    public void setFrozenAt(final Instant frozenAt) {
+        this.frozenAt = frozenAt;
     }
 }

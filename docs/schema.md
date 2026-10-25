@@ -213,6 +213,7 @@ Represents an election for a seat, including the candidates and election dates.
 - `viewingPublicKey` (String): X25519 public key. Mail-in viewing passphrases are encrypted to this key.
 - `hash` (String): SHA-256 of the election-definition payload in [verification.md](./verification.md).
 - `signature` (String): Operator signature over `hash`.
+- `frozenAt` (Timestamp, optional): Set when a restore check finds that a witnessed head is no longer a prefix of this election's restored chain. Cleared when its `RestoreIncident` is filed. Not part of the signed definition.
 
 `ballotHashPayloadSchema`, `voteHashPayloadSchema`, and `voteChainEntryHashPayloadSchema` are `canonical-json-v1`. `hashAlgorithm` is `SHA-256`. The bytes those names refer to are specified in [verification.md](./verification.md). The signed payload also covers races, ballot style, devices, precinct districts, precinct localities, and locality parents. Those source rows are locked once `status` is `active` or `historical`. `status` values are `upcoming`, `active`, and `historical`.
 

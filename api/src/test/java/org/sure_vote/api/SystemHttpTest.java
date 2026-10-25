@@ -71,6 +71,17 @@ class SystemHttpTest {
     }
 
     @Test
+    void anAdminRunsTheRestoreCheck() throws Exception {
+        final var created = this.send("POST", "/system/tenants", COUNTY, this.admin);
+        final var checked = this.send("POST", "/system/restore-check", null, this.admin);
+        final var stranger = this.send("POST", "/system/restore-check", null, UUID.randomUUID());
+        assertEquals(201, created.statusCode());
+        assertEquals(200, checked.statusCode());
+        assertEquals(0, this.count(checked, "frozenElectionIds"));
+        assertEquals(401, stranger.statusCode());
+    }
+
+    @Test
     void anAdminManagesAdmins() throws Exception {
         final var created = this.send("POST", "/system/admins", "{\"name\":\"Second\"}", this.admin);
         final var id = this.field(created, "id");
