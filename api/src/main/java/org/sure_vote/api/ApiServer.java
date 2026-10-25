@@ -30,7 +30,11 @@ import org.sure_vote.entity.Person;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
+import org.sure_vote.entity.TenantValidator;
+import org.sure_vote.entity.ValidationResultStatus;
 import org.sure_vote.entity.Vote;
+import org.sure_vote.entity.VoteChainValidationResult;
+import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.WireValue;
 import org.sure_vote.entity.Wires;
 import org.sure_vote.resource.BallotResource;
@@ -40,18 +44,27 @@ import org.sure_vote.resource.DisputeResource;
 import org.sure_vote.resource.ElectionResource;
 import org.sure_vote.resource.ErrorResource;
 import org.sure_vote.resource.HashResource;
+import org.sure_vote.resource.HeadListResource;
+import org.sure_vote.resource.HeadResource;
 import org.sure_vote.resource.HealthResource;
 import org.sure_vote.resource.IssuanceResource;
 import org.sure_vote.resource.LookupResource;
 import org.sure_vote.resource.PersonResource;
 import org.sure_vote.resource.TenantResource;
+import org.sure_vote.resource.TenantValidatorResource;
+import org.sure_vote.resource.ValidationListResource;
+import org.sure_vote.resource.ValidationResource;
+import org.sure_vote.resource.ValidatorListResource;
+import org.sure_vote.resource.ValidatorResource;
 import org.sure_vote.resource.VoteResource;
 import org.sure_vote.service.CanonicalJson;
 import org.sure_vote.service.ConstraintException;
+import org.sure_vote.service.HeadNotice;
 import org.sure_vote.service.ImportBallot;
 import org.sure_vote.service.ImportVote;
 import org.sure_vote.service.LookupResult;
 import org.sure_vote.service.SureVote;
+import org.sure_vote.service.ValidationRequest;
 
 public final class ApiServer implements HttpHandler {
     private final SureVote app;
@@ -198,6 +211,24 @@ public final class ApiServer implements HttpHandler {
         else if ("POST".equals(method) && this.disputeStatus(parts)) {
             this.reviewDispute(exchange, parts);
         }
+        else if ("POST".equals(method) && this.named(parts, "validators")) {
+            this.createValidator(exchange);
+        }
+        else if ("POST".equals(method) && this.named(parts, "tenant-validators")) {
+            this.createTenantValidator(exchange);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "heads")) {
+            this.heads(exchange, parts);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "validators")) {
+            this.electionValidators(exchange, parts);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "validations")) {
+            this.listValidations(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionAction(parts, "validations")) {
+            this.fileValidation(exchange, parts);
+        }
         else if (this.workspace.handles(method, parts)) {
             this.workspace.handle(exchange, method, parts);
         }
@@ -337,6 +368,49 @@ public final class ApiServer implements HttpHandler {
         final var status = this.wire(DisputeStatus.values(), body.status, "dispute status");
         final var saved = this.app.setDisputeStatus(id, status, actor);
         this.writeJson(exchange, 200, this.disputeResource(saved));
+    }
+
+    private void createValidator(final HttpExchange exchange) throws IOException {
+        final var actor = this.actor(exchange);
+        final var body = this.read(exchange, ValidatorBody.class);
+        final var draft = this.validatorDraft(body);
+        final var saved = this.app.registerValidator(draft, actor);
+        this.writeJson(exchange, 201, this.validatorResource(saved));
+    }
+
+    private void createTenantValidator(final HttpExchange exchange) throws IOException {
+        final var actor = this.actor(exchange);
+        final var body = this.read(exchange, TenantValidatorBody.class);
+        final var link = this.tenantValidator(body);
+        final var saved = this.app.registerTenantValidator(link, actor);
+        this.writeJson(exchange, 201, this.tenantValidatorResource(saved));
+    }
+
+    private void heads(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var notices = this.app.heads(id);
+        this.writeJson(exchange, 200, this.headList(notices));
+    }
+
+    private void electionValidators(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var rows = this.app.electionValidators(id);
+        this.writeJson(exchange, 200, this.validatorList(rows));
+    }
+
+    private void listValidations(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var rows = this.app.validationResults(id);
+        this.writeJson(exchange, 200, this.validationList(rows));
+    }
+
+    private void fileValidation(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.actor(exchange);
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, ValidationBody.class);
+        final var request = this.validationRequest(body);
+        final var saved = this.app.fileValidation(id, request, actor);
+        this.writeJson(exchange, 201, this.validationResource(saved));
     }
 
     private boolean named(final List<String> parts, final String name) {
@@ -637,6 +711,142 @@ public final class ApiServer implements HttpHandler {
         return resource;
     }
 
+    private VoteChainValidator validatorDraft(final ValidatorBody body) {
+        final var draft = new VoteChainValidator();
+        draft.setName(body.name);
+        draft.setDescription(body.description);
+        draft.setPublicKey(body.publicKey);
+        return draft;
+    }
+
+    private TenantValidator tenantValidator(final TenantValidatorBody body) {
+        final var link = new TenantValidator();
+        link.setTenantId(body.tenantId);
+        link.setValidatorId(body.validatorId);
+        return link;
+    }
+
+    private ValidationRequest validationRequest(final ValidationBody body) {
+        final var result = this.wire(ValidationResultStatus.values(), body.result, "validation result");
+        final var when = this.instant(body.dateValidated);
+        return new ValidationRequest(
+            body.voteChainId,
+            body.validatorId,
+            body.validatedThroughHash,
+            body.length,
+            result,
+            when,
+            body.method,
+            body.notes,
+            body.evidenceHash,
+            body.signature
+        );
+    }
+
+    private ValidatorResource validatorResource(final VoteChainValidator validator) {
+        final var resource = new ValidatorResource();
+        resource.setId(validator.getId());
+        resource.setName(validator.getName());
+        resource.setDescription(validator.getDescription());
+        resource.setPublicKey(validator.getPublicKey());
+        return resource;
+    }
+
+    private TenantValidatorResource tenantValidatorResource(final TenantValidator link) {
+        final var resource = new TenantValidatorResource();
+        resource.setId(link.getId());
+        resource.setTenantId(link.getTenantId());
+        resource.setValidatorId(link.getValidatorId());
+        return resource;
+    }
+
+    private HeadListResource headList(final List<HeadNotice> notices) {
+        final var resources = new ArrayList<HeadResource>();
+        final var list = new HeadListResource();
+        this.addHeads(resources, notices);
+        list.setHeads(resources);
+        return list;
+    }
+
+    private void addHeads(final List<HeadResource> resources, final List<HeadNotice> notices) {
+        for (final var notice : notices) {
+            resources.add(this.headResource(notice));
+        }
+    }
+
+    private HeadResource headResource(final HeadNotice notice) {
+        final var resource = new HeadResource();
+        resource.setElectionId(notice.electionId());
+        resource.setRaceId(notice.raceId());
+        resource.setLength(notice.length());
+        resource.setHeadHash(notice.headHash());
+        resource.setObservedAt(this.time(notice.observedAt()));
+        resource.setSignature(notice.signature());
+        resource.setCanvassHash(notice.canvassHash());
+        resource.setWitnessGap(notice.witnessGap());
+        return resource;
+    }
+
+    private ValidatorListResource validatorList(final List<VoteChainValidator> rows) {
+        final var resources = new ArrayList<ValidatorResource>();
+        final var list = new ValidatorListResource();
+        this.addValidators(resources, rows);
+        list.setValidators(resources);
+        return list;
+    }
+
+    private void addValidators(final List<ValidatorResource> resources, final List<VoteChainValidator> rows) {
+        for (final var row : rows) {
+            resources.add(this.validatorResource(row));
+        }
+    }
+
+    private ValidationListResource validationList(final List<VoteChainValidationResult> rows) {
+        final var resources = new ArrayList<ValidationResource>();
+        final var list = new ValidationListResource();
+        this.addValidations(resources, rows);
+        list.setValidations(resources);
+        return list;
+    }
+
+    private void addValidations(
+        final List<ValidationResource> resources,
+        final List<VoteChainValidationResult> rows
+    ) {
+        for (final var row : rows) {
+            resources.add(this.validationResource(row));
+        }
+    }
+
+    private ValidationResource validationResource(final VoteChainValidationResult row) {
+        final var resource = new ValidationResource();
+        final var result = row.getResult();
+        resource.setId(row.getId());
+        resource.setTenantId(row.getTenantId());
+        resource.setVoteChainId(row.getVoteChainId());
+        resource.setValidatorId(row.getValidatorId());
+        resource.setDateValidated(this.time(row.getDateValidated()));
+        resource.setValidatedThroughHash(row.getValidatedThroughHash());
+        resource.setLength(row.getLength());
+        resource.setMethod(row.getMethod());
+        resource.setResult(result.wire());
+        resource.setNotes(row.getNotes());
+        resource.setEvidenceHash(row.getEvidenceHash());
+        resource.setPayload(row.getPayload());
+        resource.setHash(row.getHash());
+        resource.setSignature(row.getSignature());
+        return resource;
+    }
+
+    private String time(final Instant instant) {
+        if (instant == null) {
+            return null;
+        }
+        else {
+            return CanonicalJson.timestampText(instant);
+        }
+    }
+
     private <T> T read(final HttpExchange exchange, final Class<T> type) throws IOException {
         final var input = exchange.getRequestBody();
         final var bytes = input.readAllBytes();
@@ -815,6 +1025,30 @@ public final class ApiServer implements HttpHandler {
         public String entryTimestamp;
         public String nonce;
         public String entrySignature;
+    }
+
+    public static final class ValidatorBody {
+        public String name;
+        public String description;
+        public String publicKey;
+    }
+
+    public static final class TenantValidatorBody {
+        public UUID tenantId;
+        public UUID validatorId;
+    }
+
+    public static final class ValidationBody {
+        public UUID voteChainId;
+        public UUID validatorId;
+        public String validatedThroughHash;
+        public int length;
+        public String result;
+        public String dateValidated;
+        public String method;
+        public String notes;
+        public String evidenceHash;
+        public String signature;
     }
 
     public static final class SignatureBody {

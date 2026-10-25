@@ -2,6 +2,7 @@ package org.sure_vote.service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.sure_vote.entity.Address;
@@ -23,8 +24,10 @@ import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
+import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
 import org.sure_vote.entity.VoteChain;
+import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.VotingDistrict;
 import org.sure_vote.entity.VotingPrecinct;
 import org.sure_vote.repository.SureVoteRepository;
@@ -217,6 +220,7 @@ final class DefinitionService {
         );
         this.definitions.validate(this.repository, existing);
         this.stores.require(signed, "Operator signature does not match the election definition");
+        this.requireOutsideValidator(existing);
         return this.activated(existing, hash, signature, actor);
     }
 
@@ -266,6 +270,50 @@ final class DefinitionService {
         chain.setHash(hash);
         this.stores.add(chain, actor);
         return saved;
+    }
+
+    private void requireOutsideValidator(final Election election) {
+        final var tenant = this.stores.require(Tenant.class, election.getTenantId());
+        if (tenant.getKind() == TenantKind.PRODUCTION) {
+            final var registered = this.outsideValidator(tenant.getId());
+            this.stores.require(registered, "a production election needs an outside validator");
+        }
+    }
+
+    private boolean outsideValidator(final UUID tenantId) {
+        final var links = this.repository.list(TenantValidator.class);
+        return this.liveLink(links, tenantId);
+    }
+
+    private boolean liveLink(final List<TenantValidator> links, final UUID tenantId) {
+        var found = false;
+        for (final var link : links) {
+            found = found || this.live(link, tenantId);
+        }
+        return found;
+    }
+
+    private boolean live(final TenantValidator link, final UUID tenantId) {
+        final var kept = link.getDeletedAt() == null;
+        final var same = tenantId.equals(link.getTenantId());
+        if (kept && same) {
+            return this.liveValidator(link.getValidatorId());
+        }
+        else {
+            return false;
+        }
+    }
+
+    private boolean liveValidator(final UUID validatorId) {
+        final var found = this.repository.find(VoteChainValidator.class, validatorId);
+        if (found.isEmpty()) {
+            return false;
+        }
+        else {
+            final var validator = found.get();
+            final var kept = validator.getDeletedAt() == null;
+            return kept;
+        }
     }
 
     private Election activated(final Election existing, final String hash, final String signature, final UUID actor) {

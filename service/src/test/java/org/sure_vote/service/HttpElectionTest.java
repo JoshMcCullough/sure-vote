@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.sure_vote.api.ApiServer;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.IssuanceStatus;
+import org.sure_vote.entity.VoteChain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,6 +49,18 @@ class HttpElectionTest {
     void disputeCountOmitsTheStatement() throws Exception {
         final var world = SampleElection.fptp();
         this.use(world, () -> this.dispute(world));
+    }
+
+    @Test
+    void headsStayPrivateUntilTheElectionIsActive() throws Exception {
+        final var world = SampleElection.upcomingFptp();
+        this.use(world, () -> this.hiddenHeads(world));
+    }
+
+    @Test
+    void aValidatorSignsThePublishedHead() throws Exception {
+        final var world = SampleElection.fptp();
+        this.use(world, () -> this.witness(world));
     }
 
     private void activate(final SampleElection world) throws Exception {
@@ -166,6 +179,71 @@ class HttpElectionTest {
         assertFalse(style.isBlank());
         assertFalse(owned.isBlank());
         assertFalse(assignment.isBlank());
+    }
+
+    private void hiddenHeads(final SampleElection world) throws Exception {
+        final var response = this.send("GET", "/elections/" + world.electionId + "/heads", null);
+        final var body = response.body();
+        assertEquals(400, response.statusCode());
+        assertTrue(body.contains("election is not public yet"));
+    }
+
+    private void witness(final SampleElection world) throws Exception {
+        final var chain = this.chain(world);
+        final var path = "/elections/" + world.electionId;
+        final var heads = this.send("GET", path + "/heads", null);
+        final var headBody = heads.body();
+        final var filed = this.saved(path + "/validations", this.validationJson(world, chain));
+        final var listed = this.send("GET", path + "/validations", null);
+        final var validators = this.send("GET", path + "/validators", null);
+        final var listBody = listed.body();
+        final var validatorBody = validators.body();
+        final var publicKey = world.validatorKey.publicKey();
+        assertEquals(200, heads.statusCode());
+        assertTrue(headBody.contains("\"length\":0"));
+        assertTrue(headBody.contains("\"witnessGap\":false"));
+        assertTrue(headBody.contains("\"signature\":null"));
+        assertTrue(headBody.contains(chain.getHash()));
+        assertTrue(filed.contains("\"result\":\"valid\""));
+        assertEquals(200, listed.statusCode());
+        assertTrue(listBody.contains("\"result\":\"valid\""));
+        assertEquals(200, validators.statusCode());
+        assertTrue(validatorBody.contains("Outside witness"));
+        assertTrue(validatorBody.contains(publicKey));
+    }
+
+    private String validationJson(final SampleElection world, final VoteChain chain) {
+        final var when = Instant.parse("2026-11-05T12:00:00.000Z");
+        final var payload = Payloads.validation(
+            chain.getId(),
+            world.validatorId,
+            chain.getHash(),
+            chain.getLength(),
+            "valid",
+            when,
+            null,
+            null
+        );
+        final var digest = Digests.sha256Hex(payload);
+        final var raw = Digests.unhex(digest);
+        final var seed = world.validatorKey.seed();
+        final var signature = Signatures.sign(seed, raw);
+        return "{\"voteChainId\":\"" + chain.getId()
+            + "\",\"validatorId\":\"" + world.validatorId
+            + "\",\"validatedThroughHash\":\"" + chain.getHash()
+            + "\",\"length\":" + chain.getLength()
+            + ",\"result\":\"valid\",\"dateValidated\":\"2026-11-05T12:00:00.000Z\""
+            + ",\"method\":\"crypto\",\"signature\":\"" + signature + "\"}";
+    }
+
+    private VoteChain chain(final SampleElection world) {
+        final var rows = world.repository.list(VoteChain.class);
+        for (final var row : rows) {
+            if (world.raceId.equals(row.getRaceId())) {
+                return row;
+            }
+        }
+        throw new IllegalStateException("missing chain");
     }
 
     private String demoCast(

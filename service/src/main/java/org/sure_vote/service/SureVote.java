@@ -22,7 +22,10 @@ import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingPlace;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Tenant;
+import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
+import org.sure_vote.entity.VoteChainValidationResult;
+import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.VotingDistrict;
 import org.sure_vote.entity.VotingPrecinct;
 import org.sure_vote.repository.SureVoteRepository;
@@ -35,6 +38,7 @@ public final class SureVote {
     private final DisputeService disputes;
     private final ShowcaseService showcase;
     private final WorkspaceCatalog catalog;
+    private final ValidatorService validators;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -46,6 +50,7 @@ public final class SureVote {
         this.disputes = new DisputeService(repository, stores, this.lookup);
         this.showcase = new ShowcaseService(repository, stores, this);
         this.catalog = new WorkspaceCatalog(repository, stores);
+        this.validators = new ValidatorService(repository, stores);
     }
 
     public Tenant createTenant(final Tenant tenant, final UUID actor) {
@@ -173,6 +178,34 @@ public final class SureVote {
 
     public Election closeShowcase(final UUID electionId, final UUID actor) {
         return this.showcase.close(electionId, actor);
+    }
+
+    public VoteChainValidator registerValidator(final VoteChainValidator validator, final UUID actor) {
+        return this.validators.register(validator, actor);
+    }
+
+    public TenantValidator registerTenantValidator(final TenantValidator link, final UUID actor) {
+        return this.validators.link(link, actor);
+    }
+
+    public VoteChainValidationResult fileValidation(
+        final UUID electionId,
+        final ValidationRequest request,
+        final UUID actor
+    ) {
+        return this.validators.file(electionId, request, actor);
+    }
+
+    public List<HeadNotice> heads(final UUID electionId) {
+        return this.validators.heads(electionId);
+    }
+
+    public List<VoteChainValidationResult> validationResults(final UUID electionId) {
+        return this.validators.results(electionId);
+    }
+
+    public List<VoteChainValidator> electionValidators(final UUID electionId) {
+        return this.validators.validators(electionId);
     }
 
     public Ballot importBallot(final ImportBallot request) {

@@ -91,4 +91,26 @@ public final class Payloads {
         fields.add(CanonicalJson.field("length", CanonicalJson.number(0)));
         return CanonicalJson.object(fields);
     }
+
+    public static String validation(
+        final UUID voteChainId,
+        final UUID validatorId,
+        final String validatedThroughHash,
+        final int length,
+        final String result,
+        final Instant dateValidated,
+        final String notes,
+        final String evidenceHash
+    ) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("voteChainId", CanonicalJson.uuid(voteChainId)));
+        fields.add(CanonicalJson.field("validatorId", CanonicalJson.uuid(validatorId)));
+        fields.add(CanonicalJson.field("validatedThroughHash", CanonicalJson.quote(validatedThroughHash)));
+        fields.add(CanonicalJson.field("length", CanonicalJson.number(length)));
+        fields.add(CanonicalJson.field("result", CanonicalJson.quote(result)));
+        fields.add(CanonicalJson.field("dateValidated", CanonicalJson.timestamp(dateValidated)));
+        fields.add(CanonicalJson.field("notes", CanonicalJson.nullableString(notes)));
+        fields.add(CanonicalJson.field("evidenceHash", CanonicalJson.nullableString(evidenceHash)));
+        return CanonicalJson.object(fields);
+    }
 }

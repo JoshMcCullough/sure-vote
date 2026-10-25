@@ -36,7 +36,9 @@ import org.sure_vote.entity.SeatType;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
+import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Term;
+import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChain;
 import org.sure_vote.entity.VoteChainEntry;
@@ -58,6 +60,8 @@ final class SampleElection {
     final SigningKey operator;
     final SigningKey importKey;
     final SigningKey deviceKey;
+    SigningKey validatorKey;
+    UUID validatorId;
     SigningKey workstationKey;
     byte[] viewingSeed;
     String viewingPublic = VIEWING_KEY;
@@ -504,6 +508,26 @@ final class SampleElection {
         this.seatId = this.savedSeat(this.seat());
         this.termId = this.savedTerm(this.term());
         this.assign();
+        this.registerValidator();
+    }
+
+    private void registerValidator() {
+        final var key = Signatures.generate();
+        final var validator = new VoteChainValidator();
+        final var link = new TenantValidator();
+        final var saved = this.savedValidator(validator, key);
+        this.validatorKey = key;
+        this.validatorId = saved.getId();
+        link.setTenantId(this.tenantId);
+        link.setValidatorId(saved.getId());
+        this.app.registerTenantValidator(link, this.actor);
+    }
+
+    private VoteChainValidator savedValidator(final VoteChainValidator validator, final SigningKey key) {
+        final var publicKey = key.publicKey();
+        validator.setName("Outside witness");
+        validator.setPublicKey(publicKey);
+        return this.app.registerValidator(validator, this.actor);
     }
 
     private Tenant tenant(final TenantKind kind) {

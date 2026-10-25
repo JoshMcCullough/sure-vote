@@ -43,7 +43,7 @@ A demonstration cast is refused for a production tenant. Production recording st
 
 `X-Actor-Id` is an unsigned id stored in this browser under `surevote.actor`. The tenant id may be stored under `surevote.tenant`. That header is enough to build the workspace locally. It is not an account and it is not enough for a public production console.
 
-Voter rolls, mail-in from the browser, dispute review, outside validators, restore incidents, and row-level security stay out of this app for now.
+Voter rolls, mail-in from the browser, dispute review, restore incidents, and row-level security stay out of this app for now.
 
 ## API the workspace calls
 
@@ -58,6 +58,12 @@ Official creates require `X-Actor-Id` and return the saved resource. They map on
 - `POST /elections/{id}/activate` and `POST /elections/{id}/close` with signatures made outside the app
 - `POST /showcase/elections` and `POST /showcase/devices` when the host generates the keys
 - `POST /showcase/elections/{id}/activate`, `/cast`, and `/close`
+
+These routes are public and are not called by the workspace:
+
+- `GET /elections/{id}/heads` publishes each race head once the election is `active`
+- `GET /elections/{id}/validators` and `GET /elections/{id}/validations`
+- `POST /validators`, `POST /tenant-validators`, and `POST /elections/{id}/validations` record an outside validator and a signed result. The React app does not call them.
 
 `POST /showcase/elections/{id}/cast` takes `{votingPrecinctId, recordingDeviceId, recordingPlaceId, personId, selections: [{raceCandidateId, value}]}`. The response is `{code, ballot, votes}`. `value` for a first-past-the-post choice is `Y`.
 
@@ -77,4 +83,5 @@ From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run bui
 - Accounts and a voter login.
 - Mail-in recording from the browser.
 - Noting or dismissing a dispute.
-- Outside validators, restore incidents, and row-level security.
+- Registering an outside validator or filing a validation result. The HTTP routes exist. This app does not call them.
+- Restore incidents and row-level security.
