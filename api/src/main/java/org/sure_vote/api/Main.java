@@ -82,9 +82,11 @@ public final class Main {
     private static void flushed(final SureVote app) {
         try {
             app.flushReceivedBatch();
+            app.pruneNonces();
         }
         catch (final RuntimeException failure) {
-            System.out.println("SureVote could not flush received marks. They stay issued until the next flush.");
+            System.out.println("SureVote could not flush received marks or prune nonces. "
+                + "It tries again on the next run.");
         }
     }
 

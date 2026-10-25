@@ -10,6 +10,7 @@ import org.sure_vote.repository.SureVoteRepository;
 
 public final class SignedRequests {
     static final Duration SKEW = Duration.ofMinutes(5);
+    static final Duration KEPT = SKEW.multipliedBy(2);
 
     private final SureVoteRepository repository;
     private final Stores stores;

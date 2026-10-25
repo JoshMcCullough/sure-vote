@@ -20,6 +20,7 @@ import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.CanvassStatement;
 import org.sure_vote.entity.Identifiable;
 import org.sure_vote.entity.IssuanceStatus;
+import org.sure_vote.entity.RequestNonce;
 import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.TenantValidator;
 import org.sure_vote.entity.Vote;
@@ -83,6 +84,35 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         else {
             return this.nested(joined, work);
         }
+    }
+
+    @Override
+    public int pruneNonces(final Instant before) {
+        synchronized (this.lock) {
+            return this.pruneLocked(before);
+        }
+    }
+
+    private int pruneLocked(final Instant before) {
+        final var currentRows = this.rows;
+        final var nextTable = new LinkedHashMap<UUID, Identifiable>();
+        final var nextRows = new LinkedHashMap<Class<?>, Map<UUID, Identifiable>>();
+        final var nonces = this.listLocked(RequestNonce.class);
+        final var kept = nonces
+            .stream()
+            .filter(nonce -> fresh(nonce, before))
+            .toList();
+        final var removed = nonces.size() - kept.size();
+        kept.forEach(nonce -> nextTable.put(nonce.getId(), nonce));
+        nextRows.putAll(currentRows);
+        nextRows.put(RequestNonce.class, nextTable);
+        this.rows = nextRows;
+        return removed;
+    }
+
+    private static boolean fresh(final RequestNonce nonce, final Instant before) {
+        final var at = nonce.getRequestTimestamp();
+        return !at.isBefore(before);
     }
 
     @Override

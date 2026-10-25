@@ -24,6 +24,8 @@ public interface SureVoteRepository {
 
     void lock(UUID key);
 
+    int pruneNonces(Instant before);
+
     List<Ballot> ballotsByAccessHash(final String voterAccessHash);
 
     Optional<UUID> electionTenant(final UUID electionId);

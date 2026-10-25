@@ -489,6 +489,11 @@ public final class SureVote {
         this.marks.configure(queue, batchSize);
     }
 
+    public int pruneNonces() {
+        final var now = Instant.now();
+        return this.repository.pruneNonces(now.minus(SignedRequests.KEPT));
+    }
+
     public int flushReceived() {
         return this.marks.flush(true);
     }

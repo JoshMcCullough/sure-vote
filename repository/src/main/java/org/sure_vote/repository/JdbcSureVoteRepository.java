@@ -208,6 +208,22 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     }
 
     @Override
+    public int pruneNonces(final Instant before) {
+        return this.query(connection -> this.pruned(connection, before));
+    }
+
+    private int pruned(final Connection connection, final Instant before) throws SQLException {
+        final var statement = connection.prepareStatement("select prune_request_nonces(?)");
+        try {
+            statement.setObject(1, OffsetDateTime.ofInstant(before, ZoneOffset.UTC));
+            return this.firstInt(statement);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    @Override
     public void lock(final UUID key) {
         this.query(connection -> this.advisory(connection, key));
     }

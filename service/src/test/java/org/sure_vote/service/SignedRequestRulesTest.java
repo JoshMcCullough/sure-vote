@@ -25,6 +25,33 @@ class SignedRequestRulesTest {
     }
 
     @Test
+    void nonceRowsArePrunedOnceTheirWindowHasPassed() {
+        final var world = SampleElection.fptp();
+        final var keyId = "import:" + world.electionId;
+        final var seed = world.importKey.seed();
+        final var now = Instant.now();
+        final var early = this.signed(seed, keyId, now.minus(Duration.ofMinutes(4)), "nonce-gggggggggggggggg");
+        final var late = this.signed(seed, keyId, now, "nonce-hhhhhhhhhhhhhhhh");
+        final var first = this.imported(world, early);
+        final var accepted = first.equals(this.imported(world, late));
+        final var kept = world.app.pruneNonces();
+        final var cutoff = now.minus(Duration.ofMinutes(2));
+        final var removed = world.repository.transaction(() -> world.repository.pruneNonces(cutoff));
+        final var after = world.repository.list(org.sure_vote.entity.RequestNonce.class);
+        assertEquals(true, accepted);
+        assertEquals(0, kept);
+        assertEquals(1, removed);
+        assertEquals(1, after.size());
+        this.denied("request was already used", () -> this.imported(world, late));
+        this.denied("request timestamp is too far from now", () -> this.imported(world, this.stale(seed, keyId)));
+    }
+
+    private SignedRequest stale(final byte[] seed, final String keyId) {
+        final var then = Instant.now();
+        return this.signed(seed, keyId, then.minus(Duration.ofMinutes(11)), "nonce-gggggggggggggggg");
+    }
+
+    @Test
     void aForgedStaleOrMisnamedRequestIsRefused() {
         final var world = SampleElection.fptp();
         final var keyId = "import:" + world.electionId;
