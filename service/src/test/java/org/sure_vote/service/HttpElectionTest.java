@@ -63,6 +63,37 @@ class HttpElectionTest {
         this.use(world, () -> this.witness(world));
     }
 
+    @Test
+    void anOperatorSignedRestoreIncidentIsPublic() throws Exception {
+        final var world = SampleElection.fptp();
+        RestoreFixture.restoredAfterLoss(world);
+        this.use(world, () -> this.restoreIncident(world));
+    }
+
+    private void restoreIncident(final SampleElection world) throws Exception {
+        final var path = "/elections/" + world.electionId + "/restore-incidents";
+        final var draft = "{\"reason\":\"Disk lost\",\"timestamp\":\"2026-11-06T09:30:00.250Z\"}";
+        final var hashed = this.saved(path + "/hash", draft);
+        final var hash = this.text(hashed, "hash");
+        final var raw = Digests.unhex(hash);
+        final var seed = world.operator.seed();
+        final var signature = Signatures.sign(seed, raw);
+        final var filed = this.saved(path, this.restoreJson(signature));
+        final var listed = this.send("GET", path, null);
+        final var listBody = listed.body();
+        final var unsigned = this.send("POST", path, this.restoreJson("00".repeat(64)));
+        assertTrue(filed.contains(hash));
+        assertEquals(200, listed.statusCode());
+        assertTrue(listBody.contains("\"signature\":\"" + signature + "\""));
+        assertTrue(listBody.contains("\\\"reason\\\":\\\"Disk lost\\\""));
+        assertEquals(400, unsigned.statusCode());
+    }
+
+    private String restoreJson(final String signature) {
+        return "{\"reason\":\"Disk lost\",\"timestamp\":\"2026-11-06T09:30:00.250Z\""
+            + ",\"signature\":\"" + signature + "\"}";
+    }
+
     private void activate(final SampleElection world) throws Exception {
         final var path = "/elections/" + world.electionId;
         final var defined = this.send("POST", path + "/definition", "{}");

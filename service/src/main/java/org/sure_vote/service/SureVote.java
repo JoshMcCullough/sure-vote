@@ -1,5 +1,6 @@
 package org.sure_vote.service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +21,7 @@ import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.RecordingDevice;
 import org.sure_vote.entity.RecordingPlace;
+import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.Seat;
 import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantValidator;
@@ -39,6 +41,7 @@ public final class SureVote {
     private final ShowcaseService showcase;
     private final WorkspaceCatalog catalog;
     private final ValidatorService validators;
+    private final RestoreService restores;
 
     public SureVote(final SureVoteRepository repository) {
         final var stores = new Stores(repository);
@@ -51,6 +54,7 @@ public final class SureVote {
         this.showcase = new ShowcaseService(repository, stores, this);
         this.catalog = new WorkspaceCatalog(repository, stores);
         this.validators = new ValidatorService(repository, stores);
+        this.restores = new RestoreService(repository, stores, this.validators);
     }
 
     public Tenant createTenant(final Tenant tenant, final UUID actor) {
@@ -206,6 +210,22 @@ public final class SureVote {
 
     public List<VoteChainValidator> electionValidators(final UUID electionId) {
         return this.validators.validators(electionId);
+    }
+
+    public String restoreIncidentPayload(final UUID electionId, final String reason, final Instant timestamp) {
+        return this.restores.payload(electionId, reason, timestamp);
+    }
+
+    public RestoreIncident fileRestoreIncident(
+        final UUID electionId,
+        final RestoreRequest request,
+        final UUID actor
+    ) {
+        return this.restores.file(electionId, request, actor);
+    }
+
+    public List<RestoreIncident> restoreIncidents(final UUID electionId) {
+        return this.restores.incidents(electionId);
     }
 
     public Ballot importBallot(final ImportBallot request) {

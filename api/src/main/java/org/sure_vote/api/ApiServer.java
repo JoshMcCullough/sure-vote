@@ -31,6 +31,7 @@ import org.sure_vote.entity.Tenant;
 import org.sure_vote.entity.TenantKind;
 import org.sure_vote.entity.TenantStatus;
 import org.sure_vote.entity.TenantValidator;
+import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.ValidationResultStatus;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChainValidationResult;
@@ -52,6 +53,8 @@ import org.sure_vote.resource.LookupResource;
 import org.sure_vote.resource.PersonResource;
 import org.sure_vote.resource.TenantResource;
 import org.sure_vote.resource.TenantValidatorResource;
+import org.sure_vote.resource.RestoreIncidentListResource;
+import org.sure_vote.resource.RestoreIncidentResource;
 import org.sure_vote.resource.ValidationListResource;
 import org.sure_vote.resource.ValidationResource;
 import org.sure_vote.resource.ValidatorListResource;
@@ -59,10 +62,12 @@ import org.sure_vote.resource.ValidatorResource;
 import org.sure_vote.resource.VoteResource;
 import org.sure_vote.service.CanonicalJson;
 import org.sure_vote.service.ConstraintException;
+import org.sure_vote.service.Digests;
 import org.sure_vote.service.HeadNotice;
 import org.sure_vote.service.ImportBallot;
 import org.sure_vote.service.ImportVote;
 import org.sure_vote.service.LookupResult;
+import org.sure_vote.service.RestoreRequest;
 import org.sure_vote.service.SureVote;
 import org.sure_vote.service.ValidationRequest;
 
@@ -228,6 +233,15 @@ public final class ApiServer implements HttpHandler {
         }
         else if ("POST".equals(method) && this.electionAction(parts, "validations")) {
             this.fileValidation(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionNested(parts, "restore-incidents", "hash")) {
+            this.restoreHash(exchange, parts);
+        }
+        else if ("POST".equals(method) && this.electionAction(parts, "restore-incidents")) {
+            this.fileRestoreIncident(exchange, parts);
+        }
+        else if ("GET".equals(method) && this.electionAction(parts, "restore-incidents")) {
+            this.listRestoreIncidents(exchange, parts);
         }
         else if (this.workspace.handles(method, parts)) {
             this.workspace.handle(exchange, method, parts);
@@ -411,6 +425,48 @@ public final class ApiServer implements HttpHandler {
         final var request = this.validationRequest(body);
         final var saved = this.app.fileValidation(id, request, actor);
         this.writeJson(exchange, 201, this.validationResource(saved));
+    }
+
+    private void restoreHash(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, RestoreBody.class);
+        final var when = this.instant(body.timestamp);
+        final var payload = this.app.restoreIncidentPayload(id, body.reason, when);
+        this.writeJson(exchange, 200, new HashResource(Digests.sha256Hex(payload)));
+    }
+
+    private void fileRestoreIncident(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var actor = this.actor(exchange);
+        final var id = this.id(parts.get(1));
+        final var body = this.read(exchange, RestoreBody.class);
+        final var when = this.instant(body.timestamp);
+        final var request = new RestoreRequest(body.reason, when, body.signature);
+        final var saved = this.app.fileRestoreIncident(id, request, actor);
+        this.writeJson(exchange, 201, this.restoreResource(saved));
+    }
+
+    private void listRestoreIncidents(final HttpExchange exchange, final List<String> parts) throws IOException {
+        final var id = this.id(parts.get(1));
+        final var rows = this.app.restoreIncidents(id);
+        final var resources = new ArrayList<RestoreIncidentResource>();
+        final var list = new RestoreIncidentListResource();
+        for (final var row : rows) {
+            resources.add(this.restoreResource(row));
+        }
+        list.setIncidents(resources);
+        this.writeJson(exchange, 200, list);
+    }
+
+    private RestoreIncidentResource restoreResource(final RestoreIncident row) {
+        final var resource = new RestoreIncidentResource();
+        resource.setId(row.getId());
+        resource.setTenantId(row.getTenantId());
+        resource.setElectionId(row.getElectionId());
+        resource.setPayload(row.getPayload());
+        resource.setHash(row.getHash());
+        resource.setSignature(row.getSignature());
+        resource.setCreatedAt(this.time(row.getCreatedAt()));
+        return resource;
     }
 
     private boolean named(final List<String> parts, final String name) {
@@ -1048,6 +1104,12 @@ public final class ApiServer implements HttpHandler {
         public String method;
         public String notes;
         public String evidenceHash;
+        public String signature;
+    }
+
+    public static final class RestoreBody {
+        public String reason;
+        public String timestamp;
         public String signature;
     }
 

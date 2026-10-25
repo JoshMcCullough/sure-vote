@@ -113,4 +113,36 @@ public final class Payloads {
         fields.add(CanonicalJson.field("evidenceHash", CanonicalJson.nullableString(evidenceHash)));
         return CanonicalJson.object(fields);
     }
+
+    public static String restoreIncident(
+        final UUID electionId,
+        final List<ChainHead> witnessedHeads,
+        final List<ChainHead> restoredHeads,
+        final String reason,
+        final Instant timestamp
+    ) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("electionId", CanonicalJson.uuid(electionId)));
+        fields.add(CanonicalJson.field("witnessedHeads", heads(witnessedHeads)));
+        fields.add(CanonicalJson.field("restoredHeads", heads(restoredHeads)));
+        fields.add(CanonicalJson.field("reason", CanonicalJson.quote(reason)));
+        fields.add(CanonicalJson.field("timestamp", CanonicalJson.timestamp(timestamp)));
+        return CanonicalJson.object(fields);
+    }
+
+    private static String heads(final List<ChainHead> heads) {
+        final var encoded = new ArrayList<String>();
+        for (final var head : heads) {
+            encoded.add(head(head));
+        }
+        return CanonicalJson.array(encoded);
+    }
+
+    private static String head(final ChainHead head) {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("raceId", CanonicalJson.uuid(head.raceId())));
+        fields.add(CanonicalJson.field("length", CanonicalJson.number(head.length())));
+        fields.add(CanonicalJson.field("headHash", CanonicalJson.quote(head.headHash())));
+        return CanonicalJson.object(fields);
+    }
 }

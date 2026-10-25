@@ -149,7 +149,7 @@ final class ValidatorService {
         this.stores.require(present, "validatedThroughHash is not on the chain");
     }
 
-    private boolean onChain(final VoteChain chain, final int length, final String hash) {
+    boolean onChain(final VoteChain chain, final int length, final String hash) {
         if (length == 0) {
             return this.emptyHead(chain, hash);
         }
@@ -246,7 +246,7 @@ final class ValidatorService {
         return this.stores.add(row, actor);
     }
 
-    private Election publicElection(final UUID electionId) {
+    Election publicElection(final UUID electionId) {
         final var election = this.stores.require(Election.class, electionId);
         final var status = election.getStatus();
         final var open = status == ElectionStatus.ACTIVE || status == ElectionStatus.HISTORICAL;
@@ -330,7 +330,7 @@ final class ValidatorService {
         }
     }
 
-    private boolean registered(final UUID tenantId, final UUID validatorId) {
+    boolean registered(final UUID tenantId, final UUID validatorId) {
         final var links = this.repository.list(TenantValidator.class);
         return this.linked(links, tenantId, validatorId);
     }
@@ -345,7 +345,7 @@ final class ValidatorService {
         }
     }
 
-    private VoteChain chainFor(final UUID raceId) {
+    VoteChain chainFor(final UUID raceId) {
         final var rows = this.repository.list(VoteChain.class);
         final var matched = new ArrayList<VoteChain>();
         this.collectChains(matched, rows, raceId);
@@ -401,7 +401,7 @@ final class ValidatorService {
         }
     }
 
-    private List<Race> races(final UUID electionId) {
+    List<Race> races(final UUID electionId) {
         final var rows = this.repository.list(Race.class);
         final var matched = new ArrayList<Race>();
         for (final var race : rows) {

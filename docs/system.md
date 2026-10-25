@@ -79,6 +79,8 @@ Promotion back to production follows the witnesses:
 
 If a disaster makes the latest witnessed head unrecoverable, promotion requires a `RestoreIncident` for that election. The authority signs it with the operator key. The payload names each race's witnessed head and the head that was actually restored, plus the reason. The host stores the incident and leaves the validator results in place. The incident is public. It does not edit a ledger row. If the operator token is lost as well, a divergent restore cannot be promoted, because there is no signature for the incident.
 
+`POST /elections/{id}/restore-incidents/hash` takes `{reason, timestamp}` and returns the hash the operator signs. The service builds the payload itself. `restoredHeads` is every race's current chain head. `witnessedHeads` is, for each race that has one, the longest head a currently registered `TenantValidator` filed a result for, with the later `dateValidated` breaking a tie. The reason is trimmed and may not be blank. `POST /elections/{id}/restore-incidents` with `X-Actor-Id` takes the same fields plus `signature`, rebuilds the payload, and checks the signature under `Election.operatorPublicKey`. It is refused when every witnessed head is still a prefix of the restored chain, because that restore needs no incident. A second incident for the same election is refused. `GET /elections/{id}/restore-incidents` is public on the same schedule as the head notice. Filing an incident does not change a ballot, a chain, a validator result, or the tally. The host's restore and quarantine steps are operations outside this service.
+
 The backup contains the private roll and the sealed passphrases. It does not contain access codes. Those were never stored.
 
 ### Outside copies

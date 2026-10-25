@@ -57,6 +57,8 @@ A voter files a `BallotDispute` with the same code. The claim is private. The vo
 
 A production election cannot become active until the tenant has registered an outside validator. The host stores that public key and not the private key. `GET /elections/{id}/heads` publishes each race head once the election is active. A validator files a signed result for a real chain prefix. The result does not change the tally. `witnessGap` is true when an active chain has grown and no registered validator has signed the current head within 24 hours. Recording does not stop. A showcase election may activate without a validator.
 
+After a divergent restore, an official files the operator-signed `RestoreIncident`. The service builds the payload from the current chain heads and the latest registered-validator witnesses, refuses it when every witness is still a prefix of the restored chain, and publishes it at `GET /elections/{id}/restore-incidents`. It does not change the ledger or the tally.
+
 The React app in `ui/` is the public lookup and the election workspace. On a showcase tenant it configures an election, casts one demonstration ballot, shows the access code once, and closes. On a production tenant the same configuration screens apply, and activate and close still take a signature made outside the app. The browser does not hold a production private key. See [ui.md](./docs/ui.md).
 
 PostgreSQL stores the same rows. Row-level security, the role split, triggers, and foreign keys from the PostgreSQL strategy are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.

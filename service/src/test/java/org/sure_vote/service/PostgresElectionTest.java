@@ -10,6 +10,7 @@ import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.ChainStatus;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.Outcome;
+import org.sure_vote.entity.RestoreIncident;
 import org.sure_vote.entity.VoteChain;
 import org.sure_vote.repository.JdbcSureVoteRepository;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -51,6 +52,28 @@ class PostgresElectionTest {
         final var world = SampleElection.fptpOn(repository);
         final var before = repository.list(Ballot.class);
         this.assertRolledBack(world, before);
+    }
+
+    @Test
+    void storesADivergentRestoreIncident() {
+        final var world = SampleElection.fptpOn(repository);
+        final var chain = RestoreFixture.restoredAfterLoss(world);
+        final var saved = this.fileIncident(world);
+        final var rows = world.app.restoreIncidents(world.electionId);
+        final var stored = rows.getFirst();
+        assertEquals(1, rows.size());
+        assertEquals(saved.getHash(), stored.getHash());
+        assertEquals(saved.getPayload(), stored.getPayload());
+        assertEquals(1, chain.getLength());
+    }
+
+    private RestoreIncident fileIncident(final SampleElection world) {
+        final var payload = world.app.restoreIncidentPayload(world.electionId, "Disk lost", RestoreFixture.WHEN);
+        final var raw = Digests.unhex(Digests.sha256Hex(payload));
+        final var seed = world.operator.seed();
+        final var signature = Signatures.sign(seed, raw);
+        final var request = new RestoreRequest("Disk lost", RestoreFixture.WHEN, signature);
+        return world.app.fileRestoreIncident(world.electionId, request, world.actor);
     }
 
     private static void open(final PostgreSQLContainer<?> container) {
