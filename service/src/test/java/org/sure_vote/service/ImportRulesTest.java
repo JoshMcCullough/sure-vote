@@ -443,6 +443,7 @@ class ImportRulesTest {
         final var chain = rows.getFirst();
         final var next = Copies.chain(chain);
         next.setStatus(ChainStatus.CLOSED);
+        next.setSignature("00".repeat(64));
         world.repository.replace(next);
     }
 }

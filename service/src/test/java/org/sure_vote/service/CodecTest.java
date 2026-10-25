@@ -10,6 +10,7 @@ import org.sure_vote.entity.VoteChain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class CodecTest {
     @Test
@@ -73,6 +74,11 @@ class CodecTest {
 
     @Test
     void sealRequiresTheRaceChain() {
+        assumeFalse(SampleStore.onPostgres(), "the db does not let a chain move to another race");
+        this.assertSealNeedsChain();
+    }
+
+    private void assertSealNeedsChain() {
         final var failure = assertThrows(ConstraintException.class, this::sealWithoutChain);
         assertEquals("A race has one vote chain", failure.getMessage());
     }

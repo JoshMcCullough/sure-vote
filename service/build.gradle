@@ -25,3 +25,16 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+tasks.register('postgresTest', Test) {
+    description = 'Runs the service tests against PostgreSQL.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    systemProperty 'surevote.store', 'postgres'
+    shouldRunAfter tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('postgresTest')
+}

@@ -13,6 +13,7 @@ import org.sure_vote.entity.ElectionMethod;
 import org.sure_vote.entity.ElectionVotingPrecinctAssignment;
 import org.sure_vote.entity.Locality;
 import org.sure_vote.entity.PrecinctDistrict;
+import org.sure_vote.entity.VotingDistrict;
 import org.sure_vote.entity.Race;
 import org.sure_vote.entity.RaceType;
 import org.sure_vote.entity.Seat;
@@ -26,6 +27,7 @@ import org.sure_vote.entity.VotingPrecinct;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class DefinitionRulesTest {
     @Test
@@ -106,6 +108,7 @@ class DefinitionRulesTest {
     @Test
     void aMissingTermIsRejected() {
         final var world = SampleElection.upcomingFptp();
+        assumeFalse(SampleStore.onPostgres(), "the db rejects a race whose term is missing");
         this.breakTerm(world);
         this.assertMessage(() -> world.app.definitionHash(world.electionId), "Missing Term");
     }
@@ -239,11 +242,21 @@ class DefinitionRulesTest {
 
     private void district(final SampleElection world, final DistrictType type) {
         final var row = new PrecinctDistrict();
+        final var saved = this.savedDistrict(world, type);
         row.setTenantId(world.tenantId);
         row.setVotingPrecinctId(world.precinctId);
-        row.setVotingDistrictId(UUID.randomUUID());
+        row.setVotingDistrictId(saved.getId());
         row.setDistrictType(type);
         world.app.createPrecinctDistrict(row, world.actor);
+    }
+
+    private VotingDistrict savedDistrict(final SampleElection world, final DistrictType type) {
+        final var district = new VotingDistrict();
+        district.setTenantId(world.tenantId);
+        district.setLocalityId(world.localityId);
+        district.setName("District");
+        district.setType(type);
+        return world.app.createVotingDistrict(district, world.actor);
     }
 
     private void pointPrecinctAtChild(final SampleElection world) {

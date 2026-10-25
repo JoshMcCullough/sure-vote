@@ -43,7 +43,6 @@ import org.sure_vote.entity.Vote;
 import org.sure_vote.entity.VoteChain;
 import org.sure_vote.entity.VoteChainEntry;
 import org.sure_vote.entity.VotingPrecinct;
-import org.sure_vote.repository.InMemorySureVoteRepository;
 import org.sure_vote.repository.SureVoteRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,7 +89,7 @@ final class SampleElection {
     private final Instant votingEnd = Instant.parse("2026-11-04T00:00:00Z");
 
     private SampleElection() {
-        this(new InMemorySureVoteRepository());
+        this(SampleStore.open());
     }
 
     private SampleElection(final SureVoteRepository repository) {

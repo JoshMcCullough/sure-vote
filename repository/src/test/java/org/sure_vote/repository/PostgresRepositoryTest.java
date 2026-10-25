@@ -40,6 +40,9 @@ class PostgresRepositoryTest {
     private static PostgreSQLContainer<?> postgres;
     private static JdbcSureVoteRepository repository;
 
+    private ParentRows rows;
+    private UUID entrySlot;
+
     @BeforeAll
     static void start() {
         final var container = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -59,6 +62,7 @@ class PostgresRepositoryTest {
     @BeforeEach
     void setUp() {
         repository.clear();
+        this.rows = new ParentRows(repository);
     }
 
     @Test
@@ -73,7 +77,7 @@ class PostgresRepositoryTest {
 
     @Test
     void anInnerFailureKeepsTheOuterInsert() {
-        final var outer = this.chain(UUID.randomUUID(), "outer");
+        final var outer = this.chain(this.rows.race(), "outer");
         final var result = repository.transaction(() -> this.outerWork(outer));
         final var stored = repository.find(VoteChain.class, outer.getId());
         final var found = stored.orElseThrow();
@@ -85,7 +89,7 @@ class PostgresRepositoryTest {
 
     @Test
     void anOuterFailureRollsBackANestedInsert() {
-        final var chain = this.chain(UUID.randomUUID(), "nested");
+        final var chain = this.chain(this.rows.race(), "nested");
         final var failure = assertThrows(IllegalStateException.class, () -> this.nestedThenStop(chain));
         final var listed = repository.list(VoteChain.class);
         assertEquals("stop", failure.getMessage());
@@ -277,7 +281,7 @@ class PostgresRepositoryTest {
 
     @Test
     void aMissingTimestampStaysNull() {
-        final var chain = this.chain(UUID.randomUUID(), "abc");
+        final var chain = this.chain(this.rows.race(), "abc");
         this.insertWithoutStatus(chain);
         this.assertNullChain(chain.getId());
     }
@@ -286,8 +290,8 @@ class PostgresRepositoryTest {
     void listOrdersByCreatedAtThenId() {
         final var earlier = Instant.parse("2026-01-01T00:00:00Z");
         final var later = Instant.parse("2026-01-02T00:00:00Z");
-        final var first = this.chain(UUID.randomUUID(), "later");
-        final var second = this.chain(UUID.randomUUID(), "earlier");
+        final var first = this.chain(this.rows.race(), "later");
+        final var second = this.chain(this.rows.race(), "earlier");
         this.insertOrdered(first, second, later, earlier);
         this.assertOldest(second.getId());
     }
@@ -323,7 +327,7 @@ class PostgresRepositoryTest {
     }
 
     private void catchInner() {
-        final var inner = this.chain(UUID.randomUUID(), "inner");
+        final var inner = this.chain(this.rows.race(), "inner");
         try {
             repository.transaction(() -> this.insertAndThrow(inner));
         }
@@ -383,7 +387,7 @@ class PostgresRepositoryTest {
     }
 
     private void twoChains() {
-        final var raceId = UUID.randomUUID();
+        final var raceId = this.rows.race();
         final var first = this.chain(raceId, "a");
         final var second = this.chain(raceId, "b");
         repository.insert(first);
@@ -391,8 +395,8 @@ class PostgresRepositoryTest {
     }
 
     private void twoIssuances() {
-        final var personId = UUID.randomUUID();
-        final var electionId = UUID.randomUUID();
+        final var personId = this.rows.personId;
+        final var electionId = this.rows.electionId;
         final var first = this.issuance(personId, electionId);
         final var second = this.issuance(personId, electionId);
         repository.insert(first);
@@ -400,7 +404,7 @@ class PostgresRepositoryTest {
     }
 
     private void twoBallots() {
-        final var electionId = UUID.randomUUID();
+        final var electionId = this.rows.electionId;
         final var first = this.ballot(electionId, "ab");
         final var second = this.ballot(electionId, "ab");
         repository.insert(first);
@@ -408,15 +412,23 @@ class PostgresRepositoryTest {
     }
 
     private void twoNonces() {
-        final var chainId = UUID.randomUUID();
-        final var first = this.entry(chainId, UUID.randomUUID(), 0, "n-1");
-        final var second = this.entry(chainId, UUID.randomUUID(), 1, "n-1");
+        final var chainId = this.entryChain();
+        final var first = this.entry(chainId, this.rows.vote(this.entrySlot), 0, "n-1");
+        final var second = this.entry(chainId, this.rows.vote(this.entrySlot), 1, "n-1");
         repository.insert(first);
         repository.insert(second);
     }
 
+    private UUID entryChain() {
+        final var raceId = this.rows.race();
+        final var chain = this.chain(raceId, "e0");
+        this.entrySlot = this.rows.slot(raceId);
+        repository.insert(chain);
+        return chain.getId();
+    }
+
     private VoteChain inserted(final String hash) {
-        final var chain = this.chain(UUID.randomUUID(), hash);
+        final var chain = this.chain(this.rows.race(), hash);
         repository.insert(chain);
         return chain;
     }
@@ -424,7 +436,7 @@ class PostgresRepositoryTest {
     private VoteChain chain(final UUID raceId, final String hash) {
         final var chain = new VoteChain();
         chain.setId(UUID.randomUUID());
-        chain.setTenantId(UUID.randomUUID());
+        chain.setTenantId(this.rows.tenantId);
         chain.setRaceId(raceId);
         chain.setStatus(ChainStatus.ACTIVE);
         chain.setLength(0);
@@ -446,7 +458,7 @@ class PostgresRepositoryTest {
     private BallotIssuance issuance(final UUID personId, final UUID electionId) {
         final var row = new BallotIssuance();
         row.setId(UUID.randomUUID());
-        row.setTenantId(UUID.randomUUID());
+        row.setTenantId(this.rows.tenantId);
         row.setPersonId(personId);
         row.setElectionId(electionId);
         row.setStatus(IssuanceStatus.ACCEPTED);
@@ -456,8 +468,9 @@ class PostgresRepositoryTest {
     private Ballot ballot(final UUID electionId, final String hash) {
         final var ballot = new Ballot();
         ballot.setId(UUID.randomUUID());
-        ballot.setTenantId(UUID.randomUUID());
+        ballot.setTenantId(this.rows.tenantId);
         ballot.setElectionId(electionId);
+        ballot.setVotingPrecinctId(this.rows.precinctId);
         ballot.setVoterAccessHash(hash);
         return ballot;
     }
@@ -465,7 +478,7 @@ class PostgresRepositoryTest {
     private VoteChainEntry entry(final UUID chainId, final UUID voteId, final int index, final String nonce) {
         final var entry = new VoteChainEntry();
         entry.setId(UUID.randomUUID());
-        entry.setTenantId(UUID.randomUUID());
+        entry.setTenantId(this.rows.tenantId);
         entry.setVoteChainId(chainId);
         entry.setVoteId(voteId);
         entry.setIndex(index);
@@ -479,7 +492,7 @@ class PostgresRepositoryTest {
     }
 
     private void replaceMissing() {
-        final var chain = this.chain(UUID.randomUUID(), "abc");
+        final var chain = this.chain(this.rows.race(), "abc");
         repository.replace(chain);
     }
 
@@ -522,8 +535,8 @@ class PostgresRepositoryTest {
     }
 
     private void twoEntriesForOneVote() {
-        final var chainId = UUID.randomUUID();
-        final var voteId = UUID.randomUUID();
+        final var chainId = this.entryChain();
+        final var voteId = this.rows.vote(this.entrySlot);
         final var first = this.entry(chainId, voteId, 0, "n-1");
         final var second = this.entry(chainId, voteId, 1, "n-2");
         repository.insert(first);
@@ -531,15 +544,16 @@ class PostgresRepositoryTest {
     }
 
     private void twoEntriesAtOneIndex() {
-        final var chainId = UUID.randomUUID();
-        final var first = this.entry(chainId, UUID.randomUUID(), 0, "n-1");
-        final var second = this.entry(chainId, UUID.randomUUID(), 0, "n-2");
+        final var chainId = this.entryChain();
+        final var first = this.entry(chainId, this.rows.vote(this.entrySlot), 0, "n-1");
+        final var second = this.entry(chainId, this.rows.vote(this.entrySlot), 0, "n-2");
         repository.insert(first);
         repository.insert(second);
     }
 
     private void insertNonce(final String nonce) {
-        final var entry = this.entry(UUID.randomUUID(), UUID.randomUUID(), 0, "n-1");
+        final var chainId = this.entryChain();
+        final var entry = this.entry(chainId, this.rows.vote(this.entrySlot), 0, "n-1");
         entry.setNonce(nonce);
         repository.insert(entry);
     }
@@ -550,16 +564,16 @@ class PostgresRepositoryTest {
     }
 
     private List<VoteChain> twoRaces() {
-        final var first = this.chain(UUID.randomUUID(), "a");
-        final var second = this.chain(UUID.randomUUID(), "b");
+        final var first = this.chain(this.rows.race(), "a");
+        final var second = this.chain(this.rows.race(), "b");
         repository.insert(first);
         repository.insert(second);
         return repository.list(VoteChain.class);
     }
 
     private void moveChainOntoTakenRace() {
-        final var taken = UUID.randomUUID();
-        final var first = this.chain(UUID.randomUUID(), "a");
+        final var taken = this.rows.race();
+        final var first = this.chain(this.rows.race(), "a");
         final var second = this.chain(taken, "b");
         final var moved = this.copy(first, "a");
         repository.insert(first);
@@ -569,32 +583,32 @@ class PostgresRepositoryTest {
     }
 
     private List<Ballot> sameHashTwoElections() {
-        final var first = this.ballot(UUID.randomUUID(), "ab");
-        final var second = this.ballot(UUID.randomUUID(), "ab");
+        final var first = this.ballot(this.rows.electionId, "ab");
+        final var second = this.ballot(this.rows.election(), "ab");
         repository.insert(first);
         repository.insert(second);
         return repository.list(Ballot.class);
     }
 
     private void blankHash() {
-        final var ballot = this.ballot(UUID.randomUUID(), " ");
+        final var ballot = this.ballot(this.rows.electionId, " ");
         repository.insert(ballot);
     }
 
     private void missingHash() {
-        final var ballot = this.ballot(UUID.randomUUID(), "ab");
+        final var ballot = this.ballot(this.rows.electionId, "ab");
         ballot.setVoterAccessHash(null);
         repository.insert(ballot);
     }
 
     private void ballotWithoutElection() {
-        final var ballot = this.ballot(UUID.randomUUID(), "ab");
+        final var ballot = this.ballot(this.rows.electionId, "ab");
         ballot.setElectionId(null);
         repository.insert(ballot);
     }
 
     private void twoCanvasses() {
-        final var electionId = UUID.randomUUID();
+        final var electionId = this.rows.electionId;
         final var first = this.canvass(electionId);
         final var second = this.canvass(electionId);
         repository.insert(first);
@@ -602,7 +616,7 @@ class PostgresRepositoryTest {
     }
 
     private void twoIncidents() {
-        final var electionId = UUID.randomUUID();
+        final var electionId = this.rows.electionId;
         final var first = this.incident(electionId);
         final var second = this.incident(electionId);
         repository.insert(first);
@@ -610,9 +624,9 @@ class PostgresRepositoryTest {
     }
 
     private void twoStyles() {
-        final var electionId = UUID.randomUUID();
-        final var precinctId = UUID.randomUUID();
-        final var raceId = UUID.randomUUID();
+        final var electionId = this.rows.electionId;
+        final var precinctId = this.rows.precinctId;
+        final var raceId = this.rows.race();
         final var first = this.style(electionId, precinctId, raceId);
         final var second = this.style(electionId, precinctId, raceId);
         repository.insert(first);
@@ -620,8 +634,8 @@ class PostgresRepositoryTest {
     }
 
     private void twoValidators() {
-        final var tenantId = UUID.randomUUID();
-        final var validatorId = UUID.randomUUID();
+        final var tenantId = this.rows.tenantId;
+        final var validatorId = this.rows.validator();
         final var first = this.validator(tenantId, validatorId);
         final var second = this.validator(tenantId, validatorId);
         repository.insert(first);
@@ -629,8 +643,8 @@ class PostgresRepositoryTest {
     }
 
     private List<BallotIssuance> voidedThenAccepted() {
-        final var personId = UUID.randomUUID();
-        final var electionId = UUID.randomUUID();
+        final var personId = this.rows.personId;
+        final var electionId = this.rows.electionId;
         final var voided = this.issuance(personId, electionId);
         final var accepted = this.issuance(personId, electionId);
         voided.setStatus(IssuanceStatus.VOIDED);
@@ -642,7 +656,7 @@ class PostgresRepositoryTest {
     private CanvassStatement canvass(final UUID electionId) {
         final var statement = new CanvassStatement();
         statement.setId(UUID.randomUUID());
-        statement.setTenantId(UUID.randomUUID());
+        statement.setTenantId(this.rows.tenantId);
         statement.setElectionId(electionId);
         return statement;
     }
@@ -650,7 +664,7 @@ class PostgresRepositoryTest {
     private RestoreIncident incident(final UUID electionId) {
         final var incident = new RestoreIncident();
         incident.setId(UUID.randomUUID());
-        incident.setTenantId(UUID.randomUUID());
+        incident.setTenantId(this.rows.tenantId);
         incident.setElectionId(electionId);
         return incident;
     }
@@ -658,7 +672,7 @@ class PostgresRepositoryTest {
     private BallotStyle style(final UUID electionId, final UUID precinctId, final UUID raceId) {
         final var style = new BallotStyle();
         style.setId(UUID.randomUUID());
-        style.setTenantId(UUID.randomUUID());
+        style.setTenantId(this.rows.tenantId);
         style.setElectionId(electionId);
         style.setVotingPrecinctId(precinctId);
         style.setRaceId(raceId);
@@ -721,7 +735,7 @@ class PostgresRepositoryTest {
     private Address address() {
         final var address = new Address();
         address.setId(UUID.randomUUID());
-        address.setTenantId(UUID.randomUUID());
+        address.setTenantId(this.rows.tenantId);
         address.setStreet1("1 Main");
         address.setLatitude(Double.valueOf(41.25));
         address.setLongitude(Double.valueOf(-72.5));
@@ -732,7 +746,7 @@ class PostgresRepositoryTest {
     private Person person() {
         final var person = new Person();
         person.setId(UUID.randomUUID());
-        person.setTenantId(UUID.randomUUID());
+        person.setTenantId(this.rows.tenantId);
         person.setFirstName("Ada");
         person.setDateOfBirth(LocalDate.of(1990, 1, 2));
         person.setVersion(Integer.valueOf(7));
@@ -743,7 +757,7 @@ class PostgresRepositoryTest {
     private RaceCandidate slot() {
         final var slot = new RaceCandidate();
         slot.setId(UUID.randomUUID());
-        slot.setTenantId(UUID.randomUUID());
+        slot.setTenantId(this.rows.tenantId);
         slot.setWriteIn(true);
         slot.setIncumbent(true);
         slot.setVotesReceived(3);
