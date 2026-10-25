@@ -11,7 +11,7 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 - A lookup page on every deployment lets a voter scan a QR code or type a text code to open the ballot that code names. A mail-in lookup also requires the passphrase the voter set at registration. Checking a published chain does not require this codebase. Published instructions, the public API, an SDK, or an independent program are enough. See [verification.md](./docs/verification.md).
 - When a ballot is recorded, the voter receives that code as a QR code and as text. In person, an offline voting machine prints it at commit and the voter takes it. The machine never learns the voter id. For mail-in, the code is generated when the returned ballot is recorded and sent to the email, phone, or registration address the voter checked on the envelope. It is not printed on the outgoing ballot, and it is not written on the voter row. The letter alone cannot open the ballot.
 - A ballot on the ledger is final. Before commit, an in-person voter can correct the selections. After commit, the voter can file a dispute. The dispute does not change the ballot or the tally.
-- Sure Vote Systems hosts the service for many election authorities on one deployment. A small locality is a tenant on that service, not its own installation. An authority that runs its own instance does so under a separate agreement. Tenancy, residency, backups, and outside copies of chain heads are in [system.md](./docs/system.md).
+- Sure Vote Systems hosts the service for many election authorities on one deployment, on AWS, with infrastructure defined in the AWS CDK. A small locality is a tenant on that service, not its own installation. An authority that runs its own instance does so under a separate agreement. Tenancy, residency, backups, and outside copies of chain heads are in [system.md](./docs/system.md).
 
 ## Capabilities
 
@@ -29,7 +29,8 @@ The chain lives in PostgreSQL. A copy of the chain head held outside that db is 
 - A voter-controlled device submitting a binding ballot. It is planned as a React Native app and is not designed yet. See [system.md](./docs/system.md).
 - Coercion resistance. An in-person access code is a bearer token. Anyone with that slip can open that ballot.
 - A networked voting machine. Polling-place machines stay offline and write ballots to local media.
-- A ledger-level proof that every ballot came from an eligible voter exactly once. SureVote will add a cryptographic spend for it. The design is not specified. See [system.md](./docs/system.md).
+- A ledger-level proof that every ballot came from an eligible voter exactly once. One ballot per voter is required and is enforced today by the private `BallotIssuance` mark. Whether to add a cryptographic spend is open. See [system.md](./docs/system.md).
+- Publishing ballot bodies before close. Bodies are published at close, and validators pull the ledger in bulk then.
 - A parent chain per precinct, district, state, or nation. Geographic totals are the canvass statement.
 - Provisional ballots. A voter who is not accepted is not recorded.
 
