@@ -61,7 +61,7 @@ After a divergent restore, an official files the operator-signed `RestoreInciden
 
 The React app in `ui/` is the public lookup and the election workspace. On a showcase tenant it configures an election, casts one demonstration ballot, shows the access code once, and closes. On a production tenant the same configuration screens apply, and activate and close still take a signature made outside the app. The browser does not hold a production private key. See [ui.md](./docs/ui.md).
 
-PostgreSQL stores the same rows. Row-level security, the role split, triggers, and foreign keys from the PostgreSQL strategy are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
+PostgreSQL stores the same rows. Migration `V3__ledger_guards.sql` adds the immutability triggers from the PostgreSQL strategy: ballots, votes, chain entries, canvass statements, restore incidents, and held keys reject `UPDATE` and `DELETE`. A chain header may change only its tip and status, may move only from `active` to `closed`, and needs a hash and a signature once closed. A validation result keeps its signed fields and cannot be deleted. No row may change its `tenant_id`. Row-level security, the role split, foreign keys, and the cross-row triggers (vote election, ballot precinct, entry chain, tenant copied from the parent) are not in this slice. A new recording device is rejected once any election for that tenant has left `upcoming`, because the signed definition lists every active device.
 
 ## Run
 

@@ -676,6 +676,7 @@ class PostgresRepositoryTest {
     private void replaceChain(final VoteChain next) {
         next.setLength(2);
         next.setStatus(ChainStatus.CLOSED);
+        next.setSignature("sig");
         repository.replace(next);
     }
 
