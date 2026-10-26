@@ -1,10 +1,10 @@
 # Election app
 
-One React app serves two areas. The public area is the lookup in [system.md](./system.md). The workspace configures an election and, on a showcase tenant, runs a demonstration. The app is not built as a second service. It is a client of the HTTP API.
+Two React apps share one npm workspace in `ui/`. The public app (`ui/apps/public`) is the lookup in [system.md](./system.md): static, with no sign-in, no cookies, and no session code, calling only public read endpoints plus the voter's own dispute. The workspace app (`ui/apps/workspace`) is sign-in, the election workspace, reconciliation, and `/admin`; on a showcase tenant it runs a demonstration and can open the lookup for the ballot it cast. `ui/packages/shared` holds the USWDS theme and wrappers, the i18n setup and locales, the API client, the lookup page, and the smoke helpers. Each app is a client of the HTTP API, and each deploys with the API surface in [deployment.md](./deployment.md). The UI is not the security boundary: the API surface is.
 
 Checking a published chain still does not require this app. [verification.md](./verification.md) stays sufficient on its own.
 
-The app is served at `/app` on the same origin as the API. Routes live under that prefix so they do not collide with `GET /elections/{id}`. Fetch calls use the unprefixed API paths.
+The workspace app is served at `/app/` and the public app at `/voter/`, each on the same origin as its API surface. Routes live under those prefixes so they do not collide with `GET /elections/{id}`. Fetch calls use the unprefixed API paths. `SUREVOTE_STATIC` (default `ui/apps/workspace/dist`) and `SUREVOTE_STATIC_PUBLIC` (default `ui/apps/public/dist`) point at the builds. The public surface mounts only `/voter`, the workspace surface only `/app`, and the demo and `all` surfaces both. Each page is sent with its Content-Security-Policy (`Pages`), and CloudFront repeats it.
 
 ## Public area
 
@@ -12,8 +12,10 @@ A voter, or a person the voter asked to type the code, opens one ballot. A mail-
 
 Routes:
 
-- `/` explains the two areas. It opens a ballot from the code and passphrase alone with `POST /lookup`, then opens that ballot's election page with the code and passphrase in router state, not in the address. It can also open a lookup by election id.
-- `/elections/:electionId` is the lookup.
+- `/voter/` opens a ballot from the code and passphrase alone with `POST /lookup`, then opens that ballot's election page with the code and passphrase in router state, not in the address. It can also open a lookup by election id. On the lookup host CloudFront redirects `/` here.
+- `/voter/elections/:electionId` is the lookup. The workspace app mounts the same page at `/app/elections/:electionId` so a demonstration can open the ballot it just cast without putting the code in the address.
+
+The workspace app's `/app/` is its own home. It reads `surface` from `GET /auth/config` and, on the demo, hides the official sign-in and officials links. That is presentation only; the demo surface does not mount those routes.
 
 The lookup page:
 
@@ -87,37 +89,37 @@ Create a recording device before activate. Devices lock once any election of the
 
 ## Stack
 
-Vite, React, and TypeScript, with USWDS and react-i18next. No second state library. The dev server proxies the API prefixes to `http://127.0.0.1:8080`. Production serves `ui/dist` from the JDK API at `/app`. Do not add CORS until a separate host requires it.
+Vite, React, and TypeScript, with USWDS and react-i18next. No second state library. `ui/package.json` declares the npm workspaces (`packages/shared`, `apps/public`, `apps/workspace`) and holds the dependencies. Each app imports shared code as `@surevote/shared/...` and locales as `@surevote/locales/...` (a Vite alias and a TypeScript path from `packages/shared/vite.base.ts` and `tsconfig.base.json`). Each app has its own Vite build, base path, and `dist`. The dev servers proxy their API prefixes to `http://127.0.0.1:8080`. Do not add CORS: each app shares an origin with its surface.
 
-`./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_JDBC_APP_USER` and `SUREVOTE_JDBC_APP_PASSWORD` name the writer role the API connects as: the process migrates as the owner, grants that existing role `select`, `insert`, and `update` on every table, and opens the store as the role, so row-level security applies. Without them it connects as the owner and prints a warning. `SUREVOTE_JDBC_PUBLIC_USER` and `SUREVOTE_JDBC_PUBLIC_PASSWORD` name an existing read-only role for public reads. At startup the owner grants it `select` on `tenant`, `election`, `race`, `race_candidate`, `candidate`, `vote_chain`, `vote_chain_entry`, `vote`, `vote_chain_validator`, `tenant_validator`, `vote_chain_validation_result`, `restore_incident`, `canvass_statement`, and `close_bundle` only (`JdbcSureVoteRepository.grantReader`), and `GET /elections/{id}`, the ballot lookups, heads, validators, validations, and restore incidents run through it. It has no access to `person`, `ballot_issuance`, `ballot` (lookups go through `lookup_ballots`, and candidate names through `candidate_names`), disputes, sessions, or held keys, and it cannot write. The dispute count stays on the writer role, because the dispute table holds private statements. Without the variables, public reads use the writer connection. `SUREVOTE_STATIC` overrides the static root. The default root is `ui/dist`, and it is mounted only when `index.html` is there.
+`./gradlew :api:run` listens on port 8080, or `SUREVOTE_PORT`. With no `SUREVOTE_JDBC_URL` the store is in memory. When that URL is set, the process migrates and opens PostgreSQL with `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. `SUREVOTE_JDBC_APP_USER` and `SUREVOTE_JDBC_APP_PASSWORD` name the writer role the API connects as: the process migrates as the owner, grants that existing role `select`, `insert`, and `update` on every table, and opens the store as the role, so row-level security applies. Without them it connects as the owner and prints a warning. `SUREVOTE_JDBC_PUBLIC_USER` and `SUREVOTE_JDBC_PUBLIC_PASSWORD` name an existing read-only role for public reads. At startup the owner grants it `select` on `tenant`, `election`, `race`, `race_candidate`, `candidate`, `vote_chain`, `vote_chain_entry`, `vote`, `vote_chain_validator`, `tenant_validator`, `vote_chain_validation_result`, `restore_incident`, `canvass_statement`, and `close_bundle` only (`JdbcSureVoteRepository.grantReader`), and `GET /elections/{id}`, the ballot lookups, heads, validators, validations, and restore incidents run through it. It has no access to `person`, `ballot_issuance`, `ballot` (lookups go through `lookup_ballots`, and candidate names through `candidate_names`), disputes, sessions, or held keys, and it cannot write. The dispute count stays on the writer role, because the dispute table holds private statements. Without the variables, public reads use the writer connection. `SUREVOTE_SURFACE` is `public`, `workspace`, `demo`, or `all` (the default); see [deployment.md](./deployment.md). Each static root is mounted only when its `index.html` is there.
 
-From `ui/`, `npm install` then `npm run dev` starts the dev server. `npm run build` type-checks, runs `npm run i18n:check`, and writes `ui/dist`. `npm run smoke` builds the app, starts `:api:run` on port 8089 (`SUREVOTE_SMOKE_PORT`) with a demo tenant, and drives headless Chrome (`SUREVOTE_SMOKE_CHROME`, default `/usr/bin/google-chrome`) through `playwright-core`; see [Testing](#testing). It is not part of `./gradlew check`; the `ui` job in `.github/workflows/ci.yml` runs it.
+From `ui/`, `npm install` then `npm run dev:public` or `npm run dev:workspace` starts a dev server. `npm run build` runs `npm run i18n:check`, then type-checks and builds each app into `ui/apps/<app>/dist`; the public build also runs the bundle check. `npm run smoke` builds both apps and the API distribution, starts three API processes with fresh in-memory stores (demo on port 8089, `SUREVOTE_SMOKE_PORT`; public on 8090; workspace on 8091 with dev sign-in and a bootstrapped system admin), and drives headless Chrome (`SUREVOTE_SMOKE_CHROME`, default `/usr/bin/google-chrome`) through `playwright-core`; see [Testing](#testing). It is not part of `./gradlew check`; the `ui` job in `.github/workflows/ci.yml` runs it.
 
 ## Design system
 
-The app uses the U.S. Web Design System: `@uswds/uswds` 3.14 for the Sass, tokens, fonts, and icons, and `@trussworks/react-uswds` 13 for a few React components (header, navigation, title). Both are maintained, and react-uswds 13 lists React 19 as a peer. Most markup uses the USWDS classes directly (`usa-card`, `usa-form-group`, `usa-input`, `usa-alert`, `usa-table--stacked-header`), wrapped in small typed components in `ui/src/components`: `Layout` (skip link, header, menu, footer, focus on route change), `Page` (`PageHeading`, `Panel`, alerts), `Fields` (text, select, and textarea fields with hint, error, and an error summary), `AccessCode`, and `LanguageSwitcher`.
+The app uses the U.S. Web Design System: `@uswds/uswds` 3.14 for the Sass, tokens, fonts, and icons, and `@trussworks/react-uswds` 13 for a few React components (header, navigation, title). Both are maintained, and react-uswds 13 lists React 19 as a peer. Most markup uses the USWDS classes directly (`usa-card`, `usa-form-group`, `usa-input`, `usa-alert`, `usa-table--stacked-header`), wrapped in small typed components in `ui/packages/shared/src/components` (and `AccessCode` in the workspace app): `Layout` (skip link, header, menu, footer, focus on route change), `Page` (`PageHeading`, `Panel`, alerts), `Fields` (text, select, and textarea fields with hint, error, and an error summary), `AccessCode`, and `LanguageSwitcher`.
 
-The theme is `ui/src/styles/index.scss`. It sets USWDS settings only: a `green-cool` primary family, a `gray-cool` base, Public Sans for text and Merriweather for headings, the `blue-40v` focus ring, and which USWDS packages are compiled. Every color comes from a system token, so the contrast follows the USWDS grade rules. `ui/src/styles/_app.scss` adds only what USWDS has no setting for, using USWDS functions and logical properties: a 44 px minimum target size, the access-code block, the desktop header row, and a `prefers-reduced-motion` rule. Vite compiles it with `sass-embedded`, and `vite.config.ts` puts `node_modules/@uswds/uswds/packages` on the Sass load path.
+The theme is `ui/packages/shared/src/styles/index.scss`, shared by both apps. It sets USWDS settings only: a `green-cool` primary family, a `gray-cool` base, Public Sans for text and Merriweather for headings, the `blue-40v` focus ring, and which USWDS packages are compiled. Every color comes from a system token, so the contrast follows the USWDS grade rules. `_app.scss` beside it adds only what USWDS has no setting for, using USWDS functions and logical properties: a 44 px minimum target size, the access-code block, the desktop header row, and a `prefers-reduced-motion` rule. Vite compiles it with `sass-embedded`, and `packages/shared/vite.base.ts` puts `node_modules/@uswds/uswds/packages` on the Sass load path.
 
 ## Translations
 
-Every user-facing string is in `ui/src/locales/<code>.json` and read with `react-i18next` (`i18next` 26, `react-i18next` 17). `en.json` is the source. `es.json` is a machine draft: its `_meta.reviewed` is `false`, and while it is, the app shows "This translation is a machine draft that has not been reviewed yet" on every page in that language. A fluent reviewer who knows election terms must check it before production use and then set `reviewed` to `true`.
+Every user-facing string is in `ui/packages/shared/locales/<code>/<namespace>.json` and read with `react-i18next` (`i18next` 26, `react-i18next` 17). The namespaces are `common` (layout, errors, form messages, not found, and the enum labels the lookup shows), `lookup` (the voter pages), and `workspace` (everything else). The public app loads `common` and `lookup` only, so its bundle carries no workspace string; the workspace app loads all three. Keys keep their full paths (`lookup.title`, `fields.code`), and i18next searches the loaded namespaces in order, so a key lives in exactly one namespace. English is the source. Spanish is a machine draft: its `_meta.reviewed` is `false`, and while it is, the app shows "This translation is a machine draft that has not been reviewed yet" on every page in that language. A fluent reviewer who knows election terms must check it before production use and then set `reviewed` to `true`.
 
 Rules:
 
 - Sentences are whole strings with `{{name}}` interpolation. Nothing builds a sentence by concatenation.
 - Counts use i18next plurals (`_one`, `_other`, and Spanish `_many`), which follow `Intl.PluralRules`.
-- Dates and numbers go through `formatDateTime` and `formatNumber` in `ui/src/i18n.ts`, which use `Intl` with the current language.
+- Dates and numbers go through `formatDateTime` and `formatNumber` in `ui/packages/shared/src/i18n.ts`, which use `Intl` with the current language.
 - API enum values (`city-council`, `in-person`, `historical`) are shown through `values.<value>` and sent to the API unchanged. Error text from the API is not translated; it is shown inside a translated sentence.
-- The language comes from `?lang=`, then the saved choice (`localStorage` `surevote.lang`), then the browser's languages, then English. Changing it sets `lang` and `dir` on `<html>`. Layout uses logical properties, so a right-to-left language only needs to be listed in `rtl` in `i18n.ts`. USWDS itself still uses some physical properties, so check a right-to-left language visually before shipping it.
+- The language comes from `?lang=`, then the saved choice (`localStorage` `surevote.lang`), then the browser's languages, then English. Changing it sets `lang` and `dir` on `<html>`. Layout uses logical properties, so a right-to-left language only needs to be listed in `rtl` in the shared `i18n.ts`. USWDS itself still uses some physical properties, so check a right-to-left language visually before shipping it.
 
 To add a language:
 
-1. Copy `en.json` to `<code>.json`, set `_meta.language`, and set `_meta.reviewed` to `false` until a reviewer signs off.
+1. Copy `locales/en/` to `locales/<code>/`, set `_meta.language` in each file, and set `_meta.reviewed` to `false` until a reviewer signs off.
 2. Translate every value. Keep the `{{...}}` names and add the plural forms the language needs.
-3. Import it in `ui/src/i18n.ts` and add it to `languages` with its own name for itself. With more than two languages the switcher becomes a select.
-4. Run `npm run i18n:check`. It fails on a missing or extra key, a plural without `_other`, a missing `_meta.reviewed`, or a `t('...')` key in the code that `en.json` does not have.
-5. Add the language to the smoke run in `ui/smoke/workspace.smoke.mjs` so axe and the layout checks cover it.
+3. Add it to `languages` in the shared `i18n.ts` with its own name for itself, and import its files in each app's `main.tsx`. With more than two languages the switcher becomes a select.
+4. Run `npm run i18n:check`. Per namespace, it fails on a missing or extra key, a plural without `_other`, or a missing `_meta.reviewed`. It also fails on a key in two namespaces, or on a `t('...')` key in an app (or the shared code it uses) that the app's namespaces do not have.
+5. Add the language to the smoke scripts in `ui/smoke/` so axe and the layout checks cover it.
 
 ## Accessibility
 
@@ -137,13 +139,13 @@ Layouts are mobile first on the USWDS grid. The header collapses into a menu bel
 
 ## Testing
 
-`npm run smoke` runs, in English:
+`npm run smoke` runs three scripts, each against its own surface. Every page state gets an axe scan (`@axe-core/playwright` 4.14, WCAG 2.0, 2.1, and 2.2 A and AA tags) and the horizontal-scroll check at 320, 390, and 1280 px, in English and then in Spanish after the language button (which must set `lang="es"`). The helpers are in `ui/packages/shared/smoke/helpers.mjs`.
 
-- every page (home, sign-in, officials, not found, workspace, the access code, reconciliation, lookup), with an axe scan (`@axe-core/playwright` 4.14, WCAG 2.0, 2.1, and 2.2 A and AA tags) and the horizontal-scroll check at 320, 390, and 1280 px;
-- the mobile menu, focus on route change, and the error summary;
-- the showcase flow: configure, activate, cast, copy the access code and read it back from the clipboard, spell it out, close, check the reconciliation row, and open the lookup, which must show the candidate name and not the raw `Y`;
+- `smoke/demo.smoke.mjs`, demo surface, both apps: the workspace home without official links, the mobile menu, focus on route change, the error summary, the showcase flow (configure, activate, cast, copy the access code and read it back from the clipboard, spell it out, close, check the reconciliation row), the lookup in the workspace app and in the public app at `/voter/`, which must show the candidate name and not the raw `Y`, and `404` on system, sign-in, dev sign-in, and machine routes.
+- `smoke/public.smoke.mjs`, public surface, public app: home, a missing code, a missing election, not found, no cookies in the browser, the voter Content-Security-Policy, and `404` on `/app/`, the session, showcase, official, and system routes.
+- `smoke/workspace.smoke.mjs`, workspace surface, workspace app: home, sign-in, dev sign-in as a system admin, `/admin` signed in, not found, and `404` on `/voter/`, the showcase routes, and the public lookup.
 
-then switches to Spanish with the language button, checks `lang="es"`, and scans the same pages again, including a lookup with the code. Any serious or critical axe violation fails the run, and so the `ui` CI job. `SUREVOTE_SMOKE_SHOTS=<dir>` also saves full-page screenshots at 390 and 1280 px.
+Any serious or critical axe violation, any CSP violation, or a page error fails the run, and so the `ui` CI job. `SUREVOTE_SMOKE_SHOTS=<dir>` also saves full-page screenshots at 390 and 1280 px.
 
 Automated checks do not cover everything in WCAG. Before a release, test with a screen reader (VoiceOver on iOS and macOS, NVDA on Windows), at 200 and 400 percent zoom, and with keyboard only.
 
