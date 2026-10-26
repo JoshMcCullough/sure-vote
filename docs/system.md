@@ -233,20 +233,27 @@ A ballot, vote, and chain entry each store a canonical JSON `payload`. The selec
 
 ## Keys
 
-Signatures are Ed25519. The rules are in [verification.md](./verification.md).
+Every signature is ECDSA on NIST P-256 with SHA-256, IEEE P1363 `r || s` with low S. Public keys are uncompressed SEC1 points. The viewing key seals with ECIES on P-256 (ECDH, HKDF-SHA256, AES-256-GCM). The byte rules are in [verification.md](./verification.md). The service uses only the JDK's SunEC provider for these; Bouncy Castle remains only for Argon2id.
 
-Production keys live on hardware tokens. Testing, development, and the showcase must work with software keys and no hardware: the same Ed25519 and X25519 operations, with the seed in a file, in memory, or in `HeldKey`. A production tenant does not accept a software operator or viewing key from the host.
+Production keys live on hardware tokens. Testing, development, and the showcase must work with software keys and no hardware: the same P-256 ECDSA and ECDH operations, with the 32-byte private scalar in a file, in memory, or in `HeldKey`. A production tenant does not accept a software operator or viewing key from the host.
 
-Hardware that fits, as examples rather than requirements:
+### Hardware keys
 
-- **Operator and viewing keys.** A YubiKey 5 series key, through OpenPGP (Ed25519 and X25519 from firmware 5.2.3) or PIV (Ed25519 and X25519 from firmware 5.7), or a Nitrokey 3.
-- **Official and system-admin sign-in.** Any WebAuthn passkey, hardware or platform. A FIDO-only key such as a Google Titan key is a fine sign-in passkey for an official or admin who does not hold an operator or viewing key. A custody officer needs a signing-capable token, such as a YubiKey 5 or a Nitrokey 3.
+Recommended: a YubiKey 5 FIPS Series key, firmware 5.7.4 (FIPS 140-3, certificate #5291, Overall Level 2, Physical Security Level 3), in FIPS-approved mode, for every official's keys and passkeys. In that mode PIV allows only P-256 and P-384 ECC and RSA-3072 and RSA-4096, and blocks Ed25519 and X25519, which is why the keys are P-256.
+
+- **FIPS-approved mode.** Change the default PIV management key (to AES-192 or AES-256), PIN, and PUK before use. PIN policy `none` is not allowed; use `always` for operator, viewing, and escrow slots, with touch policy `always`.
+- **Operator key.** PIV slot 9C (digital signature), generated on the key so its attestation certificate can be checked against the Yubico root. It signs the definition, heads, canvass statement, close bundle, restore incidents, and device-key revocations.
+- **Viewing key.** PIV slot 9D (key management), generated on the key. Unsealing a passphrase is the PIV ECDH operation on the sealed box's ephemeral key.
+- **Official and system-admin sign-in.** The same key's FIDO2 passkey. The relying party asks only for ES256 or ES384 credentials. Any WebAuthn passkey on those algorithms works; a FIDO-only key is fine for an official who holds no operator or viewing key.
+- **Escrow shares** for device voting go in a PIV slot as well. See [device-voting.md](./device-voting.md#escrow-on-p-256).
+- **FIPS 140-2 models.** YubiKey 5 FIPS firmware 5.4.2 and 5.4.3 (certificates #3907 and #3914) moved to the CMVP historical list after 21 September 2026. Do not buy them for new deployments; they also cannot do RSA-3072.
+- **RSA blind-signature keys** for device tokens (RSA-3072, RFC 9474) stay on the authority's HSM, a YubiHSM 2 or AWS CloudHSM, not on a YubiKey: they sign on demand for every issuance.
 - **The host's backup key.** A YubiHSM 2, AWS CloudHSM, or AWS KMS.
 
 - **Device key.** Generated on the device. The private key never leaves it. The public key is registered before the election is signed. A lost or retired device cannot sign new ballots. Ballots it already signed still verify. There is no copy of the private key in escrow. Ballots still only on a dead device are lost with it.
 - **Operator key.** One per election. Generated offline. The private key stays on a hardware token in the authority's custody, and two officers must be present to use it. It is not on a voting machine and not on the db server. On a production tenant the host does not hold it. Sure Vote Systems may hold it for a showcase tenant. It signs the election definition, each published chain head, the canvass statement, and any restore incident. The chain header stores only the latest head signature. A validator result is what keeps an earlier head outside the db.
 - **Import key.** Generated on the authority's central import workstation. Its public key is inside the signed election definition. It signs chain entries and nothing else. The private key stays on that workstation. The hosted service checks the signature and does not hold the key.
-- **Viewing key.** One X25519 key pair for the tenant, generated on the hardware token. Each election definition copies the public key, and the operator signature freezes that copy. Registration seals the voter's passphrase to it. The private key is used only by the mail-in recording component on the authority's workstation, under the same two-officer rule. It can unseal every viewing passphrase for that tenant. It is not in the db, the mail export, a voting machine, or the host. Replacing it means unsealing and resealing on the token. An election cannot name a different viewing public key unless the stored passphrases were sealed to that key.
+- **Viewing key.** One P-256 key pair for the tenant, generated on the hardware token. Each election definition copies the public key, and the operator signature freezes that copy. Registration seals the voter's passphrase to it. The private key is used only by the mail-in recording component on the authority's workstation, under the same two-officer rule. It can unseal every viewing passphrase for that tenant. It is not in the db, the mail export, a voting machine, or the host. Replacing it means unsealing and resealing on the token. An election cannot name a different viewing public key unless the stored passphrases were sealed to that key.
 - **Validator key.** The validator generates it. The authority records only the public key. The authority cannot produce that validator's signature.
 
 A showcase tenant is the exception to the production custody rules above: the host stores that tenant's operator, import, viewing, and device seeds in `HeldKey`, the API never returns them, and a demonstration can be activated, cast, and closed without a hardware token.

@@ -208,9 +208,9 @@ Represents an election for a seat, including the candidates and election dates.
 - `voteHashPayloadSchema` (String): The schema used to generate the payload to be hashed at the vote level.
 - `voteChainEntryHashPayloadSchema` (String): The schema used to generate the payload to be hashed at the vote chain entry level.
 - `hashAlgorithm` (String): The hashing algorithm used across all hashed artifacts in this election (ballots, votes, and vote chain entries).
-- `operatorPublicKey` (String): Ed25519 public key that signs this election definition and each published chain head.
-- `importPublicKey` (String): Ed25519 public key that signs chain entries.
-- `viewingPublicKey` (String): X25519 public key. Mail-in viewing passphrases are encrypted to this key.
+- `operatorPublicKey` (String): P-256 public key, uncompressed SEC1 hex (130 characters), that signs this election definition and each published chain head.
+- `importPublicKey` (String): P-256 public key, uncompressed SEC1 hex, that signs chain entries.
+- `viewingPublicKey` (String): P-256 public key, uncompressed SEC1 hex. Mail-in viewing passphrases are sealed to this key with ECIES.
 - `hash` (String): SHA-256 of the election-definition payload in [verification.md](./verification.md).
 - `signature` (String): Operator signature over `hash`.
 - `frozenAt` (Timestamp, optional): Set when a restore check finds that a witnessed head is no longer a prefix of this election's restored chain. Cleared when its `RestoreIncident` is filed. Not part of the signed definition.
@@ -281,7 +281,7 @@ A machine or workstation that records ballots and signs them. An in-person machi
 - Administrative audit fields
 - `name` (String): The label printed on the device, including its serial number.
 - `kind` (Enum): `polling-place-machine` or `central-workstation`.
-- `publicKey` (String): The key that verifies ballots and votes this device signs.
+- `publicKey` (String): The P-256 public key, uncompressed SEC1 hex, that verifies ballots and votes this device signs.
 - `status` (Enum): `active` or `retired`.
 
 ### HeldKey
@@ -291,7 +291,7 @@ A private seed the host holds for a showcase tenant. The API does not return thi
 - `tenant` (Reference to Tenant)
 - `purpose` (Enum): `operator`, `import`, `device`, or `viewing`.
 - `subject` (UUID): The election, for `operator`, `import`, and `viewing`. The recording device, for `device`.
-- `seed` (String): Lowercase hex of the 32-byte private seed.
+- `seed` (String): Lowercase hex of the 32-byte P-256 private scalar.
 
 Unique on (`purpose`, `subject`).
 
@@ -364,7 +364,7 @@ Represents a person, group, or service that has validated the integrity of a vot
 - Administrative audit fields
 - `name` (String): The name of the vote chain validator.
 - `description` (String, Optional): A description of the vote chain validator.
-- `publicKey` (String): The public key of the vote chain validator, used for verifying signatures.
+- `publicKey` (String): The P-256 public key of the vote chain validator, uncompressed SEC1 hex, used for verifying signatures.
 
 ### VoteChainValidationResult
 Represents the result of a vote chain validation performed by a vote chain validator.

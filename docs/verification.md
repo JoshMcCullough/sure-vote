@@ -40,7 +40,15 @@ The access code is 32 bytes from a cryptographic random generator. The voter see
 - **In person.** `voterAccessHash` is lowercase hex of SHA-256 over the 32 raw bytes.
 - **Mail-in and absentee.** `voterAccessHash` is lowercase hex of Argon2id version 1.3 (version byte `0x13`) over the viewing passphrase, with the 32 raw code bytes as the salt. The passphrase is trimmed, then Unicode NFC, then UTF-8. There is no secret key and no associated data. The memory cost is 65536 KiB (64 MiB), with 3 iterations, parallelism 1, and a 32-byte output. The passphrase is the one set at registration. It is not printed on the letter.
 
-The stored passphrase is a libsodium `crypto_box_seal` ciphertext: an ephemeral X25519 key, then XSalsa20-Poly1305, sealed to the authority viewing public key. The column is lowercase hex of that ciphertext. The recording component unseals it with the viewing private key. Verifiers of the public chain do not unseal it.
+The stored passphrase is an ECIES sealed box to the authority viewing public key, and the column is lowercase hex of it:
+
+1. Pick an ephemeral P-256 key `e` and compute `E = e·G`, encoded as 65 bytes uncompressed SEC1.
+2. `Z` is the 32-byte X coordinate of `e·V`, where `V` is the viewing public key (ECDH, SP 800-56A).
+3. `okm` is 44 bytes of HKDF-SHA256 with an empty salt, input `Z`, and info `"SureVote viewing box v1" || E || V` (ASCII label, then the two 65-byte points).
+4. The first 32 bytes of `okm` are the AES-256-GCM key and the last 12 are the nonce. A fresh `e` per seal keeps the nonce unique. There is no associated data.
+5. The box is `E || ciphertext || tag` (16-byte tag), so it is 81 bytes longer than the passphrase.
+
+The recording component unseals it with the viewing private key, which is the PIV ECDH operation on `E` when the key is on a YubiKey. Verifiers of the public chain do not unseal it. `CryptoRulesTest` holds a fixed vector computed with an independent implementation.
 
 ## Election definition
 
@@ -64,7 +72,14 @@ An empty race chain has no entry hash. Its head payload keys are `raceId`, `leng
 
 ## Signatures
 
-Public keys and signatures are lowercase hex. Signing keys are Ed25519. A signature is over the 32 raw bytes of the integrity hash, not over the hex text.
+Public keys and signatures are lowercase hex.
+
+- **Curve and hash.** ECDSA on NIST P-256 (secp256r1) with SHA-256 (FIPS 186-5).
+- **Public key.** Uncompressed SEC1: `04 || X || Y`, 65 bytes, 130 hex characters. The point must be on the curve. Compressed points and SPKI DER are refused.
+- **Signature.** IEEE P1363: `r || s`, each a 32-byte big-endian integer, 64 bytes, 128 hex characters. DER is refused.
+- **Low S.** `s` must be at most `n / 2`, where `n` is the group order (`ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551`). A signer that gets a high `s` replaces it with `n - s`. A verifier refuses a high `s`, so each signature has one valid encoding and cannot be altered without the key. `r` and `s` must be between 1 and `n - 1`.
+- **What is signed.** The 32 raw bytes of the integrity hash are the ECDSA message digest `e` directly, not hashed again. So the signature is a standard ECDSA-SHA256 signature over the canonical payload bytes, and any ECDSA-P256-SHA256 verifier can check it against the payload. In Java that is `NONEwithECDSAinP1363Format` over the hash, or `SHA256withECDSAinP1363Format` over the payload.
+- `CryptoRulesTest` holds a fixed signature made by an independent implementation, and its high-S twin, which is refused.
 
 - A ballot or vote signature verifies under `recordingDevice.publicKey`, and that device is in the signed `devices` list.
 - A chain-entry signature verifies under `Election.importPublicKey`.
@@ -105,7 +120,7 @@ Each `payload` is the stored canonical text as a JSON string, so a verifier hash
 
 ## Request signatures
 
-A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is Ed25519 over those 32 raw bytes, in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.
+A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is ECDSA P-256 over those 32 raw bytes, encoded as above, in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.
 
 ## Checks
 

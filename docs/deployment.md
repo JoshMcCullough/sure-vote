@@ -20,7 +20,7 @@ One codebase runs as separate deployments. `SUREVOTE_SURFACE` picks the routes a
 | health | `GET /health` | yes | yes | yes |
 | public | `GET /elections/{id}`, `GET /elections/{id}/ballots`, `POST /lookup`, `POST /elections/{id}/lookup`, `GET /elections/{id}/disputes/count`, `POST /elections/{id}/disputes/lookup`, `POST /elections/{id}/disputes`, `GET /elections/{id}/heads`, `GET /elections/{id}/validators`, `GET /elections/{id}/validations`, `GET /elections/{id}/close-bundle`, `GET /elections/{id}/restore-incidents` | yes | no | yes |
 | official | the session routes for configuring and running an election, `GET /workspace`, and the hash helpers | no | yes | yes |
-| machine | `POST /ballots`, `POST /elections/{id}/validations` (Ed25519-signed) | no | yes | no |
+| machine | `POST /ballots`, `POST /elections/{id}/validations` (ECDSA P-256-signed) | no | yes | no |
 | session | `GET /auth/config`, `GET /auth/session`, `POST /auth/sign-out` | no | yes | yes |
 | sign-in | passkey sign-in and enrollment, `/officials/...`, `POST /auth/dev/sign-in` | no | yes | no |
 | system | `/system/...` | no | yes | no |

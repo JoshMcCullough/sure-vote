@@ -8,8 +8,8 @@ Status: people's sign-in is built: WebAuthn passkeys and PostgreSQL-backed serve
 | --- | --- | --- | --- |
 | Official | configure, accept voters, import, close | one tenant | passkey session |
 | System admin | create, list, suspend tenants and admins | every tenant, not their rows | passkey session checked against `SystemAdmin` |
-| Import workstation | `POST /ballots` | one tenant | the ballot and chain entries are already Ed25519-signed |
-| Validator | `POST /elections/{id}/validations` | global | the result is already Ed25519-signed |
+| Import workstation | `POST /ballots` | one tenant | the ballot and chain entries are already ECDSA P-256-signed |
+| Validator | `POST /elections/{id}/validations` | global | the result is already ECDSA P-256-signed |
 | Voter | lookup, disputes | the ballot the code names | the access code, plus the passphrase for mail-in |
 
 The threat model in [system.md](./system.md) sets the bar. A neighboring official or an ordinary request must not read or write another tenant. The host can read the private roll, and outside copies of chain heads are what catch a host rewrite, so request identity does not have to defend against the host. Production operator and viewing keys stay on hardware tokens in the authority's custody and never reach the host. Testing, development, and the showcase use software keys and need no hardware. Revocation has to be immediate: suspending a tenant or disabling an admin must stop the next request.
@@ -38,7 +38,7 @@ Officials and system admins enroll a WebAuthn passkey, either a hardware securit
 
 ### 3. Signed requests or mTLS for machines
 
-The import workstation and validators already hold Ed25519 keys whose public halves are in the signed election definition or in `VoteChainValidator`. They can sign each request (method, path, body hash, timestamp) with that key, or present a client certificate over mTLS.
+The import workstation and validators already hold P-256 keys whose public halves are in the signed election definition or in `VoteChainValidator`. They can sign each request (method, path, body hash, timestamp) with that key, or present a client certificate over mTLS.
 
 - Reuses keys the system already trusts, and the host never holds them.
 - mTLS needs a CA and certificate rotation, and it terminates at whatever proxy is in front of the service. Signing the request with the existing key avoids both.
@@ -62,7 +62,7 @@ The service runs as several containers. Sessions live in PostgreSQL, not in a co
 
 Sign-in needs only WebAuthn, so any FIDO2 key or platform passkey works. A FIDO-only key such as a Google Titan key is a fine sign-in passkey for an official or admin who does not hold an operator or viewing key. A custody officer needs a signing-capable token.
 
-Operator and viewing keys need Ed25519 and X25519 on the token. Examples: a YubiKey 5 series key through OpenPGP (firmware 5.2.3 and later) or PIV (firmware 5.7 and later), or a Nitrokey 3. The host's backup key uses a YubiHSM 2, AWS CloudHSM, or AWS KMS.
+Operator and viewing keys need P-256 ECDSA and ECDH on the token. The recommendation is a YubiKey 5 FIPS Series key, firmware 5.7.4, in FIPS-approved mode, through PIV; see [Hardware keys](./system.md#hardware-keys). The relying party asks only for ES256 or ES384 passkeys. The host's backup key uses a YubiHSM 2, AWS CloudHSM, or AWS KMS.
 
 Every signing step must also run with a software key, so tests, development, and the showcase never need hardware. A production tenant does not accept a software operator or viewing key held by the host.
 
@@ -76,7 +76,7 @@ Every signing step must also run with a software key, so tests, development, and
 - The first admin enrolls with `SUREVOTE_SYSTEM_ADMIN_ENROLLMENT_TOKEN`. The service stores its hash once, and the token works once.
 - `POST /auth/enrollments/start` and `POST /auth/passkeys/finish` enroll a passkey. `POST /auth/passkeys/start` adds another for the signed-in person. `POST /auth/sign-in/start` and `/finish` sign in. `GET /auth/session` names the principal, and `POST /auth/sign-out` revokes the row and clears the cookie.
 - Routes: `/system/*` needs a system-admin session. `POST /elections`, issuances, activate, close, disputes, validators, and restore incidents need an official. `POST /persons`, the workspace creates, `GET /workspace`, and the showcase routes accept an official or a visitor. Each runs in `inTenant` with the session's tenant, and a route that names an election, issuance, or dispute of another tenant is refused with 403 before the service runs.
-- Signed machine requests carry `SureVote-Key-Id`, `SureVote-Timestamp`, `SureVote-Nonce`, and `SureVote-Signature`. The signature is Ed25519 over SHA-256 of the UTF-8 lines `method`, raw `path`, key id, timestamp, nonce, and the lowercase hex SHA-256 of the body bytes, joined by `\n`. The key id is `import:{electionId}` checked against `Election.importPublicKey`, or `validator:{validatorId}` checked against `VoteChainValidator.publicKey`. The timestamp is ISO-8601 within 5 minutes of the server clock. The nonce is 16 to 128 url-safe characters, and `request_nonce` refuses a second use of the same key id and nonce. The check commits in its own transaction before the write, so an import that is then rejected still uses its nonce. A nonce whose request timestamp is more than 10 minutes old can no longer pass the timestamp check, so the scheduled job (`SUREVOTE_RECEIVED_FLUSH_SECONDS`) removes it through `prune_request_nonces` (`V13__nonce_pruning.sql`). Each failure is a 401 with its reason. The import's tenant comes from the election, never from the body. The import's actor is the signed body's `recordedBy`, or a principal derived from the key id when the body has none.
+- Signed machine requests carry `SureVote-Key-Id`, `SureVote-Timestamp`, `SureVote-Nonce`, and `SureVote-Signature`. The signature is ECDSA P-256 (P1363 `r || s`, low S; see [verification.md](./verification.md#signatures)) over SHA-256 of the UTF-8 lines `method`, raw `path`, key id, timestamp, nonce, and the lowercase hex SHA-256 of the body bytes, joined by `\n`. The key id is `import:{electionId}` checked against `Election.importPublicKey`, or `validator:{validatorId}` checked against `VoteChainValidator.publicKey`. The timestamp is ISO-8601 within 5 minutes of the server clock. The nonce is 16 to 128 url-safe characters, and `request_nonce` refuses a second use of the same key id and nonce. The check commits in its own transaction before the write, so an import that is then rejected still uses its nonce. A nonce whose request timestamp is more than 10 minutes old can no longer pass the timestamp check, so the scheduled job (`SUREVOTE_RECEIVED_FLUSH_SECONDS`) removes it through `prune_request_nonces` (`V13__nonce_pruning.sql`). Each failure is a 401 with its reason. The import's tenant comes from the election, never from the body. The import's actor is the signed body's `recordedBy`, or a principal derived from the key id when the body has none.
 - The software path: `SUREVOTE_DEV_SIGN_IN=true` turns on `POST /auth/dev/sign-in` with `{kind, id, tenantId}`, which opens a session for an active admin or official without a passkey. It is off by default, `GET /auth/config` reports it, and it never opens a visitor session. Tests also enroll and sign in with a software authenticator. `POST /showcase/session` opens a visitor session in the demo tenant.
 
 ## What changes when it is chosen
