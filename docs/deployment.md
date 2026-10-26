@@ -12,7 +12,19 @@ One codebase runs as separate deployments. `SUREVOTE_SURFACE` picks the routes a
 
 `all` is the default when `SUREVOTE_SURFACE` is unset. It mounts every route and both apps, for local development and tests. Do not run `all` in production. Production runs the four: `public`, `demo`, `workspace`, and `ingest`.
 
-`Startup` checks each surface's configuration before the process opens a database or a port, and refuses to start on a mistake: the writer role or a missing role on the public surface, dev sign-in on the public or ingest surface, or no demo tenant on the demo surface (`StartupTest`).
+`Startup` checks each surface's configuration before the process opens a database or a port, and refuses to start on a mistake: the owner credential or any migration setting on a surface other than the workspace, the writer role or a missing role on the public surface, no writer role on the demo or ingest surface, no owner on the workspace, dev sign-in on the public or ingest surface, or no demo tenant on the demo surface (`StartupTest`).
+
+## Migrations
+
+Only the workspace surface runs the Flyway migrations and the role grants.
+
+- The workspace needs the owner credential, `SUREVOTE_JDBC_USER` and `SUREVOTE_JDBC_PASSWORD`. At start it migrates, then grants the writer role (`SUREVOTE_JDBC_APP_USER`) and, when set, the public reader (`SUREVOTE_GRANT_PUBLIC_ROLE`) and the dispute role (`SUREVOTE_GRANT_DISPUTE_ROLE`). The grant settings take role names only, never passwords. Each grant includes `SELECT` on `flyway_schema_history`, and the writer loses `INSERT` and `UPDATE` there, so only the owner records migrations.
+- Concurrent workspace instances rely on Flyway's lock: each migration runs once, and the other instances wait for it.
+- The public, demo, and ingest surfaces never migrate or grant. They refuse to start if `SUREVOTE_JDBC_USER`, `SUREVOTE_JDBC_PASSWORD`, either grant setting, or any `FLYWAY_*` variable is set.
+- Before they open a port, those surfaces compare the database's highest applied migration with the version their build ships (`JdbcSureVoteRepository.SCHEMA_VERSION`; `SchemaVersionTest` keeps it equal to the newest file in `db/migration`). They read it with their own role. While the database is behind, or the version cannot be read, the process logs why, does not listen, so readiness fails, and tries again with backoff from 1 to 30 seconds (`SchemaGate`, `SchemaGateTest`). It never serves on an older schema. A newer schema is served, since that is a rolling deploy in which the workspace has already migrated, so every migration must keep working for the build before it.
+- Deploy order follows: the workspace first, then the others. Started early, they wait.
+- `all` still migrates and grants, for local development and tests.
+- In CDK, `SureVoteDatabaseSecrets` holds one generated secret per role, and one managed policy per surface. Only `WorkspaceDatabaseAccess` can read the owner secret. Public reads the reader and dispute secrets; demo and ingest read the writer secret (`SURFACE_SECRETS`).
 
 ## Route groups
 
@@ -38,7 +50,7 @@ Sessions are checked against the surface too. The workspace refuses a showcase v
 - The public surface never holds the writer role. With `SUREVOTE_JDBC_URL` set it needs two roles and refuses to start without either, or with `SUREVOTE_JDBC_APP_USER` set:
   - `SUREVOTE_JDBC_PUBLIC_USER`, the read-only role, for every lookup and published read (`grantReader`).
   - `SUREVOTE_JDBC_DISPUTE_USER`, the dispute role, for a voter's dispute (`grantDispute`, `V18__dispute_role.sql`). It has the reader's published tables, `INSERT` on `ballot_dispute`, and `SELECT` on that table's `id` column only, for the duplicate-id check. It cannot read a statement, update or delete a dispute, or touch any other private table. It reads a voter's own disputes back through `ballot_disputes(access hash)` and the public count through `dispute_count(election)`, owner functions in the style of `lookup_ballots` that return only what the hash or the election names. The tenant row-level security applies to its insert, and a restrictive policy makes every new dispute `open`. `PostgresDisputeHttpTest` runs the public flows through both roles.
-- With `SUREVOTE_JDBC_USER` (the owner) set, the process migrates and grants at start; leave it unset when a separate job does that, so the public process holds no owner credential.
+- It holds no owner credential and never migrates: the workspace migrates and grants both roles. See [Migrations](#migrations).
 - The public surface runs no scheduled job and provisions nothing.
 - Dev sign-in cannot be enabled. The process refuses to start with `SUREVOTE_DEV_SIGN_IN=true`.
 - It serves the lookup for every tenant, the demo tenant included. A demonstration ballot is looked up here, and the page labels it as a demonstration with no legal effect.
@@ -90,9 +102,8 @@ The workspace uses `form-action 'self'`. Neither allows inline script or style. 
 
 ## Smoke
 
-`ui/` `npm run smoke` runs the demo, public, workspace, and ingest surfaces on one Postgres, as deployed: a throwaway `postgres:16-alpine` container, or `SUREVOTE_SMOKE_JDBC_URL`. It creates the writer, reader, and dispute roles. The demo casts a ballot, the smoke follows the demo's link to the public host, looks the ballot up there, checks the demonstration label, and files a dispute through the dispute role. It also checks that the public surface refuses to start with the writer role, that ingest serves only the machine routes, and that the workspace no longer does.
+`ui/` `npm run smoke` runs the demo, public, workspace, and ingest surfaces on one Postgres, as deployed: a throwaway `postgres:16-alpine` container, or `SUREVOTE_SMOKE_JDBC_URL`. It creates the writer, reader, and dispute roles. The ingest, demo, and public surfaces start first, on an empty database, and the smoke checks that they wait without serving. Then the workspace migrates and grants, and the others come up. The demo casts a ballot, the smoke follows the demo's link to the public host, looks the ballot up there, checks the demonstration label, and files a dispute through the dispute role. It also checks that the public surface refuses to start with the writer role, that the demo refuses the owner credential, that ingest serves only the machine routes, and that the workspace no longer does.
 
 ## Not decided
 
-- Whether the public process should ever hold the owner credential. Today it migrates and grants when `SUREVOTE_JDBC_USER` is set; a separate migration job is the tighter choice.
-- Whether the workspace access-log bucket should also be object-locked, like the published bucket. It is not, until log delivery to an object-locked bucket is confirmed.
+- Whether the workspace access-log bucket should also be object-locked, like the published bucket. It is not. Verified Access delivers to S3 through CloudWatch vended-log delivery, and AWS documents no Object Lock limit for that path, but does not confirm it works either. S3 server access logs are documented as unable to use an Object Lock bucket. The documented-safe option is to deliver to the current unlocked bucket and replicate to a separate locked bucket.

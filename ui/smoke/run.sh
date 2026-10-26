@@ -65,8 +65,6 @@ start() {
   shift 2
   env "$@" \
     SUREVOTE_JDBC_URL="$jdbc" \
-    SUREVOTE_JDBC_USER="$owner" \
-    SUREVOTE_JDBC_PASSWORD="$owner_password" \
     SUREVOTE_SURFACE="$surface" \
     SUREVOTE_PORT="$port" \
     SUREVOTE_STATIC="$root/ui/apps/workspace/dist" \
@@ -91,17 +89,38 @@ ready() {
 
 writer=(SUREVOTE_JDBC_APP_USER=surevote_app SUREVOTE_JDBC_APP_PASSWORD="$role_password")
 lookup="http://127.0.0.1:$((first + 1))"
-# The demo migrates first; the others start once it is up.
+# Only the workspace migrates and grants. The others start first and must wait for it without serving.
+start ingest "$((first + 3))" "${writer[@]}"
 start demo "$first" "${writer[@]}" SUREVOTE_DEMO_TENANT_ID="$demo_tenant" SUREVOTE_LOOKUP_URL="$lookup"
-ready demo "$first"
 start public "$((first + 1))" \
   SUREVOTE_JDBC_PUBLIC_USER=surevote_public SUREVOTE_JDBC_PUBLIC_PASSWORD="$role_password" \
   SUREVOTE_JDBC_DISPUTE_USER=surevote_dispute SUREVOTE_JDBC_DISPUTE_PASSWORD="$role_password"
+# On a fresh database (the default container) the gate has something to wait for.
+if [ -n "$database" ]; then
+  for _ in $(seq 1 60); do
+    if grep -q "could not read the database schema version\|Waiting for the workspace surface to migrate" \
+      "$logs/ingest.log"; then
+      break
+    fi
+    sleep 1
+  done
+  if curl -fs "http://127.0.0.1:$((first + 3))/health" > /dev/null; then
+    echo "the ingest surface served before the workspace migrated"
+    exit 1
+  elif ! grep -q "could not read the database schema version\|Waiting for the workspace surface to migrate" \
+    "$logs/ingest.log"; then
+    cat "$logs/ingest.log"
+    exit 1
+  fi
+  echo "ok the other surfaces wait for the workspace to migrate"
+fi
 start workspace "$((first + 2))" "${writer[@]}" \
+  SUREVOTE_JDBC_USER="$owner" SUREVOTE_JDBC_PASSWORD="$owner_password" \
+  SUREVOTE_GRANT_PUBLIC_ROLE=surevote_public SUREVOTE_GRANT_DISPUTE_ROLE=surevote_dispute \
   SUREVOTE_DEV_SIGN_IN=true SUREVOTE_SYSTEM_ADMIN_ID="$admin" SUREVOTE_SYSTEM_ADMIN_NAME=Smoke
-start ingest "$((first + 3))" "${writer[@]}"
-ready public "$((first + 1))"
 ready workspace "$((first + 2))"
+ready demo "$first"
+ready public "$((first + 1))"
 ready ingest "$((first + 3))"
 
 refused() {
@@ -122,6 +141,18 @@ elif ! grep -q "must not use the writer role" "$logs/public-writer.log"; then
   exit 1
 fi
 echo "ok the public surface refuses the writer role"
+
+# The demo, like every surface but the workspace, must refuse the owner credential.
+if env SUREVOTE_SURFACE=demo SUREVOTE_PORT="$((first + 4))" SUREVOTE_JDBC_URL="$jdbc" "${writer[@]}" \
+  SUREVOTE_DEMO_TENANT_ID="$demo_tenant" SUREVOTE_JDBC_USER="$owner" SUREVOTE_JDBC_PASSWORD="$owner_password" \
+  timeout 60 "$root/api/build/install/api/bin/api" > "$logs/demo-owner.log" 2>&1; then
+  echo "the demo surface started with the owner credential"
+  exit 1
+elif ! grep -q "demo surface does not migrate" "$logs/demo-owner.log"; then
+  cat "$logs/demo-owner.log"
+  exit 1
+fi
+echo "ok the demo surface refuses the owner credential"
 
 ingest="http://127.0.0.1:$((first + 3))"
 for check in "POST /ballots 40[01]" "POST /elections/00000000-0000-4000-8000-000000000000/validations 40[01]" \

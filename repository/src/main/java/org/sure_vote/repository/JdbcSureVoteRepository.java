@@ -2,6 +2,7 @@ package org.sure_vote.repository;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.time.Instant;
@@ -143,6 +144,43 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         this.source = source;
     }
 
+    /**
+     * The highest migration this build ships. {@code SchemaVersionTest} keeps it equal to the newest file in
+     * {@code db/migration}. Surfaces that do not migrate wait until the database has reached it.
+     */
+    public static final String SCHEMA_VERSION = "18";
+
+    /**
+     * The highest migration applied to the database, or an empty string before the first. Any role the workspace
+     * granted can read it, because each grant includes select on {@code flyway_schema_history}.
+     */
+    public static String schemaVersion(final String url, final String user, final String password) {
+        final var repository = open(url, user, password);
+        return repository.alone(repository::appliedVersion);
+    }
+
+    private String appliedVersion(final Connection connection) throws SQLException {
+        final var sql = "select version from flyway_schema_history where success and version is not null";
+        final var statement = connection.createStatement();
+        try {
+            return this.highest(statement.executeQuery(sql));
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private String highest(final ResultSet rows) throws SQLException {
+        var highest = "";
+        while (rows.next()) {
+            final var version = rows.getString(1);
+            if (SchemaVersions.compare(version, highest) > 0) {
+                highest = version;
+            }
+        }
+        return highest;
+    }
+
     public static void migrate(final String url, final String user, final String password) {
         final var configured = Flyway.configure();
         final var sourced = configured.dataSource(url, user, password);
@@ -164,7 +202,8 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         final var sql = "do $$ begin "
             + "execute format('grant usage on schema %I to " + role + "', current_schema()); "
             + "execute format('grant select, insert, update on all tables in schema %I to " + role + "', "
-            + "current_schema()); end $$";
+            + "current_schema()); "
+            + "execute 'revoke insert, update on flyway_schema_history from " + role + "'; end $$";
         return this.execute(connection, sql);
     }
 
@@ -183,7 +222,8 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         final var sql = "do $$ begin "
             + "execute format('grant usage on schema %I to " + role + "', current_schema()); "
             + "execute format('revoke all on all tables in schema %I from " + role + "', current_schema()); "
-            + "execute 'grant select on " + tables + " to " + role + "'; end $$";
+            + "execute 'grant select on " + tables + " to " + role + "'; "
+            + "execute 'grant select on flyway_schema_history to " + role + "'; end $$";
         return this.execute(connection, sql);
     }
 

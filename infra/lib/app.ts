@@ -1,5 +1,6 @@
 import { App } from "aws-cdk-lib";
 import { config } from "./config";
+import { DatabaseSecretsStack } from "./database-secrets-stack";
 import { DemoStack } from "./demo-stack";
 import { EdgeStack } from "./edge-stack";
 import { IngestStack } from "./ingest-stack";
@@ -12,6 +13,7 @@ export function build(app: App): {
     workspace: WorkspaceAccessStack;
     ingest: IngestStack;
     queue: QueueStack;
+    database: DatabaseSecretsStack;
 } {
     const settings = config(app);
     const edge = new EdgeStack(app, "SureVoteEdge", { env: { region: "us-east-1" }, settings });
@@ -22,5 +24,9 @@ export function build(app: App): {
     });
     const ingest = new IngestStack(app, "SureVoteIngestEdge", { env: { region: "us-east-1" }, settings });
     const queue = new QueueStack(app, "SureVoteReceivedQueue", { env: { region: settings.queueRegion }, settings });
-    return { edge, demo, workspace, ingest, queue };
+    const database = new DatabaseSecretsStack(app, "SureVoteDatabaseSecrets", {
+        env: { region: settings.databaseRegion },
+        settings,
+    });
+    return { edge, demo, workspace, ingest, queue, database };
 }

@@ -12,6 +12,8 @@ export interface SureVoteConfig {
     readonly demoCertificateArn: string;
     readonly queueRegion: string;
     readonly workspaceRegion: string;
+    /** Where the database and its role secrets live. */
+    readonly databaseRegion: string;
     readonly rateLimit: number;
     readonly demoRateLimit: number;
     readonly headTtlSeconds: number;
@@ -48,6 +50,7 @@ const DEFAULTS: SureVoteConfig = {
     demoCertificateArn: "",
     queueRegion: "us-east-1",
     workspaceRegion: "us-east-1",
+    databaseRegion: "us-east-1",
     rateLimit: 1000,
     demoRateLimit: 300,
     headTtlSeconds: 5,
@@ -107,6 +110,7 @@ export function config(app: App): SureVoteConfig {
         demoCertificateArn: text("demoCertificateArn", DEFAULTS.demoCertificateArn),
         queueRegion: text("queueRegion", DEFAULTS.queueRegion),
         workspaceRegion: text("workspaceRegion", DEFAULTS.workspaceRegion),
+        databaseRegion: text("databaseRegion", DEFAULTS.databaseRegion),
         rateLimit: number("rateLimit", DEFAULTS.rateLimit),
         demoRateLimit: number("demoRateLimit", DEFAULTS.demoRateLimit),
         headTtlSeconds: number("headTtlSeconds", DEFAULTS.headTtlSeconds),

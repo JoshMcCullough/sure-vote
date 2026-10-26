@@ -17,6 +17,7 @@ function stacks(context: Record<string, string> = {}) {
         workspace: Template.fromStack(built.workspace),
         queue: Template.fromStack(built.queue),
         ingest: Template.fromStack(built.ingest),
+        database: Template.fromStack(built.database),
         built,
     };
 }
@@ -108,6 +109,7 @@ test("the app synthesizes a cloud assembly", () => {
     const assembly = app.synth();
     const names = assembly.stacks.map((stack) => stack.stackName).sort();
     assert.deepEqual(names, [
+        "SureVoteDatabaseSecrets",
         "SureVoteDemoEdge",
         "SureVoteEdge",
         "SureVoteIngestEdge",
@@ -289,6 +291,35 @@ test("an authority may be IPv6 only, and IPv6 CIDRs are checked", () => {
     assert.throws(() => stacks({ ingestAllowlists: JSON.stringify({ county: ["2001:db8::/32"] }) }), /IPv4 CIDRs/);
     assert.throws(() => stacks({ ingestAllowlists: JSON.stringify({ county: ["192.0.2.0/0"] }) }), /IPv4 CIDRs/);
     assert.throws(() => stacks({ ingestAllowlistsV6: JSON.stringify({ "County C": ["2001:db8::/32"] }) }), /lowercase/);
+});
+
+test("only the workspace surface can read the owner secret", () => {
+    const { database, built } = stacks({ databaseRegion: "us-west-2" });
+    assert.equal(built.database.region, "us-west-2");
+    database.resourceCountIs("AWS::SecretsManager::Secret", 4);
+    const secrets = database.findResources("AWS::SecretsManager::Secret");
+    const secretId = (username: string) => Object.entries(secrets).find(([, secret]) =>
+        JSON.parse(secret.Properties.GenerateSecretString.SecretStringTemplate).username === username)![0];
+    for (const secret of Object.values(secrets)) {
+        assert.equal(secret.DeletionPolicy, "Retain");
+        assert.equal(secret.Properties.SecretString, undefined);
+    }
+    const policies = database.findResources("AWS::IAM::ManagedPolicy");
+    const readable = (policy: string) => {
+        const statements = policies[policy].Properties.PolicyDocument.Statement;
+        assert.deepEqual(statements.map((statement: { Action: string }) => statement.Action), ["secretsmanager:GetSecretValue"]);
+        const resources = [statements[0].Resource].flat();
+        return resources.map((resource: { Ref: string }) => resource.Ref).sort();
+    };
+    const policyId = (prefix: string) => Object.keys(policies).find((id) => id.startsWith(prefix))!;
+    const owner = secretId("surevote");
+    const writer = secretId("surevote_app");
+    assert.deepEqual(readable(policyId("WorkspaceDatabaseAccess")), [owner, writer].sort());
+    assert.deepEqual(readable(policyId("PublicDatabaseAccess")), [secretId("surevote_public"), secretId("surevote_dispute")].sort());
+    assert.deepEqual(readable(policyId("DemoDatabaseAccess")), [writer]);
+    assert.deepEqual(readable(policyId("IngestDatabaseAccess")), [writer]);
+    const withOwner = Object.keys(policies).filter((id) => readable(id).includes(owner));
+    assert.deepEqual(withOwner, [policyId("WorkspaceDatabaseAccess")]);
 });
 
 test("workspace access logs go to S3 and are kept 22 months by default, as a parameter", () => {

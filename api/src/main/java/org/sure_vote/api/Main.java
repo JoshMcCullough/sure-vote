@@ -51,18 +51,46 @@ public final class Main {
         if (url.isBlank()) {
             return memory();
         }
+        else if (surface.migrates()) {
+            return database(url);
+        }
         else if (surface == Surface.PUBLIC) {
-            return disputes(url);
+            return disputes(surface, url);
         }
         else {
-            return database(url);
+            return writer(surface, url);
         }
     }
 
+    /** Waits, before any port is open, until the workspace has migrated the database to this build's schema. */
+    private static JdbcSureVoteRepository gated(
+        final Surface surface,
+        final String url,
+        final String role,
+        final String password
+    ) {
+        SchemaGate.await(
+            surface,
+            JdbcSureVoteRepository.SCHEMA_VERSION,
+            () -> JdbcSureVoteRepository.schemaVersion(url, role, password),
+            length -> Thread.sleep(length),
+            System.out::println
+        );
+        return JdbcSureVoteRepository.open(url, role, password);
+    }
+
+    /** The demo and ingest surfaces write as the writer role the workspace granted. They never migrate. */
+    private static SureVote writer(final Surface surface, final String url) {
+        final var role = text("SUREVOTE_JDBC_APP_USER");
+        final var password = text("SUREVOTE_JDBC_APP_PASSWORD");
+        final var repository = gated(surface, url, role, password);
+        return configured(provisioned(bootstrapped(new SureVote(repository))));
+    }
+
     /** The public surface writes only disputes, through the dispute role. It runs no jobs and provisions nothing. */
-    private static SureVote disputes(final String url) {
-        final var role = prepared(url, text("SUREVOTE_JDBC_DISPUTE_USER"));
-        final var repository = JdbcSureVoteRepository.open(url, role, text("SUREVOTE_JDBC_DISPUTE_PASSWORD"));
+    private static SureVote disputes(final Surface surface, final String url) {
+        final var role = text("SUREVOTE_JDBC_DISPUTE_USER");
+        final var repository = gated(surface, url, role, text("SUREVOTE_JDBC_DISPUTE_PASSWORD"));
         return origins(new SureVote(repository));
     }
 
@@ -71,20 +99,6 @@ public final class Main {
         final var rpId = or(text("SUREVOTE_RP_ID"), "localhost");
         app.configurePasskeys(settings(rpId, text("SUREVOTE_ORIGINS")));
         return app;
-    }
-
-    /** With owner credentials the process migrates and grants first; without them a separate job has done it. */
-    private static String prepared(final String url, final String role) {
-        final var owner = text("SUREVOTE_JDBC_USER");
-        final var password = text("SUREVOTE_JDBC_PASSWORD");
-        if (owner.isBlank()) {
-            return role;
-        }
-        else {
-            JdbcSureVoteRepository.migrate(url, owner, password);
-            JdbcSureVoteRepository.grantDispute(url, owner, password, role);
-            return role;
-        }
     }
 
     private static SureVote reader(final SureVote app) {
@@ -222,9 +236,14 @@ public final class Main {
         }
     }
 
+    /**
+     * Migrates under Flyway's lock, so concurrent workspace instances run each migration once, then grants the roles
+     * the other surfaces use.
+     */
     private static JdbcSureVoteRepository open(final String url, final String user, final String password) {
         final var writer = text("SUREVOTE_JDBC_APP_USER");
         JdbcSureVoteRepository.migrate(url, user, password);
+        grantedOthers(url, user, password);
         if (writer.isBlank()) {
             System.out.println("SureVote connects as the table owner, which bypasses row-level security. "
                 + "Set SUREVOTE_JDBC_APP_USER outside local development.");
@@ -233,6 +252,23 @@ public final class Main {
         else {
             JdbcSureVoteRepository.grantWriter(url, user, password, writer);
             return JdbcSureVoteRepository.open(url, writer, text("SUREVOTE_JDBC_APP_PASSWORD"));
+        }
+    }
+
+    private static void grantedOthers(final String url, final String user, final String password) {
+        grantedReader(url, user, password, text("SUREVOTE_GRANT_PUBLIC_ROLE"));
+        grantedDispute(url, user, password, text("SUREVOTE_GRANT_DISPUTE_ROLE"));
+    }
+
+    private static void grantedReader(final String url, final String user, final String password, final String role) {
+        if (!role.isBlank()) {
+            JdbcSureVoteRepository.grantReader(url, user, password, role);
+        }
+    }
+
+    private static void grantedDispute(final String url, final String user, final String password, final String role) {
+        if (!role.isBlank()) {
+            JdbcSureVoteRepository.grantDispute(url, user, password, role);
         }
     }
 

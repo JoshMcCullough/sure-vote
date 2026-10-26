@@ -37,6 +37,11 @@ public enum Surface {
         }
     }
 
+    /** Only the workspace runs Flyway and the role grants; {@code all} does too, for development and tests. */
+    public boolean migrates() {
+        return this == ALL || this == WORKSPACE;
+    }
+
     public String wire() {
         final var name = this.name();
         return name.toLowerCase(Locale.ROOT);
