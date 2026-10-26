@@ -2,6 +2,7 @@ package org.sure_vote.repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -29,6 +30,8 @@ public interface SureVoteRepository {
     List<Ballot> ballotsByAccessHash(final String voterAccessHash);
 
     Optional<UUID> electionTenant(final UUID electionId);
+
+    Map<UUID, String> candidateNames(final UUID electionId);
 
     int markReceived(final List<UUID> issuanceIds, final Instant receivedAt);
 

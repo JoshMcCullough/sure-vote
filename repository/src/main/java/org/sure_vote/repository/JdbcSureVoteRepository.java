@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -298,6 +299,11 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     @Override
     public Optional<UUID> electionTenant(final UUID electionId) {
         return this.query(connection -> this.tenantOf(connection, electionId));
+    }
+
+    @Override
+    public Map<UUID, String> candidateNames(final UUID electionId) {
+        return this.query(connection -> this.namesOf(connection, electionId));
     }
 
     @Override
@@ -656,6 +662,31 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         try {
             result.next();
             return result.getInt(1);
+        }
+        finally {
+            result.close();
+        }
+    }
+
+    private Map<UUID, String> namesOf(final Connection connection, final UUID electionId) throws SQLException {
+        final var statement = connection.prepareStatement("select * from candidate_names(?)");
+        try {
+            statement.setObject(1, electionId);
+            return this.names(statement);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private Map<UUID, String> names(final java.sql.PreparedStatement statement) throws SQLException {
+        final var names = new LinkedHashMap<UUID, String>();
+        final var result = statement.executeQuery();
+        try {
+            while (result.next()) {
+                names.put(result.getObject(1, UUID.class), result.getString(2));
+            }
+            return names;
         }
         finally {
             result.close();

@@ -71,6 +71,7 @@ import org.sure_vote.service.PlaceReconciliation;
 import org.sure_vote.service.RestoreRequest;
 import org.sure_vote.service.SureVote;
 import org.sure_vote.service.ValidationRequest;
+import org.sure_vote.service.VoteChoice;
 
 public final class ApiServer implements HttpHandler {
     private final SureVote app;
@@ -902,9 +903,29 @@ public final class ApiServer implements HttpHandler {
         final var resource = new LookupResource();
         final var votes = new ArrayList<VoteResource>();
         this.addVotes(votes, result.votes());
+        this.addChoices(votes, result.choices());
         resource.setBallot(this.ballotResource(result.ballot()));
         resource.setVotes(votes);
         return resource;
+    }
+
+    private void addChoices(final List<VoteResource> votes, final List<VoteChoice> choices) {
+        for (final var vote : votes) {
+            final var id = vote.getId();
+            final var stream = choices.stream();
+            final var matched = stream.filter(choice -> id.equals(choice.voteId()));
+            final var found = matched.findFirst();
+            found.ifPresent(choice -> this.describe(vote, choice));
+        }
+    }
+
+    private void describe(final VoteResource vote, final VoteChoice choice) {
+        vote.setRaceId(choice.raceId());
+        vote.setRaceName(choice.raceName());
+        vote.setMethod(choice.method());
+        vote.setCandidateName(choice.candidateName());
+        vote.setWriteIn(choice.writeIn());
+        vote.setReferendumChoice(choice.referendumChoice());
     }
 
     private void addVotes(final List<VoteResource> resources, final List<Vote> votes) {

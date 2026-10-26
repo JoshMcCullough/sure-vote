@@ -151,6 +151,16 @@ async function errorSummary(page) {
   console.log('ok error summary')
 }
 
+async function recordedChoice(page, race, choice) {
+  const group = page.locator('[data-race-votes]').filter({ has: page.getByRole('heading', { name: race, exact: true }) })
+  await group.getByRole('listitem').filter({ hasText: choice }).first().waitFor({ timeout })
+  const items = await page.locator('[data-race-votes] li').allTextContents()
+  if (items.includes('Y')) {
+    failures.push('lookup shows the raw value Y: ' + JSON.stringify(items))
+  }
+  console.log('ok recorded choice ' + JSON.stringify(items))
+}
+
 async function english(page) {
   await page.goto(base + '/app/?lang=en')
   await page.getByRole('heading', { level: 1 }).waitFor({ timeout })
@@ -205,6 +215,7 @@ async function english(page) {
   await page.getByRole('link', { name: 'Open the public lookup' }).click()
   await page.getByRole('button', { name: 'Look up' }).click()
   await page.getByRole('heading', { name: 'Recorded ballot' }).waitFor({ timeout })
+  await recordedChoice(page, 'Mayor', 'Ada One')
   console.log('ok Lookup')
   await check(page, 'lookup')
   return { code, lookup: page.url() }
@@ -230,6 +241,7 @@ async function spanish(page, found) {
   await page.getByLabel('Código de acceso').fill(found.code)
   await page.getByRole('button', { name: 'Consultar' }).click()
   await page.getByRole('heading', { name: 'Boleta registrada' }).waitFor({ timeout })
+  await recordedChoice(page, 'Mayor', 'Ada One')
   await check(page, 'es-lookup')
   await page.getByRole('button', { name: 'English' }).click()
   await page.getByRole('heading', { level: 1 }).waitFor({ timeout })

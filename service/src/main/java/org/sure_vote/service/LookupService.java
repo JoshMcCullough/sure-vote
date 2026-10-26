@@ -2,10 +2,13 @@ package org.sure_vote.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.Election;
+import org.sure_vote.entity.Race;
+import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.Vote;
 import org.sure_vote.repository.SureVoteRepository;
 
@@ -51,8 +54,30 @@ final class LookupService {
     }
 
     private LookupResult result(final Ballot ballot) {
-        final var votes = this.repository.inTenant(ballot.getTenantId(), () -> this.unfrozenVotes(ballot));
-        return new LookupResult(ballot, votes);
+        final var tenantId = ballot.getTenantId();
+        final var votes = this.repository.inTenant(tenantId, () -> this.unfrozenVotes(ballot));
+        final var names = this.repository.candidateNames(ballot.getElectionId());
+        final var choices = this.repository.inTenant(tenantId, () -> this.choices(votes, names));
+        return new LookupResult(ballot, votes, choices);
+    }
+
+    private List<VoteChoice> choices(final List<Vote> votes, final Map<UUID, String> names) {
+        final var choices = new ArrayList<VoteChoice>();
+        for (final var vote : votes) {
+            choices.add(this.choice(vote, names));
+        }
+        return choices;
+    }
+
+    private VoteChoice choice(final Vote vote, final Map<UUID, String> names) {
+        final var slot = this.stores.require(RaceCandidate.class, vote.getRaceCandidateId());
+        final var race = this.stores.require(Race.class, slot.getRaceId());
+        final var method = race.getMethod();
+        final var referendum = slot.getReferendumChoice();
+        final var choice = referendum == null ? null : referendum.wire();
+        final var name = names.get(slot.getId());
+        final var wire = method.wire();
+        return new VoteChoice(vote.getId(), race.getId(), race.getName(), wire, name, slot.isWriteIn(), choice);
     }
 
     private List<Vote> unfrozenVotes(final Ballot ballot) {

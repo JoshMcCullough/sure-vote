@@ -209,6 +209,16 @@
     "reenroll": "New enrollment token for {{name}}"
   },
   "lookup": {
+    "vote": {
+      "unnamedRace": "Race",
+      "unnamedChoice": "an unnamed choice",
+      "writeIn": "Write-in: {{name}}",
+      "yes": "Yes",
+      "no": "No",
+      "ranked": "Choice {{rank}}: {{name}}",
+      "chosen": "{{name}}",
+      "raw": "Recorded value: {{value}}"
+    },
     "title": "Ballot lookup",
     "status": "Status: {{status}}",
     "demonstration": "This is a demonstration. It has no legal effect.",

@@ -211,6 +211,16 @@
     "reenroll": "Nuevo token de inscripción para {{name}}"
   },
   "lookup": {
+    "vote": {
+      "unnamedRace": "Contienda",
+      "unnamedChoice": "una opción sin nombre",
+      "writeIn": "Por escrito: {{name}}",
+      "yes": "Sí",
+      "no": "No",
+      "ranked": "Preferencia {{rank}}: {{name}}",
+      "chosen": "{{name}}",
+      "raw": "Valor registrado: {{value}}"
+    },
     "title": "Consulta de boleta",
     "status": "Estado: {{status}}",
     "demonstration": "Esto es una demostración. No tiene efecto legal.",

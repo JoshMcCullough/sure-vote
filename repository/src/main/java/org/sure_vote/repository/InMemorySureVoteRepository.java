@@ -13,6 +13,11 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.Candidate;
+import org.sure_vote.entity.ElectionStatus;
+import org.sure_vote.entity.Person;
+import org.sure_vote.entity.Race;
+import org.sure_vote.entity.RaceCandidate;
 import org.sure_vote.entity.Election;
 import org.sure_vote.entity.HeldKey;
 import org.sure_vote.entity.HeldKeyPurpose;
@@ -247,6 +252,63 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         final var election = this.ownedRow(Election.class, electionId);
         final var live = election.filter(row -> row.getDeletedAt() == null);
         return live.map(Election::getTenantId);
+    }
+
+    @Override
+    public Map<UUID, String> candidateNames(final UUID electionId) {
+        final var names = new LinkedHashMap<UUID, String>();
+        final var election = this.ownedRow(Election.class, electionId);
+        final var published = election.filter(this::published);
+        published.ifPresent(row -> this.collectNames(names, electionId));
+        return names;
+    }
+
+    private boolean published(final Election election) {
+        final var status = election.getStatus();
+        return election.getDeletedAt() == null && status != ElectionStatus.UPCOMING;
+    }
+
+    private void collectNames(final Map<UUID, String> names, final UUID electionId) {
+        for (final var slot : this.owned(RaceCandidate.class)) {
+            final var race = this.ownedRow(Race.class, slot.getRaceId());
+            final var inElection = race.filter(row -> this.liveIn(row, electionId));
+            if (slot.getDeletedAt() == null && inElection.isPresent()) {
+                this.addName(names, slot);
+            }
+        }
+    }
+
+    private boolean liveIn(final Race race, final UUID electionId) {
+        return electionId.equals(race.getElectionId()) && race.getDeletedAt() == null;
+    }
+
+    private void addName(final Map<UUID, String> names, final RaceCandidate slot) {
+        final var candidate = this.ownedRow(Candidate.class, slot.getCandidateId());
+        final var live = candidate.filter(row -> row.getDeletedAt() == null);
+        final var person = live.flatMap(row -> this.ownedRow(Person.class, row.getPersonId()));
+        final var livePerson = person.filter(row -> row.getDeletedAt() == null);
+        final var name = livePerson.map(this::displayName);
+        name.ifPresent(value -> names.put(slot.getId(), value));
+    }
+
+    private String displayName(final Person person) {
+        final var full = person.getFullName();
+        if (full != null && !full.isBlank()) {
+            return full.strip();
+        }
+        else {
+            final var parts = new ArrayList<String>();
+            this.addPart(parts, person.getFirstName());
+            this.addPart(parts, person.getMiddleName());
+            this.addPart(parts, person.getLastName());
+            return String.join(" ", parts);
+        }
+    }
+
+    private void addPart(final List<String> parts, final String part) {
+        if (part != null) {
+            parts.add(part);
+        }
     }
 
     @Override

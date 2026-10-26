@@ -82,6 +82,10 @@ class PostgresLookupTest {
         final var votes = byCode.votes();
         final var vote = votes.getFirst();
         final var again = byElection.ballot();
+        final var choices = byCode.choices();
+        final var choice = choices.getFirst();
+        assertEquals("Ada One", choice.candidateName());
+        assertEquals(world.raceId, choice.raceId());
         assertEquals(List.of(), unscoped);
         assertEquals(ballot.getId(), opened.getId());
         assertEquals(ballot.getId(), again.getId());

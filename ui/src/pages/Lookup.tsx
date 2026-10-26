@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useParams } from 'react-router-dom'
 import { api, messageOf } from '../api'
@@ -15,6 +16,19 @@ type Election = {
 type Vote = {
   raceCandidateId: string
   value: string
+  raceId?: string | null
+  raceName?: string | null
+  method?: string | null
+  candidateName?: string | null
+  writeIn?: boolean | null
+  referendumChoice?: string | null
+}
+
+type RaceVotes = {
+  key: string
+  name: string | null
+  method: string | null
+  votes: Vote[]
 }
 
 type LookupResult = {
@@ -180,11 +194,24 @@ export function Lookup() {
             })}
           </p>
           <h3>{t('lookup.votesTitle', { count: result.votes.length })}</h3>
-          <ul className="usa-list">
-            {result.votes.map((vote) => (
-              <li key={vote.raceCandidateId}>{vote.value}</li>
-            ))}
-          </ul>
+          {byRace(result.votes).map((race) => (
+            <section key={race.key} className="margin-bottom-2" data-race-votes="">
+              <h4 className="margin-bottom-05">{race.name ?? t('lookup.vote.unnamedRace')}</h4>
+              {race.method === 'ranked-choice' ? (
+                <ol className="usa-list">
+                  {race.votes.map((vote) => (
+                    <li key={vote.raceCandidateId}>{describeVote(vote, t, i18n.language)}</li>
+                  ))}
+                </ol>
+              ) : (
+                <ul className="usa-list">
+                  {race.votes.map((vote) => (
+                    <li key={vote.raceCandidateId}>{describeVote(vote, t, i18n.language)}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
           <form className="usa-form maxw-none" onSubmit={(event) => void fileClaim(event)}>
             <TextAreaField
               id="lookup-statement"
@@ -216,6 +243,44 @@ export function Lookup() {
       ) : null}
     </>
   )
+}
+
+function byRace(votes: Vote[]): RaceVotes[] {
+  const groups = new Map<string, RaceVotes>()
+  for (const vote of votes) {
+    const key = vote.raceId ?? vote.raceCandidateId
+    const group = groups.get(key) ?? { key, name: vote.raceName ?? null, method: vote.method ?? null, votes: [] }
+    group.votes.push(vote)
+    groups.set(key, group)
+  }
+  for (const group of groups.values()) {
+    if (group.method === 'ranked-choice') {
+      group.votes.sort((left, right) => Number(left.value) - Number(right.value))
+    }
+  }
+  return [...groups.values()]
+}
+
+function describeVote(vote: Vote, t: TFunction, language: string): string {
+  const name = vote.candidateName ?? null
+  if (vote.writeIn) {
+    return t('lookup.vote.writeIn', { name: vote.value })
+  }
+  if (vote.method === 'referendum' && vote.referendumChoice === 'yes') {
+    return t('lookup.vote.yes')
+  }
+  if (vote.method === 'referendum' && vote.referendumChoice === 'no') {
+    return t('lookup.vote.no')
+  }
+  if (vote.method === 'ranked-choice') {
+    const rank = Number(vote.value)
+    const shown = Number.isFinite(rank) ? formatNumber(rank, language) : vote.value
+    return t('lookup.vote.ranked', { rank: shown, name: name ?? t('lookup.vote.unnamedChoice') })
+  }
+  if (name) {
+    return t('lookup.vote.chosen', { name })
+  }
+  return t('lookup.vote.raw', { value: vote.value })
 }
 
 function secretFrom(state: unknown, name: 'code' | 'passphrase'): string {
