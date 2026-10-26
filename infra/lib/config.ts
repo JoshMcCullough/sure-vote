@@ -1,3 +1,4 @@
+import { isIPv4, isIPv6 } from "node:net";
 import { App } from "aws-cdk-lib";
 
 export interface SureVoteConfig {
@@ -27,7 +28,10 @@ export interface SureVoteConfig {
     readonly ingestCertificateArn: string;
     readonly ingestRateLimit: number;
     readonly ingestAuthorityRateLimit: number;
+    /** IPv4 CIDRs per authority or validator name. */
     readonly ingestAllowlists: Record<string, string[]>;
+    /** IPv6 CIDRs per authority or validator name; a name may appear in either map or both. */
+    readonly ingestAllowlistsV6: Record<string, string[]>;
 }
 
 /** Election records are kept 22 months (52 U.S.C. 20701); 670 days covers it. */
@@ -65,6 +69,10 @@ const DEFAULTS: SureVoteConfig = {
         "authority-example": ["192.0.2.0/24"],
         "validator-example": ["198.51.100.0/24"],
     },
+    ingestAllowlistsV6: {
+        "authority-example": ["2001:db8:a::/48"],
+        "validator-example": ["2001:db8:b::/48"],
+    },
 };
 
 export function config(app: App): SureVoteConfig {
@@ -79,10 +87,10 @@ export function config(app: App): SureVoteConfig {
         }
         return value;
     };
-    const allowlists = (key: string, fallback: Record<string, string[]>): Record<string, string[]> => {
+    const allowlists = (key: string, fallback: Record<string, string[]>, version: IpVersion): Record<string, string[]> => {
         const raw = app.node.tryGetContext(key);
         const value = typeof raw === "string" && raw.trim() !== "" ? JSON.parse(raw) : raw ?? fallback;
-        return checkedAllowlists(key, value);
+        return checkedAllowlists(key, value, version);
     };
     const list = (key: string, fallback: string[]): string[] => {
         const value = text(key, fallback.join(","));
@@ -115,7 +123,8 @@ export function config(app: App): SureVoteConfig {
         ingestCertificateArn: text("ingestCertificateArn", DEFAULTS.ingestCertificateArn),
         ingestRateLimit: number("ingestRateLimit", DEFAULTS.ingestRateLimit),
         ingestAuthorityRateLimit: number("ingestAuthorityRateLimit", DEFAULTS.ingestAuthorityRateLimit),
-        ingestAllowlists: allowlists("ingestAllowlists", DEFAULTS.ingestAllowlists),
+        ingestAllowlists: allowlists("ingestAllowlists", DEFAULTS.ingestAllowlists, "IPv4"),
+        ingestAllowlistsV6: allowlists("ingestAllowlistsV6", DEFAULTS.ingestAllowlistsV6, "IPv6"),
     };
     const hosts = [
         settings.lookupDomain,
@@ -127,29 +136,47 @@ export function config(app: App): SureVoteConfig {
     if (new Set(hosts).size !== hosts.length) {
         throw new Error("lookupDomain, demoDomain, workspaceDomain, ingestDomain, and castDomain must be different hosts");
     }
+    if (Object.keys(settings.ingestAllowlists).length + Object.keys(settings.ingestAllowlistsV6).length === 0) {
+        throw new Error("ingestAllowlists and ingestAllowlistsV6 together need at least one authority");
+    }
     if (settings.workspaceSubnetIds.length === 0) {
         throw new Error("workspaceSubnetIds needs at least one subnet");
     }
     return settings;
 }
 
-const IPV4_CIDR = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}\/(3[0-2]|[12]?\d)$/;
+type IpVersion = "IPv4" | "IPv6";
 
-function checkedAllowlists(key: string, value: unknown): Record<string, string[]> {
+const EXAMPLE: Record<IpVersion, string> = { IPv4: "192.0.2.0/24", IPv6: "2001:db8::/32" };
+
+/** A CIDR AWS WAF accepts: any prefix except /0, up to /32 for IPv4 and /128 for IPv6. */
+function isCidr(value: unknown, version: IpVersion): boolean {
+    if (typeof value !== "string") {
+        return false;
+    }
+    const match = /^([^/\s]+)\/(\d{1,3})$/.exec(value);
+    if (match === null) {
+        return false;
+    }
+    const prefix = Number(match[2]);
+    if (version === "IPv4") {
+        return isIPv4(match[1]) && prefix >= 1 && prefix <= 32;
+    }
+    return isIPv6(match[1]) && !match[1].includes(".") && prefix >= 1 && prefix <= 128;
+}
+
+function checkedAllowlists(key: string, value: unknown, version: IpVersion): Record<string, string[]> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new Error(`${key} must map an authority name to a list of IPv4 CIDRs`);
+        throw new Error(`${key} must map an authority name to a list of ${version} CIDRs`);
     }
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) {
-        throw new Error(`${key} needs at least one authority`);
-    }
     const checked: Record<string, string[]> = {};
     for (const [name, cidrs] of entries) {
         if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(name)) {
             throw new Error(`${key}: ${name} must be lowercase letters, digits, and hyphens`);
         }
-        if (!Array.isArray(cidrs) || cidrs.length === 0 || !cidrs.every((cidr) => typeof cidr === "string" && IPV4_CIDR.test(cidr))) {
-            throw new Error(`${key}: ${name} needs a list of IPv4 CIDRs such as 192.0.2.0/24`);
+        if (!Array.isArray(cidrs) || cidrs.length === 0 || !cidrs.every((cidr) => isCidr(cidr, version))) {
+            throw new Error(`${key}: ${name} needs a list of ${version} CIDRs such as ${EXAMPLE[version]}`);
         }
         checked[name] = [...cidrs];
     }

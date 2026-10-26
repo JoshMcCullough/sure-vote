@@ -41,6 +41,7 @@ export class IngestStack extends Stack {
         this.distribution = new cloudfront.Distribution(this, "Ingest", {
             comment: "SureVote ingest: the ingest API surface, allowlisted per authority",
             webAclId: this.acl.attrArn,
+            enableIpv6: true,
             enableLogging: false,
             priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
             ...aliases(this, "IngestCertificate", settings.ingestDomain, settings.ingestCertificateArn),
@@ -58,16 +59,24 @@ export class IngestStack extends Stack {
     }
 
     private allowlistAcl(settings: SureVoteConfig): wafv2.CfnWebACL {
-        const names = Object.keys(settings.ingestAllowlists).sort();
-        const sets = names.map((name) => new wafv2.CfnIPSet(this, "Allow-" + name, {
+        const v4 = settings.ingestAllowlists;
+        const v6 = settings.ingestAllowlistsV6;
+        const names = [...new Set([...Object.keys(v4), ...Object.keys(v6)])].sort();
+        const ipSet = (id: string, version: "IPV4" | "IPV6", name: string, addresses: string[]) => new wafv2.CfnIPSet(this, id, {
             scope: "CLOUDFRONT",
-            ipAddressVersion: "IPV4",
-            addresses: settings.ingestAllowlists[name],
-            description: "Networks allowed to send signed requests for " + name,
-        }));
-        const matches = (index: number): wafv2.CfnWebACL.StatementProperty => ({
-            ipSetReferenceStatement: { arn: sets[index].attrArn },
+            ipAddressVersion: version,
+            addresses,
+            description: `${version === "IPV4" ? "IPv4" : "IPv6"} networks allowed to send signed requests for ${name}`,
         });
+        // One IPv4 and one IPv6 set per name, as each has; a WAF IP set holds one address version.
+        const sets = names.map((name) => [
+            ...(v4[name] ? [ipSet("Allow-" + name, "IPV4", name, v4[name])] : []),
+            ...(v6[name] ? [ipSet("Allow6-" + name, "IPV6", name, v6[name])] : []),
+        ]);
+        const matches = (index: number): wafv2.CfnWebACL.StatementProperty => {
+            const refs = sets[index].map((set) => ({ ipSetReferenceStatement: { arn: set.attrArn } }));
+            return refs.length === 1 ? refs[0] : { orStatement: { statements: refs } };
+        };
         const rates: wafv2.CfnWebACL.RuleProperty[] = names.map((name, index) => ({
             name: "Rate-" + name,
             priority: 10 + index,
