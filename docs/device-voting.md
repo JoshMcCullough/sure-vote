@@ -54,7 +54,7 @@ A lost phone before issuance is a new enrollment code from the clerk, which revo
   - Lifecycle: the public keys are listed in the election definition, so the operator signature publishes and freezes them at activate, before any issuance window opens. The only later change is an operator-signed [key revocation](#signing-key-compromise). The private keys sign on demand only while issuance is open, in an HSM that can do raw RSA on a blinded message. Decided: the election authority holds them, never the host. That is a YubiHSM 2 on a signer the authority runs, which the issuer calls, or AWS CloudHSM in an account the authority owns; never in the host's account, because the host already runs the casting endpoint. AWS KMS signs only whole messages and cannot do this. After polls close the keys sign nothing. After certification (the signed close), each private key is destroyed, or archived offline under the two-officer rule when the authority's retention rules require it. The public keys stay in the definition for good.
 - **Voter passkey.** Ordinary WebAuthn, used only at the issuer. It cannot be exposed by re-issuance or by any official, by design: its private key never leaves the voter's authenticator, and the issuer, and any official helping the voter, only ever see a one-time WebAuthn assertion bound to that sign-in's challenge. Nothing a passkey sign-in reveals lets anyone sign in again, so a passkey never needs replacing because of a recovery.
 - **Recovery seed.** 128 random bits generated in the app, shown once as a 12-word BIP39-style phrase, one per voter per tenant. Every token of that voter in that tenant is derived from it, so the phrase is the tokens' backup. See [Recovery phrase](#recovery-phrase).
-- **Escrow key.** Decided: threshold ElGamal on NIST P-256 (k-of-n), used only as the KEM of a hybrid scheme with HKDF-SHA256 and AES-256-GCM, new for each election, generated with Pedersen distributed key generation at an offline key ceremony before activation. Each official's share is a P-256 scalar in a YubiKey 5 FIPS PIV slot, and a partial decryption is the PIV ECDH operation, so the share never leaves the key. Its public key is in the signed definition. Shares are destroyed after certification. See [Escrow on P-256](#escrow-on-p-256).
+- **Escrow key.** Decided: threshold ElGamal on NIST P-256 (k-of-n), used only as the KEM of a hybrid scheme with HKDF-SHA256 and AES-256-GCM, new for each election, generated with Pedersen distributed key generation at an offline key ceremony before activation, with each trustee on their own offline laptop. Each official's share is a P-256 scalar in a YubiKey 5 FIPS PIV slot, and a partial decryption is the PIV ECDH operation, so the share never leaves the key. Its public key is in the signed definition. Shares are destroyed after certification. See [Escrow on P-256](#escrow-on-p-256).
 - **Check-in key.** An HPKE (RFC 9180) key pair held by the issuer, with `DHKEM(P-256, HKDF-SHA256)`, `HKDF-SHA256`, and `AES-256-GCM`, its public key in the signed definition. The app seals the token to it at [in-person check-in](#in-person-check-in), so the check-in device and the poll worker never see the token.
 - **Signing key or escrow key compromised.** The two fail differently. A compromised style signing key lets its holder create fake tokens that cast valid-looking ballots: an integrity failure, handled in [Signing-key compromise](#signing-key-compromise). A compromised escrow key lets its holder decrypt escrowed `(m, r)` and so learn voters' token ids, which, with a live-instrumented casting host, could expose votes: a privacy failure. It cannot create a token or a ballot, so it never changes the count.
 - **Access code.** 32 random bytes generated in the app at cast, with `voterAccessHash` computed in the app as for in person (SHA-256 over the raw bytes; see [verification.md](./verification.md)). The code is never sent.
@@ -226,20 +226,43 @@ The alternative without escrow is in footnote [^no-escrow].
 
 The group is NIST P-256 with generator `G` and order `n`. Signatures in this section (destruction statements, opening signatures) are the ECDSA P-256 signatures of [verification.md](./verification.md#signatures).
 
-**Key ceremony.** Before activation, offline, with the n trustees and a second officer present:
+**Key ceremony.** Decided: each trustee runs their own part of the Pedersen DKG on their own offline laptop, so no machine ever holds more than one trustee's share.[^one-machine] The ceremony is before activation, in one room, with the n trustees and the witnesses present.
 
-1. Boot the ceremony machine from read-only media with no network hardware enabled. Record the media hash in the ceremony minutes.
-2. Run Pedersen DKG (the Gennaro, Jarecki, Krawczyk, Rabin form, which fixes the bias in Feldman-only DKG) for k-of-n. Each trustee's participant picks a random degree-(k-1) polynomial; the ceremony publishes the Feldman commitments `A_j0 … A_j(k-1)` once the Pedersen phase has fixed the qualified set. Trustee `i` ends with a share `s_i`, its public share `Y_i = s_i·G`, and the election key `Y = Σ A_j0`.
-3. Each trustee checks `s_i·G = Σ_j Σ_t i^t·A_jt` on the ceremony machine.
-4. Import `s_i` into the trustee's YubiKey 5 FIPS, PIV retired slot `82`, as ECC P-256, with PIN policy `always` and touch policy `always`. The key is already in FIPS-approved mode (non-default AES management key, PIN, and PUK).
-5. Check the import: the ceremony encrypts a test value to `Y_i` alone, the YubiKey decrypts it with ECDH, and the result must match.
-6. Wipe every `s_i`, the polynomials, and the RAM image: power off the machine and destroy or securely erase any writable storage it touched. Only the public values leave it: `Y`, every `Y_i`, the commitments, and the minutes.
-7. `Y`, the roster, and each `Y_i` go into the election definition, which the operator signs.
+*Roles.*
 
-Limits of the ceremony, honestly:
+- **Trustees.** The n officials who will each hold a share. Each brings a laptop and a YubiKey 5 FIPS that is already in FIPS-approved mode (non-default AES management key, PIN, and PUK).
+- **Witnesses.** At least two people who are not trustees, one of them the second officer under the two-officer rule. Observers named by the agreement may also attend. Witnesses watch every laptop for the whole ceremony, check each step against this procedure, and sign the ceremony log. A step done out of their sight is redone from step 1.
+- **Recorder.** One witness keeps the ceremony log.
 
-- One ceremony machine sees every share at step 2. "No official holds the whole key" rests on the air gap, the read-only boot, the witnesses, and the wipe, not on the math. Stronger, and supported by the same protocol: each trustee runs their own participant on their own air-gapped laptop and the rounds pass by QR code or write-once media, so no single machine ever sees more than one share.
-- An imported PIV key has no YubiKey attestation (attestation covers only keys generated on the key). Evidence that the right share is in the slot is step 5, not an attestation certificate.
+*Preparation.*
+
+1. Each trustee laptop has its internal storage and wireless hardware removed, or is a model where they can be physically disconnected, and has no network cable. The witnesses check this and log each laptop's serial number.
+2. Each laptop boots the same ceremony image from read-only media and runs from RAM only. The recorder logs the image's SHA-256, and every trustee checks it against the published release before booting.
+3. Rounds pass between laptops only as QR codes or on write-once media, in the open, so every witness sees what moves. Nothing else is connected to a laptop.
+
+*The DKG.* The protocol is Pedersen DKG in the Gennaro, Jarecki, Krawczyk, Rabin form, which fixes the bias in Feldman-only DKG, for k-of-n. The second generator `H` is derived by hash-to-curve (RFC 9380, `P256_XMD:SHA-256_SSWU_RO_`) from a fixed domain tag, so no one knows its discrete log.
+
+4. Each laptop makes a fresh P-256 transport key and shows its public key. The recorder logs all n transport keys and every trustee checks them on their own laptop.
+5. **Pedersen phase.** Trustee `j`'s laptop picks two random degree-(k-1) polynomials `f_j` and `f'_j`. It publishes the Pedersen commitments `C_jt = a_jt·G + b_jt·H`. It sends each trustee `i` the pair `(f_j(i), f'_j(i))`, sealed to `i`'s transport key with the ECIES of [verification.md](./verification.md). Each laptop checks every pair it receives against the commitments. A failed check is a complaint, which is logged and resolved in the open as GJKR describes. A trustee whose complaint is upheld is dropped from the qualified set.
+6. **Feldman phase.** Each trustee `j` in the qualified set publishes its Feldman commitments `A_jt = a_jt·G`, `t = 0 … k-1`. Each laptop checks its received shares against them: `f_j(i)·G = Σ_t i^t·A_jt`. Failures are handled as in step 5.
+7. Each laptop computes its own share `s_i = Σ_j f_j(i)` over the qualified set. Every laptop computes `Y = Σ_j A_j0` and each public share `Y_i = Σ_j Σ_t i^t·A_jt` from the commitments alone. All laptops must show the same `Y` and the same list of `Y_i`. The recorder logs them, and the witnesses compare the fingerprints across the laptops.
+
+*Import and check.* An imported PIV key has no YubiKey attestation, because attestation covers only keys generated on the key. These steps replace it as evidence that the slot holds the right share.
+
+8. Each trustee's laptop imports `s_i` into the trustee's YubiKey, PIV retired slot `82`, as ECC P-256, with PIN policy `always` and touch policy `always`. It uses the management key once, then sets a new random management key and discards it, so nobody can import a different key into that slot later.
+9. Check against the commitments: read the slot's public key from the YubiKey's PIV metadata on a different trustee's laptop, which never held `s_i`. It must equal the `Y_i` computed from the Feldman commitments in step 7. The metadata must also report the key's origin as imported, with PIN and touch policy `always`.
+10. Check the share works: that laptop encrypts a random test value to `Y_i` alone, the trustee decrypts it on the YubiKey with PIN and touch (PIV ECDH), and the result must match. The recorder logs both checks for each trustee. A trustee who fails either check is not given a share in this election. If that leaves fewer than k, or if anything is in doubt, the ceremony starts again from step 4 with fresh keys.
+
+*Wipe.*
+
+11. Each laptop is powered off and left off for at least 5 minutes, which clears `s_i`, the polynomials, and the transport key from RAM. No writable storage was attached, so no copy survives. The write-once media that carried sealed shares in step 5 is shredded in front of the witnesses. Only public values leave the room: `Y`, the commitments, every `Y_i`, the transport public keys, and the log.
+
+*Ceremony log.*
+
+12. The log lists, in order and with times: who attended in each role, each laptop's serial number, the image hash, the transport keys, every complaint and how it was resolved, the qualified set, the Pedersen and Feldman commitments, `Y`, each `Y_i`, the result of steps 9 and 10 for each trustee, and the wipe in step 11. Every trustee and witness signs the paper log. The operator signs its SHA-256 with the operator key (ECDSA P-256, PIV slot 9C) on the authority's workstation.
+13. `Y`, the roster, each `Y_i`, the commitments, and the log hash go into the election definition, which the operator signs. The signed log is published with the definition, so anyone can recompute every `Y_i` from the commitments.
+
+[^one-machine]: An earlier draft allowed a single ceremony machine that ran every trustee's participant and then wiped. It is not supported. On one machine, "no official holds the whole key" rests only on the air gap and the wipe, not on the math.
 
 **PIN policy.**
 
@@ -385,7 +408,7 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 
 - `ElectionDeviceKey`: `electionId`, `ballotStyleKey` (the precinct, or merged precinct group, and party it covers), `keyId`, `publicKey`, `small` (Boolean), listed in the signed definition.
 - The [settings](#settings): fields on `Election`, `ElectionDistrictSetting` (`election`, `votingDistrict`, `deviceTokenLeadDays`), `ElectionVotingPrecinctAssignment` (`deviceTokenLeadDays`, `deviceMergeWithPrecinctId`), `Tenant.deviceReissueLimitPerDay`, `Tenant.deviceSharedRecoveryAllowed`, and the optional `TenantDeviceSetting` defaults.
-- `Election.escrowPublicKey` (P-256, uncompressed SEC1) and `ElectionEscrowTrustee` (`election`, `tenantOfficial`, share index, public share `Y_i`, Feldman commitments), in the signed definition; `EscrowShareDestruction` (trustee, signature), published at close.
+- `Election.escrowPublicKey` (P-256, uncompressed SEC1) and `ElectionEscrowTrustee` (`election`, `tenantOfficial`, share index, public share `Y_i`, Feldman commitments) and the ceremony log's SHA-256, in the signed definition; `EscrowShareDestruction` (trustee, signature), published at close.
 - `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey`, `revokedAt`, operator signature (ECDSA P-256). Public, insert-only, appended to the ledger.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row also has the style key id, `blindedMessage`, `blindSignature`, and `escrowCiphertext`, and no recording place.
 - `BallotIssuance.status` gains `style-changed`.
