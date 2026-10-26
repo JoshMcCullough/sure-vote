@@ -80,6 +80,7 @@ Public keys and signatures are lowercase hex.
 - **Low S.** `s` must be at most `n / 2`, where `n` is the group order (`ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551`). A signer that gets a high `s` replaces it with `n - s`. A verifier refuses a high `s`, so each signature has one valid encoding and cannot be altered without the key. `r` and `s` must be between 1 and `n - 1`.
 - **What is signed.** The 32 raw bytes of the integrity hash are the ECDSA message digest `e` directly, not hashed again. So the signature is a standard ECDSA-SHA256 signature over the canonical payload bytes, and any ECDSA-P256-SHA256 verifier can check it against the payload. In Java that is `NONEwithECDSAinP1363Format` over the hash, or `SHA256withECDSAinP1363Format` over the payload.
 - `CryptoRulesTest` holds a fixed signature made by an independent implementation, and its high-S twin, which is refused.
+- P-256 signatures and sealed boxes do not survive a large quantum computer. The rules here do not change for that. [post-quantum.md](./post-quantum.md) describes the exposure and the proposed hybrid migration.
 
 - A ballot or vote signature verifies under `recordingDevice.publicKey`, and that device is in the signed `devices` list.
 - A chain-entry signature verifies under `Election.importPublicKey`.

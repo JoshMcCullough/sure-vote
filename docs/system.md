@@ -233,7 +233,7 @@ A ballot, vote, and chain entry each store a canonical JSON `payload`. The selec
 
 ## Keys
 
-Every signature is ECDSA on NIST P-256 with SHA-256, IEEE P1363 `r || s` with low S. Public keys are uncompressed SEC1 points. The viewing key seals with ECIES on P-256 (ECDH, HKDF-SHA256, AES-256-GCM). The byte rules are in [verification.md](./verification.md). The service uses only the JDK's SunEC provider for these; Bouncy Castle remains only for Argon2id.
+Every signature is ECDSA on NIST P-256 with SHA-256, IEEE P1363 `r || s` with low S. Public keys are uncompressed SEC1 points. The viewing key seals with ECIES on P-256 (ECDH, HKDF-SHA256, AES-256-GCM). The byte rules are in [verification.md](./verification.md). The service uses only the JDK's SunEC provider for these; Bouncy Castle remains only for Argon2id. What a quantum computer would break, what that would expose, and the hybrid migration plan are in [post-quantum.md](./post-quantum.md).
 
 Production keys live on hardware tokens. Testing, development, and the showcase must work with software keys and no hardware: the same P-256 ECDSA and ECDH operations, with the 32-byte private scalar in a file, in memory, or in `HeldKey`. A production tenant does not accept a software operator or viewing key from the host.
 
