@@ -25,6 +25,11 @@ export interface SureVoteConfig {
     readonly workspaceCertificateArn: string;
     readonly workspaceGroupId: string;
     readonly workspaceLogRetentionDays: number;
+    /** Days the access logs stay in the delivery bucket; the locked archive keeps them workspaceLogRetentionDays. */
+    readonly workspaceLogDeliveryDays: number;
+    readonly workspaceTargetGroupArn: string;
+    /** The TLS policy of every ALB listener this app defines; one of PQ_ALB_POLICIES. */
+    readonly albSslPolicy: string;
     readonly ingestDomain: string;
     readonly ingestOriginDomain: string;
     readonly ingestCertificateArn: string;
@@ -35,6 +40,18 @@ export interface SureVoteConfig {
     /** IPv6 CIDRs per authority or validator name; a name may appear in either map or both. */
     readonly ingestAllowlistsV6: Record<string, string[]>;
 }
+
+/**
+ * The ELB security policies with hybrid post-quantum key exchange (ML-KEM) that AWS recommends, from
+ * https://docs.aws.amazon.com/elasticloadbalancing/latest/application/describe-ssl-policies.html. The default keeps
+ * TLS 1.2 for older clients; the FIPS variants use FIPS-validated modules.
+ */
+export const PQ_ALB_POLICIES = [
+    "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09",
+    "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09",
+    "ELBSecurityPolicy-TLS13-1-3-PQ-2025-09",
+    "ELBSecurityPolicy-TLS13-1-3-FIPS-PQ-2025-09",
+];
 
 /** Election records are kept 22 months (52 U.S.C. 20701); 670 days covers it. */
 export const ELECTION_RECORD_DAYS = 670;
@@ -63,6 +80,10 @@ const DEFAULTS: SureVoteConfig = {
     workspaceCertificateArn: "arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000",
     workspaceGroupId: "00000000-0000-0000-0000-000000000000",
     workspaceLogRetentionDays: ELECTION_RECORD_DAYS,
+    workspaceLogDeliveryDays: 30,
+    workspaceTargetGroupArn:
+        "arn:aws:elasticloadbalancing:us-east-1:000000000000:targetgroup/surevote-workspace/0000000000000000",
+    albSslPolicy: "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09",
     ingestDomain: "ingest.surevote.example",
     ingestOriginDomain: "ingest-origin.surevote.example",
     ingestCertificateArn: "",
@@ -122,6 +143,9 @@ export function config(app: App): SureVoteConfig {
         workspaceCertificateArn: text("workspaceCertificateArn", DEFAULTS.workspaceCertificateArn),
         workspaceGroupId: text("workspaceGroupId", DEFAULTS.workspaceGroupId),
         workspaceLogRetentionDays: number("workspaceLogRetentionDays", DEFAULTS.workspaceLogRetentionDays),
+        workspaceLogDeliveryDays: number("workspaceLogDeliveryDays", DEFAULTS.workspaceLogDeliveryDays),
+        workspaceTargetGroupArn: text("workspaceTargetGroupArn", DEFAULTS.workspaceTargetGroupArn),
+        albSslPolicy: text("albSslPolicy", DEFAULTS.albSslPolicy),
         ingestDomain: text("ingestDomain", DEFAULTS.ingestDomain),
         ingestOriginDomain: text("ingestOriginDomain", DEFAULTS.ingestOriginDomain),
         ingestCertificateArn: text("ingestCertificateArn", DEFAULTS.ingestCertificateArn),
@@ -142,6 +166,12 @@ export function config(app: App): SureVoteConfig {
     }
     if (Object.keys(settings.ingestAllowlists).length + Object.keys(settings.ingestAllowlistsV6).length === 0) {
         throw new Error("ingestAllowlists and ingestAllowlistsV6 together need at least one authority");
+    }
+    if (!PQ_ALB_POLICIES.includes(settings.albSslPolicy)) {
+        throw new Error(`albSslPolicy must be a hybrid post-quantum policy: ${PQ_ALB_POLICIES.join(", ")}`);
+    }
+    if (settings.workspaceLogDeliveryDays > settings.workspaceLogRetentionDays) {
+        throw new Error("workspaceLogDeliveryDays cannot be longer than workspaceLogRetentionDays");
     }
     if (settings.workspaceSubnetIds.length === 0) {
         throw new Error("workspaceSubnetIds needs at least one subnet");

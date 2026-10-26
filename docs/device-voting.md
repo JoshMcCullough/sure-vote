@@ -158,7 +158,7 @@ Decided: tokens already cast under the compromised signing key stay counted. The
 - One phrase covers every election of the tenant until it is rotated, so a theft covers them too. Rotation after exposure limits that to elections where the token was already cast.
 - An assisted recovery keeps the phrase on the voter's own phone. Only an `assisted-shared` recovery puts it on another device, which never stores it and is opt-in per tenant; see [Assisted recovery](#assisted-recovery).
 - The server stores `blinded`, the blind signature, and the escrow ciphertext. None of them link the voter to `tokenId` without `r` or k officials.
-- 128 bits of seed is beyond brute force; the 12-word checksum catches typos, not attackers.
+- 128 bits of seed is beyond brute force; the 12-word checksum catches typos, not attackers. Decided: the phrase stays 12 words, also against a quantum computer. NIST's view is that 128-bit symmetric security holds against Grover in practice ([NIST PQC FAQ](https://csrc.nist.gov/projects/post-quantum-cryptography/faqs); [NIST SP 800-131A Rev. 3 (initial public draft)](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-131Ar3.ipd.pdf)); see [post-quantum.md](./post-quantum.md#what-breaking-them-would-expose).
 
 ## Voting in person after a device issuance
 
@@ -260,7 +260,7 @@ The group is NIST P-256 with generator `G` and order `n`. Signatures in this sec
 *Ceremony log.*
 
 12. The log lists, in order and with times: who attended in each role, each laptop's serial number, the image hash, the transport keys, every complaint and how it was resolved, the qualified set, the Pedersen and Feldman commitments, `Y`, each `Y_i`, the result of steps 9 and 10 for each trustee, and the wipe in step 11. Every trustee and witness signs the paper log. The operator signs its SHA-256 with the operator key (ECDSA P-256, PIV slot 9C) on the authority's workstation.
-13. `Y`, the roster, each `Y_i`, the commitments, and the log hash go into the election definition, which the operator signs. The signed log is published with the definition, so anyone can recompute every `Y_i` from the commitments.
+13. Decided: `Y`, the roster, each `Y_i`, the commitments, and the log's SHA-256 go into the election definition, which the operator signs. The signed log is published with the definition, so anyone can recompute every `Y_i` from the commitments.
 
 [^one-machine]: An earlier draft allowed a single ceremony machine that ran every trustee's participant and then wiped. It is not supported. On one machine, "no official holds the whole key" rests only on the air gap and the wipe, not on the math.
 

@@ -322,22 +322,83 @@ test("only the workspace surface can read the owner secret", () => {
     assert.deepEqual(withOwner, [policyId("WorkspaceDatabaseAccess")]);
 });
 
-test("workspace access logs go to S3 and are kept 22 months by default, as a parameter", () => {
+test("workspace access logs are delivered to S3 and archived 22 months under compliance lock", () => {
     const { workspace } = stacks();
     workspace.hasResourceProperties("AWS::EC2::VerifiedAccessInstance", {
         LoggingConfigurations: Match.objectLike({ S3: Match.objectLike({ Enabled: true }), IncludeTrustContext: true }),
     });
-    workspace.hasResource("AWS::S3::Bucket", {
-        DeletionPolicy: "Retain",
-        Properties: Match.objectLike({
-            LifecycleConfiguration: { Rules: [Match.objectLike({ ExpirationInDays: 670, Status: "Enabled" })] },
-        }),
-    });
     workspace.resourceCountIs("AWS::Logs::LogGroup", 0);
-    const longer = stacks({ workspaceLogRetentionDays: "1100" }).workspace;
-    longer.hasResourceProperties("AWS::S3::Bucket", {
-        LifecycleConfiguration: { Rules: [Match.objectLike({ ExpirationInDays: 1100 })] },
+    const buckets = workspace.findResources("AWS::S3::Bucket");
+    const archive = Object.values(buckets).find((bucket) => bucket.Properties.ObjectLockEnabled)!;
+    const delivery = Object.values(buckets).find((bucket) => bucket.Properties.ReplicationConfiguration)!;
+    assert.equal(Object.keys(buckets).length, 2);
+    for (const bucket of [archive, delivery]) {
+        assert.equal(bucket.DeletionPolicy, "Retain");
+        assert.equal(bucket.Properties.VersioningConfiguration.Status, "Enabled");
+    }
+    assert.deepEqual(archive.Properties.ObjectLockConfiguration, {
+        ObjectLockEnabled: "Enabled",
+        Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 670 } },
     });
+    assert.equal(archive.Properties.LifecycleConfiguration.Rules[0].ExpirationInDays, 670);
+    assert.equal(delivery.Properties.ObjectLockEnabled, undefined);
+    assert.equal(delivery.Properties.LifecycleConfiguration.Rules[0].ExpirationInDays, 30);
+    const rule = delivery.Properties.ReplicationConfiguration.Rules[0];
+    assert.equal(rule.Status, "Enabled");
+    assert.deepEqual(rule.DeleteMarkerReplication, { Status: "Disabled" });
+    const archiveId = Object.keys(buckets).find((id) => buckets[id] === archive)!;
+    assert.deepEqual(rule.Destination.Bucket, { "Fn::GetAtt": [archiveId, "Arn"] });
+    const longer = stacks({ workspaceLogRetentionDays: "1100", workspaceLogDeliveryDays: "14" }).workspace;
+    longer.hasResourceProperties("AWS::S3::Bucket", {
+        ObjectLockConfiguration: { ObjectLockEnabled: "Enabled", Rule: { DefaultRetention: { Mode: "COMPLIANCE", Days: 1100 } } },
+    });
+    longer.hasResourceProperties("AWS::S3::Bucket", {
+        LifecycleConfiguration: { Rules: [Match.objectLike({ ExpirationInDays: 14 })] },
+    });
+    assert.throws(() => stacks({ workspaceLogDeliveryDays: "700" }), /cannot be longer/);
+});
+
+test("the replication role can only read the delivery bucket and write replicas to the archive", () => {
+    const { workspace } = stacks();
+    const roles = workspace.findResources("AWS::IAM::Role");
+    const [roleId, role] = Object.entries(roles).find(([, item]) =>
+        item.Properties.AssumeRolePolicyDocument.Statement[0].Principal.Service === "s3.amazonaws.com")!;
+    const trust = role.Properties.AssumeRolePolicyDocument.Statement[0];
+    assert.ok(trust.Condition.StringEquals["aws:SourceAccount"]);
+    const policy = Object.values(workspace.findResources("AWS::IAM::Policy")).find((item) =>
+        item.Properties.Roles.some((ref: { Ref: string }) => ref.Ref === roleId))!;
+    const actions = policy.Properties.PolicyDocument.Statement.flatMap((statement: { Action: string | string[] }) =>
+        [statement.Action].flat()).sort();
+    assert.deepEqual(actions, [
+        "s3:GetObjectLegalHold",
+        "s3:GetObjectRetention",
+        "s3:GetObjectVersionAcl",
+        "s3:GetObjectVersionForReplication",
+        "s3:GetObjectVersionTagging",
+        "s3:GetReplicationConfiguration",
+        "s3:ListBucket",
+        "s3:ReplicateObject",
+        "s3:ReplicateTags",
+    ]);
+    const text = JSON.stringify(policy.Properties.PolicyDocument);
+    assert.doesNotMatch(text, /ReplicateDelete|"s3:\*"/);
+});
+
+test("every ALB listener uses a hybrid post-quantum TLS policy", () => {
+    const all = stacks();
+    const templates = [all.edge, all.demo, all.workspace, all.ingest, all.queue, all.database];
+    const listeners = templates.flatMap((template) => Object.values(template.findResources("AWS::ElasticLoadBalancingV2::Listener")));
+    assert.equal(listeners.length, 1);
+    for (const listener of listeners) {
+        assert.equal(listener.Properties.Protocol, "HTTPS");
+        assert.equal(listener.Properties.SslPolicy, "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09");
+    }
+    const fips = stacks({ albSslPolicy: "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09" }).workspace;
+    fips.hasResourceProperties("AWS::ElasticLoadBalancingV2::Listener", {
+        SslPolicy: "ELBSecurityPolicy-TLS13-1-2-Res-FIPS-PQ-2025-09",
+    });
+    assert.throws(() => stacks({ albSslPolicy: "ELBSecurityPolicy-2016-08" }), /hybrid post-quantum/);
+    assert.throws(() => stacks({ albSslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06" }), /hybrid post-quantum/);
 });
 
 test("the demo serves only the workspace and names the public lookup it links to", () => {
