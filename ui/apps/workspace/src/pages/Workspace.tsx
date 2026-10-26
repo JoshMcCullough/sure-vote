@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import { api, Created, messageOf, votingWindow } from '@surevote/shared/api'
 import { AccessCode } from '../components/AccessCode'
 import { ErrorAlert, PageHeading, Panel } from '@surevote/shared/components/Page'
@@ -29,6 +28,10 @@ type Ids = {
 
 type DemoCast = {
   code: string
+}
+
+type LookupConfig = {
+  lookupUrl?: string
 }
 
 type DemoTenant = {
@@ -146,6 +149,21 @@ export function Workspace() {
     const stored: Draft = { ...ids, styled, assigned, active, closed, castDone }
     sessionStorage.setItem(draftKey, JSON.stringify(stored))
   }, [ids, styled, assigned, active, closed, castDone])
+
+  const [lookupUrl, setLookupUrl] = useState('')
+
+  useEffect(() => {
+    let current = true
+    api<LookupConfig>('GET', '/auth/config').then(
+      (config) => current && setLookupUrl(config.lookupUrl ?? ''),
+      () => undefined,
+    )
+    return () => {
+      current = false
+    }
+  }, [])
+
+  const lookupHref = lookupUrl + '/voter/elections/' + ids.electionId
 
   function save(key: keyof Ids): (row: Created) => void {
     return (row) => {
@@ -405,21 +423,22 @@ export function Workspace() {
             </div>
           </div>
           <AccessCode code={code} />
+          <p className="usa-hint margin-top-1">{t('workspace.code.paste')}</p>
           <div className="usa-button-group margin-top-2">
             <button type="button" className="usa-button usa-button--outline" onClick={() => setCode(null)}>
               {t('workspace.code.clear')}
             </button>
-            <Link className="usa-button usa-button--outline" to={'/elections/' + ids.electionId} state={{ code }}>
+            <a className="usa-button usa-button--outline" href={lookupHref} target="_blank" rel="noopener noreferrer">
               {t('workspace.code.lookup')}
-            </Link>
+            </a>
           </div>
         </Panel>
       ) : castDone ? (
         <Panel title={t('workspace.code.title')}>
           <p>{t('workspace.code.gone')}</p>
-          <Link className="usa-button usa-button--outline" to={'/elections/' + ids.electionId}>
+          <a className="usa-button usa-button--outline" href={lookupHref} target="_blank" rel="noopener noreferrer">
             {t('workspace.code.lookup')}
-          </Link>
+          </a>
         </Panel>
       ) : (
         <Panel title={t('workspace.cast.title')}>

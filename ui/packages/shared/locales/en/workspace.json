@@ -317,7 +317,8 @@
       "once": "This code is shown once. It is not saved in this browser. Copy it before you leave or clear this page.",
       "clear": "Clear the code",
       "lookup": "Open the public lookup",
-      "gone": "The access code was shown once and is no longer on this page."
+      "gone": "The access code was shown once and is no longer on this page.",
+      "paste": "Paste it on the public lookup, which opens in a new tab. Demonstration ballots are labelled there."
     },
     "close": {
       "title": "Close the demonstration",

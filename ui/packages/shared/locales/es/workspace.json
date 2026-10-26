@@ -320,7 +320,8 @@
       "once": "Este código se muestra una sola vez. No se guarda en este navegador. Cópielo antes de salir o de borrar esta página.",
       "clear": "Borrar el código",
       "lookup": "Abrir la consulta pública",
-      "gone": "El código de acceso se mostró una vez y ya no está en esta página."
+      "gone": "El código de acceso se mostró una vez y ya no está en esta página.",
+      "paste": "Péguelo en la consulta pública, que se abre en una pestaña nueva. Allí las boletas de demostración están identificadas."
     },
     "close": {
       "title": "Cerrar la demostración",

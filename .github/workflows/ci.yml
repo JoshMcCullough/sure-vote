@@ -59,7 +59,7 @@ jobs:
       - run: npm run synth
 
   ui:
-    name: UI build and browser smoke (demo, public, workspace)
+    name: UI build and browser smoke (demo, public, workspace, ingest on Postgres)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:

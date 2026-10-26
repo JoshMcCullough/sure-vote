@@ -14,6 +14,8 @@ import {
   visit,
 } from '../packages/shared/smoke/helpers.mjs'
 
+const lookupBase = process.env.SUREVOTE_SMOKE_LOOKUP_URL ?? 'http://127.0.0.1:8090'
+
 const steps = [
   'Create locality',
   'Create address',
@@ -121,18 +123,34 @@ async function english(page) {
   console.log('ok Reconciliation ' + JSON.stringify(cells))
   await check(page, 'reconciliation')
   await cardShot(page, page.locator('section[aria-labelledby="reconciliation-title"]'), 'reconciliation-card')
-  await page.getByRole('link', { name: 'Open the public lookup' }).click()
+  const link = page.getByRole('link', { name: 'Open the public lookup' })
+  const href = (await link.getAttribute('href')) ?? ''
+  if (!href.startsWith(lookupBase + '/voter/elections/')) {
+    throw new Error('the demo links to ' + href + ', expected the public lookup at ' + lookupBase)
+  }
+  if ((await link.getAttribute('target')) !== '_blank' || !(await link.getAttribute('rel'))?.includes('noopener')) {
+    failures.push('the public lookup link should open a new tab with rel="noopener"')
+  }
+  console.log('ok the demo links to the public lookup host')
+  const electionId = href.split('/elections/')[1]
+  return { code, electionId, href }
+}
+
+async function publicLookup(page, found) {
+  await page.goto(found.href + '?lang=en')
+  await page.getByText('This is a demonstration. It has no legal effect.').waitFor({ timeout })
+  await page.getByLabel('Access code').fill(found.code)
   await page.getByRole('button', { name: 'Look up' }).click()
   await page.getByRole('heading', { name: 'Recorded ballot' }).waitFor({ timeout })
   await recordedChoice(page, 'Mayor', 'Ada One')
-  console.log('ok Lookup in the demo workspace')
+  console.log('ok demonstration ballot on the public lookup host, labelled as a demonstration')
   await check(page, 'lookup')
-  const electionId = page.url().split('/elections/')[1]
-  return { code, electionId }
-}
-
-async function voterApp(page, found) {
-  await page.goto(base + '/voter/?lang=en')
+  await page.getByLabel('What looks wrong').fill('Smoke test dispute')
+  await page.getByRole('button', { name: 'File a dispute' }).click()
+  await page.getByText('Your dispute was filed.').waitFor({ timeout })
+  await page.getByText('Smoke test dispute').last().waitFor({ timeout })
+  console.log('ok dispute filed through the dispute role')
+  await page.goto(lookupBase + '/voter/?lang=en')
   await page.getByRole('heading', { level: 1, name: 'Check your ballot' }).waitFor({ timeout })
   await page.getByLabel('Access code').fill(found.code)
   await page.getByRole('button', { name: 'Open my ballot' }).click()
@@ -140,7 +158,7 @@ async function voterApp(page, found) {
   await page.getByRole('heading', { name: 'Recorded ballot' }).waitFor({ timeout })
   await recordedChoice(page, 'Mayor', 'Ada One')
   await check(page, 'voter-lookup')
-  console.log('ok public app lookup on the demo host')
+  console.log('ok public app lookup by code')
 }
 
 async function spanish(page, found) {
@@ -157,13 +175,14 @@ async function spanish(page, found) {
   await page.getByRole('button', { name: 'Cargar el informe' }).click()
   await page.locator('table[data-report] tbody tr').first().waitFor({ timeout })
   await check(page, 'es-reconciliation')
-  await page.goto(base + '/app/elections/' + found.electionId)
+  await page.goto(found.href)
+  await page.getByRole('button', { name: 'Español' }).click()
   await page.getByLabel('Código de acceso').fill(found.code)
   await page.getByRole('button', { name: 'Consultar' }).click()
   await page.getByRole('heading', { name: 'Boleta registrada' }).waitFor({ timeout })
   await recordedChoice(page, 'Mayor', 'Ada One')
   await check(page, 'es-lookup')
-  await page.goto(base + '/voter/')
+  await page.goto(lookupBase + '/voter/')
   await page.getByRole('heading', { level: 1, name: 'Revise su boleta' }).waitFor({ timeout })
   await page.getByLabel('Código de acceso').fill(found.code)
   await page.getByRole('button', { name: 'Abrir mi boleta' }).click()
@@ -177,7 +196,9 @@ async function spanish(page, found) {
 
 async function surface(page) {
   await expectPolicy(page, '/app/', "'self'")
-  await expectPolicy(page, '/voter/', "'none'")
+  await expectStatus(page, 'GET', '/voter/', 404)
+  await expectStatus(page, 'POST', '/lookup', 404)
+  await expectStatus(page, 'GET', '/elections/00000000-0000-4000-8000-000000000000/heads', 404)
   await expectStatus(page, 'GET', '/system/tenants', 404)
   await expectStatus(page, 'POST', '/auth/dev/sign-in', 404)
   await expectStatus(page, 'POST', '/auth/sign-in/start', 404)
@@ -187,6 +208,6 @@ async function surface(page) {
 smoke('demo', async (page) => {
   await surface(page)
   const found = await english(page)
-  await voterApp(page, found)
+  await publicLookup(page, found)
   await spanish(page, found)
 })

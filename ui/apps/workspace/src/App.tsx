@@ -3,7 +3,6 @@ import { Route, Routes } from 'react-router-dom'
 import { api } from '@surevote/shared/api'
 import { Layout, NavItem } from '@surevote/shared/components/Layout'
 import { NotFound } from '@surevote/shared/components/NotFound'
-import { Lookup } from '@surevote/shared/lookup/Lookup'
 import { Admin } from './pages/Admin'
 import { Home } from './pages/Home'
 import { SignIn } from './pages/SignIn'
@@ -47,7 +46,6 @@ export function App() {
         <Route path="/workspace" element={<Workspace />} />
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/admin" element={<Admin />} />
-        <Route path="/elections/:electionId" element={<Lookup />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Layout>
