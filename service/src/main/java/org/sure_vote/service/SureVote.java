@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
@@ -327,6 +328,10 @@ public final class SureVote {
 
     public Tenant provisionDemoTenant(final UUID id, final String name, final String residencyRegion) {
         return this.system.provisionDemo(id, name, residencyRegion);
+    }
+
+    public void lockTenants(final Set<UUID> tenantIds) {
+        this.repository.lockTenants(tenantIds);
     }
 
     public Optional<Tenant> demoTenant() {

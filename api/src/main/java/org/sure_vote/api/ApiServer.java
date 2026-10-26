@@ -36,6 +36,7 @@ import org.sure_vote.entity.VoteChainValidationResult;
 import org.sure_vote.entity.VoteChainValidator;
 import org.sure_vote.entity.WireValue;
 import org.sure_vote.entity.Wires;
+import org.sure_vote.repository.TenantLockedException;
 import org.sure_vote.resource.BallotResource;
 import org.sure_vote.resource.DisputeCountResource;
 import org.sure_vote.resource.DisputeListResource;
@@ -82,12 +83,14 @@ public final class ApiServer implements HttpHandler {
     private final SystemHttp system;
     private final Requests requests;
     private final AuthHttp auth;
+    private final Surface surface;
 
-    private ApiServer(final SureVote app, final HttpServer server) {
+    private ApiServer(final SureVote app, final HttpServer server, final Surface surface) {
         this.app = app;
         this.reader = app;
         this.server = server;
-        this.requests = new Requests(app);
+        this.surface = surface;
+        this.requests = new Requests(app, surface);
         this.workspace = new WorkspaceHttp(app, this.json, this.requests);
         this.system = new SystemHttp(app, this.json, this.requests);
         this.auth = new AuthHttp(app, this.json, this.requests);
@@ -107,8 +110,12 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static ApiServer start(final SureVote app, final int port, final Path staticRoot) {
+        return start(app, port, staticRoot, Surface.ALL);
+    }
+
+    public static ApiServer start(final SureVote app, final int port, final Path staticRoot, final Surface surface) {
         try {
-            return listen(app, port, staticRoot);
+            return listen(app, port, staticRoot, surface);
         }
         catch (final IOException failure) {
             throw new IllegalStateException("HTTP server failed to start", failure);
@@ -118,10 +125,11 @@ public final class ApiServer implements HttpHandler {
     private static ApiServer listen(
         final SureVote app,
         final int port,
-        final Path staticRoot
+        final Path staticRoot,
+        final Surface surface
     ) throws IOException {
         final var server = HttpServer.create(new InetSocketAddress(port), 0);
-        final var api = new ApiServer(app, server);
+        final var api = new ApiServer(app, server, surface);
         final var pages = files(staticRoot);
         server.createContext("/", api::handle);
         mount(server, pages);
@@ -167,6 +175,9 @@ public final class ApiServer implements HttpHandler {
         catch (final AccessException failure) {
             this.writeQuiet(exchange, failure.status(), failure.getMessage());
         }
+        catch (final TenantLockedException failure) {
+            this.writeQuiet(exchange, 404, "not found");
+        }
         catch (final JsonProcessingException failure) {
             this.writeQuiet(exchange, 400, "invalid json");
         }
@@ -185,115 +196,157 @@ public final class ApiServer implements HttpHandler {
             this.writeJson(exchange, 403, new ErrorResource("origin not allowed"));
         }
         else if ("GET".equals(method) && this.named(parts, "health")) {
+            this.open(RouteGroup.HEALTH);
             this.health(exchange);
         }
         else if ("GET".equals(method) && this.demoTenantPath(parts)) {
+            this.open(RouteGroup.SHOWCASE);
             this.demoTenant(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "persons")) {
+            this.open(RouteGroup.OFFICIAL);
             this.createPerson(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "elections")) {
+            this.open(RouteGroup.OFFICIAL);
             this.createElection(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "issuances")) {
+            this.open(RouteGroup.OFFICIAL);
             this.createIssuance(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "mail-issuances")) {
+            this.open(RouteGroup.OFFICIAL);
             this.mailBallot(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "ballots")) {
+            this.open(RouteGroup.MACHINE);
             this.importBallot(exchange);
         }
         else if ("GET".equals(method) && this.electionItem(parts)) {
+            this.open(RouteGroup.PUBLIC);
             this.showElection(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "definition")) {
+            this.open(RouteGroup.OFFICIAL);
             this.definition(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "activate")) {
+            this.open(RouteGroup.OFFICIAL);
             this.activate(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "close")) {
+            this.open(RouteGroup.OFFICIAL);
             this.closeElection(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "reconciliation")) {
+            this.open(RouteGroup.OFFICIAL);
             this.reconciliation(exchange, parts);
         }
         else if ("POST".equals(method) && this.issuanceVoid(parts)) {
+            this.open(RouteGroup.OFFICIAL);
             this.voidIssuance(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "ballots")) {
+            this.open(RouteGroup.PUBLIC);
             this.lookup(exchange, parts, uri);
         }
         else if ("POST".equals(method) && this.named(parts, "lookup")) {
+            this.open(RouteGroup.PUBLIC);
             this.lookupByCode(exchange);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "lookup")) {
+            this.open(RouteGroup.PUBLIC);
             this.lookupPosted(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionNested(parts, "disputes", "count")) {
+            this.open(RouteGroup.PUBLIC);
             this.disputeCount(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionNested(parts, "disputes", "lookup")) {
+            this.open(RouteGroup.PUBLIC);
             this.disputeLookup(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "disputes")) {
+            this.open(RouteGroup.PUBLIC);
             this.fileDispute(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "disputes")) {
+            this.open(RouteGroup.OFFICIAL);
             this.listDisputes(exchange, parts);
         }
         else if ("POST".equals(method) && this.disputeStatus(parts)) {
+            this.open(RouteGroup.OFFICIAL);
             this.reviewDispute(exchange, parts);
         }
         else if ("POST".equals(method) && this.named(parts, "validators")) {
+            this.open(RouteGroup.OFFICIAL);
             this.createValidator(exchange);
         }
         else if ("POST".equals(method) && this.named(parts, "tenant-validators")) {
+            this.open(RouteGroup.OFFICIAL);
             this.createTenantValidator(exchange);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "heads")) {
+            this.open(RouteGroup.PUBLIC);
             this.heads(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "validators")) {
+            this.open(RouteGroup.PUBLIC);
             this.electionValidators(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "validations")) {
+            this.open(RouteGroup.PUBLIC);
             this.listValidations(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "validations")) {
+            this.open(RouteGroup.MACHINE);
             this.fileValidation(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionNested(parts, "close-bundle", "hash")) {
+            this.open(RouteGroup.OFFICIAL);
             this.bundleHash(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "close-bundle")) {
+            this.open(RouteGroup.OFFICIAL);
             this.fileBundle(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "close-bundle")) {
+            this.open(RouteGroup.PUBLIC);
             this.downloadBundle(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionNested(parts, "restore-incidents", "hash")) {
+            this.open(RouteGroup.OFFICIAL);
             this.restoreHash(exchange, parts);
         }
         else if ("POST".equals(method) && this.electionAction(parts, "restore-incidents")) {
+            this.open(RouteGroup.OFFICIAL);
             this.fileRestoreIncident(exchange, parts);
         }
         else if ("GET".equals(method) && this.electionAction(parts, "restore-incidents")) {
+            this.open(RouteGroup.PUBLIC);
             this.listRestoreIncidents(exchange, parts);
         }
         else if (this.auth.handles(parts)) {
+            this.open(this.auth.group(method, parts));
             this.auth.handle(exchange, method, parts);
         }
         else if (this.system.handles(parts)) {
+            this.open(RouteGroup.SYSTEM);
             this.system.handle(exchange, method, parts);
         }
         else if (this.workspace.handles(method, parts)) {
+            this.open(this.workspace.group(method, parts));
             this.workspace.handle(exchange, method, parts);
         }
         else {
             this.writeJson(exchange, 404, new ErrorResource("not found"));
+        }
+    }
+
+    private void open(final RouteGroup group) {
+        if (!this.surface.serves(group)) {
+            throw new AccessException(404, "not found");
         }
     }
 

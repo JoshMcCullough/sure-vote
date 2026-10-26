@@ -57,6 +57,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     );
 
     private final Object lock = new Object();
+    private final TenantLock tenantLock = new TenantLock();
     private final ThreadLocal<List<Runnable>> after = new ThreadLocal<>();
     private final ThreadLocal<Scope> scope = new ThreadLocal<>();
     private Map<Class<?>, Map<UUID, Identifiable>> rows = new LinkedHashMap<>();
@@ -314,6 +315,7 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
     @Override
     public <T> T inTenant(final UUID tenantId, final Supplier<T> work) {
         final var current = this.currentScope();
+        this.tenantLock.check(tenantId);
         if (tenantId == null) {
             throw new IllegalArgumentException("tenantId is required");
         }
@@ -323,6 +325,11 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         else {
             return this.transaction(() -> this.within(new Scope(tenantId, current.adminId()), work));
         }
+    }
+
+    @Override
+    public void lockTenants(final Set<UUID> tenantIds) {
+        this.tenantLock.lock(tenantIds);
     }
 
     @Override

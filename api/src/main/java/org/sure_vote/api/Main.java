@@ -20,13 +20,36 @@ public final class Main {
     }
 
     public static void main(final String[] args) {
+        final var surface = Surface.parse(text("SUREVOTE_SURFACE"));
         final var app = application();
         final var port = port();
         final var root = staticRoot();
-        final var server = ApiServer.start(app, port, root);
-        final var served = server.withPublicReader(reader(app));
+        final var reader = locked(surface, app, reader(app));
+        final var server = ApiServer.start(app, port, root, surface);
+        final var served = server.withPublicReader(reader);
         final var bound = served.port();
-        System.out.println("SureVote listening on " + bound);
+        System.out.println("SureVote listening on " + bound + " as the " + surface.wire() + " surface");
+    }
+
+    private static SureVote locked(final Surface surface, final SureVote app, final SureVote reader) {
+        final var id = text("SUREVOTE_DEMO_TENANT_ID");
+        final var url = text("SUREVOTE_JDBC_URL");
+        final var database = !url.isBlank();
+        if (surface == Surface.PUBLIC && database && reader == app) {
+            throw new IllegalStateException("The public surface needs SUREVOTE_JDBC_PUBLIC_USER");
+        }
+        else if (surface != Surface.DEMO) {
+            return reader;
+        }
+        else if (id.isBlank()) {
+            throw new IllegalStateException("The demo surface needs SUREVOTE_DEMO_TENANT_ID");
+        }
+        else {
+            final var tenants = Set.of(UUID.fromString(id));
+            app.lockTenants(tenants);
+            reader.lockTenants(tenants);
+            return reader;
+        }
     }
 
     private static SureVote application() {
@@ -114,7 +137,12 @@ public final class Main {
     }
 
     private static SureVote developer(final SureVote app) {
-        if ("true".equals(text("SUREVOTE_DEV_SIGN_IN"))) {
+        final var surface = Surface.parse(text("SUREVOTE_SURFACE"));
+        final var wanted = "true".equals(text("SUREVOTE_DEV_SIGN_IN"));
+        if (wanted && surface == Surface.PUBLIC) {
+            throw new IllegalStateException("Dev sign-in cannot run on the public surface");
+        }
+        else if (wanted) {
             System.out.println("SureVote dev sign-in is enabled. Do not enable it in production.");
             app.enableDevSignIn();
             return app;

@@ -15,13 +15,21 @@ final class Requests {
     static final String COOKIE = "surevote_session";
 
     private final SureVote app;
+    private final Surface surface;
 
-    Requests(final SureVote app) {
+    Requests(final SureVote app, final Surface surface) {
         this.app = app;
+        this.surface = surface;
     }
 
     Principal principal(final HttpExchange exchange) {
-        return this.app.session(token(exchange));
+        final var principal = this.app.session(token(exchange));
+        if (!this.surface.accepts(principal.kind())) {
+            throw new AccessException(401, "sign-in required");
+        }
+        else {
+            return principal;
+        }
     }
 
     Principal official(final HttpExchange exchange) {

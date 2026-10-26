@@ -49,6 +49,23 @@ final class AuthHttp {
         return auth || officials || visitor;
     }
 
+    RouteGroup group(final String method, final List<String> parts) {
+        final var path = String.join("/", parts);
+        final var get = "GET".equals(method);
+        if ("showcase/session".equals(path)) {
+            return RouteGroup.SHOWCASE;
+        }
+        else if (get && ("auth/config".equals(path) || "auth/session".equals(path))) {
+            return RouteGroup.SESSION;
+        }
+        else if ("auth/sign-out".equals(path)) {
+            return RouteGroup.SESSION;
+        }
+        else {
+            return RouteGroup.SIGN_IN;
+        }
+    }
+
     void handle(final HttpExchange exchange, final String method, final List<String> parts) throws IOException {
         final var path = String.join("/", parts);
         final var post = "POST".equals(method);

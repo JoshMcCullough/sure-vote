@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -135,6 +136,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
 
     private final DataSource source;
     private final ThreadLocal<Work> work = new ThreadLocal<>();
+    private final TenantLock tenantLock = new TenantLock();
 
     private JdbcSureVoteRepository(final DataSource source) {
         this.source = source;
@@ -313,7 +315,13 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
 
     @Override
     public <T> T inTenant(final UUID tenantId, final Supplier<T> body) {
+        this.tenantLock.check(tenantId);
         return this.scope(TENANT, tenantId, body);
+    }
+
+    @Override
+    public void lockTenants(final Set<UUID> tenantIds) {
+        this.tenantLock.lock(tenantIds);
     }
 
     @Override

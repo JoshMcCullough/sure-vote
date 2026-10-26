@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -36,6 +37,8 @@ public interface SureVoteRepository {
     int markReceived(final List<UUID> issuanceIds, final Instant receivedAt);
 
     <T> T inTenant(final UUID tenantId, final Supplier<T> work);
+
+    void lockTenants(final Set<UUID> tenantIds);
 
     <T> T asSystemAdmin(final UUID adminId, final Supplier<T> work);
 }

@@ -107,6 +107,15 @@ final class WorkspaceHttp {
         return collection || workspace || showcase || this.raceEdit(method, parts);
     }
 
+    RouteGroup group(final String method, final List<String> parts) {
+        if (this.showcase(method, parts)) {
+            return RouteGroup.SHOWCASE;
+        }
+        else {
+            return RouteGroup.OFFICIAL;
+        }
+    }
+
     void handle(final HttpExchange exchange, final String method, final List<String> parts) throws IOException {
         if (this.collection(method, parts)) {
             this.create(exchange, parts.getFirst());
