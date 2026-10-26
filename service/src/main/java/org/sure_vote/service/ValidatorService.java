@@ -35,7 +35,7 @@ final class ValidatorService {
         final var description = this.blankToNull(draft.getDescription());
         this.stores.require(actor != null, "actor is required");
         this.stores.require(name != null, "validator name is required");
-        this.stores.require(Digests.isLowerHex(draft.getPublicKey(), 64), "validator public key");
+        this.stores.require(Signatures.isPublicKey(draft.getPublicKey()), "validator public key");
         draft.setName(name);
         draft.setDescription(description);
         return this.stores.add(draft, actor);

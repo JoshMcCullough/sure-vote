@@ -9,10 +9,22 @@ import org.sure_vote.entity.Person;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CryptoRulesTest {
+    private static final String RECIPIENT =
+        "040217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed"
+            + "194a7debcb97712d2dda3ca85aa8765a56f45fc758599652f2897c65306e5794";
+    private static final String HASH = "ab4e9d991e5d0874756969031a20998cd489b5a92c322ffaa61c9ee866f48c0c";
+    private static final String LOW_S =
+        "420c0e6f87d4e7e6d4e8f3c870a4cf61d33ab867dd8c356f308417263b22bb2c"
+            + "7eb6bd3b6a5c8394136bfe417c5a243bea4d6a6f4d9d0ddfe690c0b87d0e526e";
+    private static final String HIGH_S =
+        "420c0e6f87d4e7e6d4e8f3c870a4cf61d33ab867dd8c356f308417263b22bb2c"
+            + "814942c395a37c6cec9401be83a5dbc3d299903e597a90a50d290a0a7f54d2e3";
+
     @Test
-    void sealedBoxMatchesLibsodium() {
+    void sealedBoxMatchesTheReferenceEcies() {
         final var seed = Digests.unhex("11".repeat(32));
         final var ephemeral = Digests.unhex("22".repeat(32));
         final var message = "correct horse battery".getBytes(StandardCharsets.UTF_8);
@@ -21,22 +33,22 @@ class CryptoRulesTest {
         final var sealed = ViewingBoxes.sealWith(message, publicKey, ephemeral);
         final var opened = ViewingBoxes.open(sealed, publicKey, seed);
         final var shared = ViewingBoxes.shared(ephemeral, publicKey);
-        final var boxKey = ViewingBoxes.boxKey(shared);
-        final var nonce = ViewingBoxes.nonce(ephemeralPublic, publicKey);
-        final var pk = Digests.hex(publicKey);
+        final var derived = ViewingBoxes.derive(shared, ephemeralPublic, publicKey);
         final var epk = Digests.hex(ephemeralPublic);
-        final var sharedHex = Digests.hex(shared);
-        final var boxHex = Digests.hex(boxKey);
-        final var nonceHex = Digests.hex(nonce);
-        final var body = Arrays.copyOfRange(sealed, 32, sealed.length);
-        final var ciphertext = Digests.hex(body);
+        final var body = Arrays.copyOfRange(sealed, 65, sealed.length);
         final var text = new String(opened, StandardCharsets.UTF_8);
-        assertEquals("7b4e909bbe7ffe44c465a220037d608ee35897d31ef972f07f74892cb0f73f13", pk);
-        assertEquals("0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20", epk);
-        assertEquals("9e004098efc091d4ec2663b4e9f5cfd4d7064571690b4bea97ab146ab9f35056", sharedHex);
-        assertEquals("8abe7c8ae6800b76d4f5986b04b77f6e9b4f332403c90df02428336e8bd9b525", boxHex);
-        assertEquals("631ab57d2fbc4c0095de2610535cc8b1caa95c94d0800320", nonceHex);
-        assertEquals("c0c51035f02eecc6b054d245e089722ab9b4cc027cfee32d3d863a4964322cb3f97454b58d", ciphertext);
+        assertEquals(RECIPIENT, Digests.hex(publicKey));
+        assertEquals(
+            "04d65a93977caa3d1b081852ff57a79e465f1660577304baead505dd3a48589cf3"
+                + "50185e895372df6221ea3a137557e473fddb6755f05bd507c3c533fce9c91285",
+            epk
+        );
+        assertEquals("ccfc261f58193c98ca4ad4a53bbac6f0ee29bc4d48438090446908622ca79af6", Digests.hex(shared));
+        assertEquals(
+            "7437e583bcb29f1d8fe8ba420009e1c6732e3eae6cdd0ea8ec1aaef176a20b21065f6bcb112f26dd25285f85",
+            Digests.hex(derived)
+        );
+        assertEquals("c6f59f87d61c957dccc1ba4ab131d03b69f7168fc859d24350b01b8dc0b91970f28cc0dbff", Digests.hex(body));
         assertEquals("correct horse battery", text);
     }
 
@@ -48,7 +60,7 @@ class CryptoRulesTest {
         final var sealed = ViewingBoxes.seal(message, publicKey);
         final var opened = ViewingBoxes.open(sealed, publicKey, seed);
         final var text = new String(opened, StandardCharsets.UTF_8);
-        assertEquals(48 + message.length, sealed.length);
+        assertEquals(81 + message.length, sealed.length);
         assertEquals("another passphrase!!", text);
     }
 
@@ -63,6 +75,43 @@ class CryptoRulesTest {
             () -> ViewingBoxes.open(sealed, publicKey, seed)
         );
         assertEquals("viewing passphrase cannot be opened", failure.getMessage());
+    }
+
+    @Test
+    void aReferenceSignatureVerifiesAndItsHighSTwinDoesNot() {
+        final var hash = Digests.unhex(HASH);
+        final var low = Signatures.verify(RECIPIENT, hash, LOW_S);
+        final var high = Signatures.verify(RECIPIENT, hash, HIGH_S);
+        assertTrue(low);
+        assertFalse(high);
+    }
+
+    @Test
+    void signaturesAreLowSAndRoundTrip() {
+        final var key = Signatures.generate();
+        final var hash = Digests.unhex(HASH);
+        final var derived = Signatures.publicKey(key.seed());
+        for (var round = 0; round < 32; round = round + 1) {
+            final var signature = Signatures.sign(key.seed(), hash);
+            final var raw = Digests.unhex(signature);
+            assertEquals(128, signature.length());
+            assertTrue(Signatures.canonical(raw));
+            assertTrue(Signatures.verify(key.publicKey(), hash, signature));
+        }
+        assertEquals(key.publicKey(), derived);
+        assertEquals(130, derived.length());
+    }
+
+    @Test
+    void publicKeysMustBeUncompressedPointsOnTheCurve() {
+        final var offCurve = RECIPIENT.substring(0, 128) + "95";
+        final var compressed = "02" + RECIPIENT.substring(2, 66);
+        final var hash = Digests.unhex(HASH);
+        assertTrue(Signatures.isPublicKey(RECIPIENT));
+        assertFalse(Signatures.isPublicKey(offCurve));
+        assertFalse(Signatures.isPublicKey(compressed));
+        assertFalse(Signatures.isPublicKey("00".repeat(65)));
+        assertFalse(Signatures.verify(offCurve, hash, LOW_S));
     }
 
     @Test
@@ -99,7 +148,7 @@ class CryptoRulesTest {
     }
 
     private byte[] damaged(final byte[] sealed) {
-        sealed[40] = (byte) (sealed[40] ^ 0x01);
+        sealed[70] = (byte) (sealed[70] ^ 0x01);
         return sealed;
     }
 

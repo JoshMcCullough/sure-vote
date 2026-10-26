@@ -142,9 +142,9 @@ final class DefinitionService {
         this.stores.sameTenant(election.getTenantId(), locality.getTenantId(), "Locality");
         this.stores.requireActiveTenant(election.getTenantId());
         this.stores.require(window, "voting window is invalid");
-        this.stores.require(Digests.isLowerHex(election.getOperatorPublicKey(), 64), "operator public key");
-        this.stores.require(Digests.isLowerHex(election.getImportPublicKey(), 64), "import public key");
-        this.stores.require(Digests.isLowerHex(election.getViewingPublicKey(), 64), "viewing public key");
+        this.stores.require(Signatures.isPublicKey(election.getOperatorPublicKey()), "operator public key");
+        this.stores.require(Signatures.isPublicKey(election.getImportPublicKey()), "import public key");
+        this.stores.require(Signatures.isPublicKey(election.getViewingPublicKey()), "viewing public key");
         election.setStatus(ElectionStatus.UPCOMING);
         election.setHashAlgorithm("SHA-256");
         election.setBallotHashPayloadSchema("canonical-json-v1");
@@ -200,7 +200,7 @@ final class DefinitionService {
     }
 
     RecordingDevice createRecordingDevice(final RecordingDevice device, final UUID actor) {
-        this.stores.require(Digests.isLowerHex(device.getPublicKey(), 64), "device public key");
+        this.stores.require(Signatures.isPublicKey(device.getPublicKey()), "device public key");
         this.requireDevicesUnlocked(device.getTenantId());
         return this.stores.add(device, actor);
     }
@@ -289,7 +289,7 @@ final class DefinitionService {
         final var person = this.stores.require(Person.class, personId);
         this.stores.require(actor != null, "actor is required");
         this.stores.requireActiveTenant(person.getTenantId());
-        this.stores.require(Digests.isLowerHex(viewingPublicKey, 64), "viewing public key");
+        this.stores.require(Signatures.isPublicKey(viewingPublicKey), "viewing public key");
         this.stores.require(person.getViewingPassphrase() == null, "viewing passphrase is already sealed");
         return this.storePassphrase(person, plaintext, viewingPublicKey, actor);
     }

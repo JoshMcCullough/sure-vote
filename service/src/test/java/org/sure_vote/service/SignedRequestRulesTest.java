@@ -59,7 +59,8 @@ class SignedRequestRulesTest {
         final var now = Instant.now();
         final var stale = this.signed(seed, keyId, now.minus(Duration.ofMinutes(6)), "nonce-bbbbbbbbbbbbbbbb");
         final var future = this.signed(seed, keyId, now.plus(Duration.ofMinutes(6)), "nonce-cccccccccccccccc");
-        final var forged = this.signed(new byte[32], keyId, Instant.now(), "nonce-dddddddddddddddd");
+        final var stranger = Signatures.generate();
+        final var forged = this.signed(stranger.seed(), keyId, Instant.now(), "nonce-dddddddddddddddd");
         final var misnamed = this.signed(seed, "import:" + UUID.randomUUID(), Instant.now(), "nonce-eeeeeeeeeeeeeeee");
         final var shortNonce = this.signed(seed, keyId, Instant.now(), "short");
         final var bare = new SignedRequest("POST", "/ballots", null, null, null, BODY, null);

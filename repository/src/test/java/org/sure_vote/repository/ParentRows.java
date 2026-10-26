@@ -136,7 +136,7 @@ final class ParentRows {
         final var validator = new VoteChainValidator();
         validator.setId(UUID.randomUUID());
         validator.setName("Witness");
-        validator.setPublicKey("ab".repeat(32));
+        validator.setPublicKey("04" + "ab".repeat(64));
         this.repository.insert(validator);
         return validator.getId();
     }

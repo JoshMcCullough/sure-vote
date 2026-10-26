@@ -411,7 +411,7 @@ class DefinitionRulesTest {
         election.setVotingEnd(Instant.parse("2026-11-03T00:00:00Z"));
         election.setOperatorPublicKey(operatorKey);
         election.setImportPublicKey(importKey);
-        election.setViewingPublicKey("ab".repeat(32));
+        election.setViewingPublicKey(TestKeys.PUBLIC);
         return election;
     }
 

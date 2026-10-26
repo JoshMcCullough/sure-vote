@@ -89,7 +89,8 @@ class ImportRulesTest {
     @Test
     void aChangedDeviceKeyBreaksTheSignedDefinition() {
         final var world = SampleElection.fptp();
-        this.deviceKey(world, "cd".repeat(32));
+        final var other = Signatures.generate();
+        this.deviceKey(world, other.publicKey());
         this.assertMessage(
             () -> world.castOne(world.slotA, "Y"),
             "Election definition does not match the signed hash"
@@ -427,7 +428,7 @@ class ImportRulesTest {
         election.setVotingEnd(Instant.parse("2026-11-04T00:00:00Z"));
         election.setOperatorPublicKey(operatorKey);
         election.setImportPublicKey(importKey);
-        election.setViewingPublicKey("ab".repeat(32));
+        election.setViewingPublicKey(TestKeys.PUBLIC);
         return election;
     }
 

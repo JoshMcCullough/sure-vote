@@ -74,9 +74,9 @@ final class ElectionDefinitions {
             "canonical-json-v1".equals(election.getVoteChainEntryHashPayloadSchema()),
             "chain schema is canonical-json-v1"
         );
-        this.require(Digests.isLowerHex(election.getOperatorPublicKey(), 64), "operator public key");
-        this.require(Digests.isLowerHex(election.getImportPublicKey(), 64), "import public key");
-        this.require(Digests.isLowerHex(election.getViewingPublicKey(), 64), "viewing public key");
+        this.require(Signatures.isPublicKey(election.getOperatorPublicKey()), "operator public key");
+        this.require(Signatures.isPublicKey(election.getImportPublicKey()), "import public key");
+        this.require(Signatures.isPublicKey(election.getViewingPublicKey()), "viewing public key");
         this.validateRaces(repository, election.getId());
         this.validateDevices(repository, election);
         this.validateCoverage(repository, election.getId());
@@ -164,7 +164,7 @@ final class ElectionDefinitions {
     private void validateDevices(final SureVoteRepository repository, final Election election) {
         final var devices = this.devices(repository, election);
         for (final var device : devices) {
-            this.require(Digests.isLowerHex(device.getPublicKey(), 64), "device public key");
+            this.require(Signatures.isPublicKey(device.getPublicKey()), "device public key");
         }
     }
 

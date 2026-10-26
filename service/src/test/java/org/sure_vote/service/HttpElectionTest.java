@@ -300,9 +300,10 @@ class HttpElectionTest {
         final var heads = this.send("GET", path + "/heads", null);
         final var headBody = heads.body();
         final var keyId = "validator:" + world.validatorId;
+        final var stranger = Signatures.generate();
         final var seed = world.validatorKey.seed();
         final var validation = this.validationJson(world, chain);
-        final var forged = this.signed(path + "/validations", validation, keyId, new byte[32], NONCE);
+        final var forged = this.signed(path + "/validations", validation, keyId, stranger.seed(), NONCE);
         final var response = this.signed(path + "/validations", validation, keyId, seed, NONCE);
         final var filed = response.body();
         final var listed = this.send("GET", path + "/validations", null);

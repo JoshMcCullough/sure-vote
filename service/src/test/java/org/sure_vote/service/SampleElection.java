@@ -53,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 final class SampleElection {
-    private static final String VIEWING_KEY = "ab".repeat(32);
+    private static final String VIEWING_KEY = TestKeys.PUBLIC;
 
     static final UUID HOST_ADMIN = UUID.fromString("00000000-0000-4000-8000-00000000a001");
 
