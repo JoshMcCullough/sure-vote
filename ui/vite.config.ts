@@ -1,11 +1,21 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 
 const api = 'http://127.0.0.1:8080'
+const uswds = fileURLToPath(new URL('./node_modules/@uswds/uswds/packages', import.meta.url))
 
 export default defineConfig({
   base: '/app/',
   plugins: [react()],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        loadPaths: [uswds],
+        quietDeps: true,
+      },
+    },
+  },
   server: {
     proxy: {
       '/health': api,

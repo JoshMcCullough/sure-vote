@@ -1,0 +1,75 @@
+@use "uswds-core" with (
+  $theme-image-path: "../../node_modules/@uswds/uswds/dist/img",
+  $theme-font-path: "../../node_modules/@uswds/uswds/dist/fonts",
+  $theme-show-notifications: false,
+  $theme-show-compile-warnings: false,
+  $theme-respect-user-font-size: true,
+  $theme-global-link-styles: true,
+  $theme-global-paragraph-styles: true,
+  $theme-color-primary-family: "green-cool",
+  $theme-color-primary-lighter: "green-cool-10",
+  $theme-color-primary-light: "green-cool-30",
+  $theme-color-primary: "green-cool-60v",
+  $theme-color-primary-vivid: "green-cool-50v",
+  $theme-color-primary-dark: "green-cool-70v",
+  $theme-color-primary-darker: "green-cool-80v",
+  $theme-color-base-family: "gray-cool",
+  $theme-focus-color: "blue-40v",
+  $theme-focus-width: 1,
+  $theme-font-type-sans: "public-sans",
+  $theme-font-type-serif: "merriweather",
+  $theme-font-type-mono: "roboto-mono",
+  $theme-font-role-heading: "serif",
+  $theme-body-font-size: "sm",
+  $theme-header-min-width: "desktop",
+  $theme-grid-container-max-width: "desktop",
+  $theme-site-margins-mobile-width: 2,
+  $theme-button-border-radius: "md",
+  $theme-input-max-width: "none",
+  $theme-utility-breakpoints: (
+    "card": false,
+    "card-lg": false,
+    "mobile": true,
+    "mobile-lg": true,
+    "tablet": true,
+    "tablet-lg": false,
+    "desktop": true,
+    "desktop-lg": false,
+    "widescreen": false,
+  )
+);
+@forward "uswds-global";
+@forward "uswds-typography";
+@forward "uswds-helpers";
+@forward "usa-layout-grid";
+@forward "usa-skipnav";
+@forward "usa-header";
+@forward "usa-footer";
+@forward "usa-identifier";
+@forward "usa-button";
+@forward "usa-button-group";
+@forward "usa-card";
+@forward "usa-alert";
+@forward "usa-site-alert";
+@forward "usa-form";
+@forward "usa-form-group";
+@forward "usa-label";
+@forward "usa-hint";
+@forward "usa-input";
+@forward "usa-select";
+@forward "usa-textarea";
+@forward "usa-fieldset";
+@forward "usa-legend";
+@forward "usa-error-message";
+@forward "usa-table";
+@forward "usa-tag";
+@forward "usa-list";
+@forward "usa-prose";
+@forward "usa-summary-box";
+@forward "usa-language-selector";
+@forward "usa-section";
+@forward "usa-step-indicator";
+@forward "usa-process-list";
+@forward "usa-icon";
+@forward "uswds-utilities";
+@use "app";

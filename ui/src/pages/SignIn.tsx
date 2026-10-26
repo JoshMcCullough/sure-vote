@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { api, messageOf } from '../api'
+import { SelectField, TextField } from '../components/Fields'
+import { ErrorAlert, PageHeading, Panel, SuccessAlert } from '../components/Page'
 import {
   addPasskey,
   currentSession,
@@ -16,6 +20,7 @@ type AuthConfig = {
 }
 
 export function SignIn() {
+  const { t } = useTranslation()
   const [principal, setPrincipal] = useState<Principal | null>(null)
   const [config, setConfig] = useState<AuthConfig>({ devSignIn: false })
   const [token, setToken] = useState('')
@@ -50,87 +55,113 @@ export function SignIn() {
       setPrincipal(await work())
       setNotice(message)
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
   function onEnroll(event: FormEvent) {
     event.preventDefault()
-    void run(() => enrollPasskey(token.trim()), 'Passkey enrolled. You are signed in.')
+    void run(() => enrollPasskey(token.trim()), t('signIn.enrolled'))
   }
 
   function onDev(event: FormEvent) {
     event.preventDefault()
-    void run(() => devSignIn(kind, id.trim(), tenantId.trim()), 'Signed in without a passkey.')
+    void run(() => devSignIn(kind, id.trim(), tenantId.trim()), t('signIn.devDone'))
   }
 
   return (
     <>
-      <h1>Sign in</h1>
-      <p>Officials and system admins sign in with a passkey. A security key or a platform passkey both work.</p>
-      {error ? <p className="banner" role="alert">{error}</p> : null}
-      {notice ? <p className="notice">{notice}</p> : null}
+      <PageHeading>{t('signIn.title')}</PageHeading>
+      <p className="usa-intro">{t('signIn.intro')}</p>
+      <ErrorAlert message={error} />
+      <SuccessAlert message={notice} />
       {principal ? (
-        <section className="card">
-          <h2>Signed in</h2>
-          <p>
-            {principal.name} ({principal.kind}){principal.tenantId ? ' in tenant ' + principal.tenantId : ''}.
-          </p>
+        <Panel title={t('signIn.signedInTitle')}>
+          <p>{signedInText(principal, t)}</p>
           {principal.kind === 'visitor' ? null : (
-            <p>
-              <Link to="/admin">Manage officials</Link>
-            </p>
+            <p><Link to="/admin">{t('signIn.manageOfficials')}</Link></p>
           )}
-          <div className="actions">
+          <div className="usa-button-group">
             {principal.kind === 'visitor' ? null : (
-              <button type="button" onClick={() => void run(addPasskey, 'Another passkey was added.')}>
-                Add another passkey
+              <button
+                type="button"
+                className="usa-button"
+                onClick={() => void run(addPasskey, t('signIn.passkeyAdded'))}
+              >
+                {t('signIn.addPasskey')}
               </button>
             )}
-            <button type="button" onClick={() => void run(async () => { await signOut(); return null }, 'Signed out.')}>
-              Sign out
+            <button
+              type="button"
+              className="usa-button usa-button--outline"
+              onClick={() => void run(async () => {
+                await signOut()
+                return null
+              }, t('signIn.signedOut'))}
+            >
+              {t('signIn.signOut')}
             </button>
           </div>
-        </section>
+        </Panel>
       ) : null}
-      <section className="card">
-        <h2>Passkey</h2>
-        <p>Use a passkey you already enrolled.</p>
-        <button type="button" onClick={() => void run(passkeySignIn, 'Signed in.')}>Sign in with a passkey</button>
-      </section>
-      <form className="card" onSubmit={onEnroll}>
-        <h2>Enroll a passkey</h2>
-        <p>Paste the one-time enrollment token you were given. It works once and expires after 24 hours.</p>
-        <label>
-          Enrollment token
-          <input value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" />
-        </label>
-        <button type="submit" disabled={!token.trim()}>Enroll and sign in</button>
-      </form>
-      {config.devSignIn ? (
-        <form className="card" onSubmit={onDev}>
-          <h2>Development sign-in</h2>
-          <p>This host allows sign-in without a passkey. A production host turns it off.</p>
-          <label>
-            Kind
-            <select value={kind} onChange={(event) => setKind(event.target.value)}>
-              <option value="system-admin">system-admin</option>
-              <option value="official">official</option>
-            </select>
-          </label>
-          <label>
-            Id
-            <input value={id} onChange={(event) => setId(event.target.value)} />
-          </label>
-          {kind === 'official' ? (
-            <label>
-              Tenant
-              <input value={tenantId} onChange={(event) => setTenantId(event.target.value)} />
-            </label>
-          ) : null}
-          <button type="submit" disabled={!id.trim()}>Sign in</button>
+      <Panel title={t('signIn.passkeyTitle')}>
+        <p>{t('signIn.passkeyBody')}</p>
+        <button type="button" className="usa-button" onClick={() => void run(passkeySignIn, t('signIn.done'))}>
+          {t('signIn.passkeyButton')}
+        </button>
+      </Panel>
+      <Panel title={t('signIn.enrollTitle')}>
+        <form className="usa-form maxw-none" onSubmit={onEnroll}>
+          <p>{t('signIn.enrollBody')}</p>
+          <TextField
+            id="enroll-token"
+            label={t('fields.enrollmentToken')}
+            value={token}
+            required
+            autoComplete="off"
+            spellCheck={false}
+            onChange={setToken}
+          />
+          <button type="submit" className="usa-button margin-top-3" disabled={!token.trim()}>
+            {t('signIn.enrollButton')}
+          </button>
         </form>
+      </Panel>
+      {config.devSignIn ? (
+        <Panel title={t('signIn.devTitle')}>
+          <form className="usa-form maxw-none" onSubmit={onDev}>
+            <p>{t('signIn.devBody')}</p>
+            <SelectField
+              id="dev-kind"
+              label={t('fields.kind')}
+              value={kind}
+              options={['system-admin', 'official'].map((value) => ({ value, label: t('values.' + value) }))}
+              onChange={setKind}
+            />
+            <TextField id="dev-id" label={t('fields.id')} value={id} required spellCheck={false} onChange={setId} />
+            {kind === 'official' ? (
+              <TextField
+                id="dev-tenant"
+                label={t('fields.tenant')}
+                value={tenantId}
+                spellCheck={false}
+                onChange={setTenantId}
+              />
+            ) : null}
+            <button type="submit" className="usa-button margin-top-3" disabled={!id.trim()}>
+              {t('signIn.devButton')}
+            </button>
+          </form>
+        </Panel>
       ) : null}
     </>
   )
+}
+
+function signedInText(principal: Principal, t: TFunction): string {
+  const kind = t('values.' + principal.kind)
+  if (principal.tenantId) {
+    return t('signIn.signedInTenant', { name: principal.name, kind, tenant: principal.tenantId })
+  }
+  return t('signIn.signedIn', { name: principal.name, kind })
 }

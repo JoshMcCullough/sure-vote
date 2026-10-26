@@ -1,0 +1,70 @@
+@use "uswds-core" as *;
+
+$target-size: units(5) + units("05");
+
+.usa-button,
+.usa-input,
+.usa-select,
+.usa-language__link,
+.usa-menu-btn,
+.usa-nav__primary > .usa-nav__primary-item > a,
+.usa-nav__close {
+  min-block-size: $target-size;
+}
+
+.usa-nav__close {
+  min-inline-size: $target-size;
+}
+
+.sv-heading-focus:focus {
+  outline: none;
+}
+
+.sv-heading-focus:focus-visible {
+  @include focus-outline;
+}
+
+.sv-navbar-tools {
+  display: flex;
+  align-items: center;
+  gap: units(1);
+}
+
+.sv-access-code {
+  @include u-font("mono", "md");
+  @include u-bg("base-lightest");
+  @include u-padding(2);
+  @include u-radius("md");
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.sv-code-group {
+  display: inline-block;
+  margin-inline-end: units(1);
+}
+
+.sv-spelled {
+  @include u-font("mono", "xs");
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@include at-media("desktop") {
+  .usa-header--basic .usa-navbar {
+    display: flex;
+    align-items: center;
+    gap: units(2);
+  }
+}

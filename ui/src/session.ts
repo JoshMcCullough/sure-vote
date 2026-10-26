@@ -1,4 +1,4 @@
-import { api } from './api'
+import { api, KeyedError } from './api'
 
 export type Principal = {
   kind: 'system-admin' | 'official' | 'visitor'
@@ -28,7 +28,7 @@ export async function workspaceSession(): Promise<Principal> {
     return current
   }
   if (current) {
-    throw new Error('A system admin does not configure elections. Sign out to use the demo.')
+    throw new KeyedError('errors.adminWorkspace')
   }
   return api<Principal>('POST', '/showcase/session')
 }
@@ -115,7 +115,7 @@ function assertionJson(credential: Credential | null): unknown {
 
 function required(credential: Credential | null): PublicKeyCredential {
   if (!credential) {
-    throw new Error('no passkey was chosen')
+    throw new KeyedError('errors.noPasskey')
   }
   return credential as PublicKeyCredential
 }

@@ -1,6 +1,9 @@
 import { FormEvent, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, messageOf } from '../api'
+import { TextField } from '../components/Fields'
+import { ErrorAlert, PageHeading, Panel } from '../components/Page'
 
 type Found = {
   ballot: {
@@ -9,88 +12,98 @@ type Found = {
 }
 
 export function Home() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [code, setCode] = useState('')
   const [passphrase, setPassphrase] = useState('')
   const [electionId, setElectionId] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [electionError, setElectionError] = useState<string | null>(null)
 
   async function openBallot(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    if (!code.trim()) {
+      setCodeError(t('form.required', { field: t('fields.code') }))
+      document.getElementById('home-code')?.focus()
+      return
+    }
+    setCodeError(null)
     try {
       const found = await api<Found>('POST', '/lookup', { code, passphrase })
       navigate('/elections/' + found.ballot.electionId, { state: { code, passphrase } })
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
   function openLookup(event: FormEvent) {
     event.preventDefault()
     const id = electionId.trim()
-    if (id) {
-      navigate('/elections/' + id)
+    if (!id) {
+      setElectionError(t('form.required', { field: t('fields.electionLookup') }))
+      document.getElementById('home-election')?.focus()
+      return
     }
+    setElectionError(null)
+    navigate('/elections/' + id)
   }
 
   return (
     <>
-      <h1>Open a ballot, or configure an election</h1>
-      <p>
-        SureVote keeps an election authority's record and a public ballot ledger.
-        This app has a public lookup and a workspace for the parts of an election.
-      </p>
-      <section className="card">
-        <h2>Public lookup</h2>
-        <p>
-          Open one ballot with its access code. A mail-in ballot also needs the viewing passphrase.
-          The page does not change the ballot. Checking a published chain does not require this app.
-        </p>
-        {error ? <p className="banner" role="alert">{error}</p> : null}
-        <form onSubmit={(event) => void openBallot(event)}>
-          <label>
-            Access code
-            <input value={code} autoComplete="off" onChange={(event) => setCode(event.target.value)} />
-          </label>
-          <label>
-            Viewing passphrase
-            <input
-              value={passphrase}
-              type="password"
-              autoComplete="off"
-              onChange={(event) => setPassphrase(event.target.value)}
-            />
-          </label>
-          <div className="actions">
-            <button type="submit">Open my ballot</button>
-          </div>
-        </form>
-        <form onSubmit={openLookup}>
-          <label>
-            Or open an election by id
-            <input value={electionId} onChange={(event) => setElectionId(event.target.value)} />
-          </label>
-          <div className="actions">
-            <button type="submit">Open lookup</button>
-          </div>
-        </form>
-      </section>
-      <section className="card">
-        <h2>Workspace</h2>
-        <p>
-          Configure a tenant, geography, contests, and recording places.
-          On a showcase tenant, activate a demonstration, cast one ballot, and close it.
-          The access code appears once and is not saved in this browser.
-        </p>
-        <p>
-          This browser does not hold a production operator, import, viewing, or device key.
-          On a production tenant, activate and close take a signature made outside this app.
-        </p>
-        <div className="actions">
-          <Link className="button" to="/workspace">Open the workspace</Link>
+      <PageHeading>{t('home.title')}</PageHeading>
+      <p className="usa-intro">{t('home.intro')}</p>
+      <div className="grid-row grid-gap">
+        <div className="grid-col-12 desktop:grid-col-6">
+          <Panel title={t('home.lookupTitle')}>
+            <p>{t('home.lookupBody')}</p>
+            <ErrorAlert message={error} />
+            <form className="usa-form maxw-none" noValidate onSubmit={(event) => void openBallot(event)}>
+              <TextField
+                id="home-code"
+                label={t('fields.code')}
+                value={code}
+                required
+                error={codeError}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={setCode}
+              />
+              <TextField
+                id="home-passphrase"
+                label={t('fields.passphrase')}
+                hint={t('home.passphraseHint')}
+                value={passphrase}
+                type="password"
+                autoComplete="off"
+                onChange={setPassphrase}
+              />
+              <button type="submit" className="usa-button margin-top-3">{t('home.openBallot')}</button>
+            </form>
+            <form className="usa-form maxw-none margin-top-4" noValidate onSubmit={openLookup}>
+              <TextField
+                id="home-election"
+                label={t('fields.electionLookup')}
+                value={electionId}
+                error={electionError}
+                spellCheck={false}
+                onChange={setElectionId}
+              />
+              <button type="submit" className="usa-button usa-button--outline margin-top-3">
+                {t('home.openLookup')}
+              </button>
+            </form>
+          </Panel>
         </div>
-      </section>
+        <div className="grid-col-12 desktop:grid-col-6">
+          <Panel title={t('home.workspaceTitle')}>
+            <p>{t('home.workspaceBody')}</p>
+            <p>{t('home.workspaceKeys')}</p>
+            <Link className="usa-button" to="/workspace">{t('home.openWorkspace')}</Link>
+          </Panel>
+        </div>
+      </div>
     </>
   )
 }

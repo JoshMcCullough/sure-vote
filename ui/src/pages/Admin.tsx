@@ -1,6 +1,9 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { api, messageOf } from '../api'
+import { SelectField, TextField } from '../components/Fields'
+import { ErrorAlert, PageHeading, Panel } from '../components/Page'
 import { currentSession, Principal } from '../session'
 
 type Tenant = {
@@ -23,6 +26,7 @@ type Enrollment = {
 }
 
 export function Admin() {
+  const { t } = useTranslation()
   const [principal, setPrincipal] = useState<Principal | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [tenants, setTenants] = useState<Tenant[]>([])
@@ -69,8 +73,8 @@ export function Admin() {
   }, [])
 
   useEffect(() => {
-    refresh(principal, tenantId).catch((caught) => setError(messageOf(caught)))
-  }, [principal, tenantId, refresh])
+    refresh(principal, tenantId).catch((caught) => setError(messageOf(caught, t)))
+  }, [principal, tenantId, refresh, t])
 
   async function act(work: () => Promise<string | null>) {
     setError(null)
@@ -78,7 +82,7 @@ export function Admin() {
       setToken(await work())
       await refresh(principal, tenantId)
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
@@ -105,78 +109,113 @@ export function Admin() {
   }
 
   if (!loaded) {
-    return <p>Loading.</p>
+    return (
+      <>
+        <PageHeading>{t('admin.title')}</PageHeading>
+        <p role="status">{t('app.loading')}</p>
+      </>
+    )
   }
   if (!principal || principal.kind === 'visitor') {
     return (
       <>
-        <h1>Officials</h1>
+        <PageHeading>{t('admin.title')}</PageHeading>
         <p>
-          <Link to="/sign-in">Sign in</Link> as an official or a system admin to manage officials.
+          <Link to="/sign-in">{t('admin.signInLink')}</Link>
         </p>
+        <p>{t('admin.signInBody')}</p>
       </>
     )
   }
 
   const ready = principal.kind === 'official' || Boolean(tenantId)
+  const tenantOptions = [
+    { value: '', label: t('admin.chooseTenant') },
+    ...tenants.map((tenant) => ({
+      value: tenant.id,
+      label: t('admin.tenantOption', {
+        name: tenant.name,
+        kind: t('values.' + tenant.kind, { defaultValue: tenant.kind }),
+        status: t('values.' + tenant.status, { defaultValue: tenant.status }),
+      }),
+    })),
+  ]
 
   return (
     <>
-      <h1>Officials</h1>
-      <p>
-        An official gets a one-time enrollment token and enrolls a passkey on the sign-in page.
-        A disabled official is signed out at once.
-      </p>
-      {error ? <p className="banner" role="alert">{error}</p> : null}
+      <PageHeading>{t('admin.title')}</PageHeading>
+      <p className="usa-intro">{t('admin.intro')}</p>
+      <ErrorAlert message={error} />
       {token ? (
-        <p className="notice">
-          Enrollment token, shown once: <code>{token}</code>
-        </p>
+        <div className="usa-alert usa-alert--success margin-y-2" role="status">
+          <div className="usa-alert__body">
+            <h2 className="usa-alert__heading">{t('admin.tokenTitle')}</h2>
+            <p className="usa-alert__text">{t('admin.tokenBody')}</p>
+            <p className="sv-access-code" translate="no">{token}</p>
+          </div>
+        </div>
       ) : null}
       {principal.kind === 'system-admin' ? (
-        <section className="card">
-          <h2>Tenant</h2>
-          <label>
-            Tenant
-            <select value={tenantId} onChange={(event) => setTenantId(event.target.value)}>
-              <option value="">Choose a tenant</option>
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name} ({tenant.kind}, {tenant.status})
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
+        <Panel title={t('admin.tenantTitle')}>
+          <SelectField
+            id="admin-tenant"
+            label={t('fields.tenant')}
+            value={tenantId}
+            options={tenantOptions}
+            onChange={setTenantId}
+          />
+        </Panel>
       ) : null}
-      <form className="card" onSubmit={onCreate}>
-        <h2>Add an official</h2>
-        <label>
-          Name
-          <input value={name} onChange={(event) => setName(event.target.value)} />
-        </label>
-        <button type="submit" disabled={!ready || !name.trim()}>Add</button>
-      </form>
-      <section className="card">
-        <h2>Officials</h2>
-        {officials.length === 0 ? <p>None yet.</p> : null}
-        <ul>
-          {officials.map((official) => (
-            <li key={official.id}>
-              {official.name} ({official.status}){' '}
-              {official.id === principal.id ? null : (
-                <button
-                  type="button"
-                  onClick={() => setStatus(official, official.status === 'active' ? 'disabled' : 'active')}
-                >
-                  {official.status === 'active' ? 'Disable' : 'Enable'}
-                </button>
-              )}{' '}
-              <button type="button" onClick={() => reenroll(official)}>New enrollment token</button>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <Panel title={t('admin.addTitle')}>
+        <form className="usa-form maxw-none" onSubmit={onCreate}>
+          <TextField id="admin-name" label={t('fields.name')} value={name} required onChange={setName} />
+          <button type="submit" className="usa-button margin-top-3" disabled={!ready || !name.trim()}>
+            {t('admin.add')}
+          </button>
+        </form>
+      </Panel>
+      <Panel title={t('admin.listTitle')}>
+        {officials.length === 0 ? <p>{t('admin.none')}</p> : (
+          <table className="usa-table usa-table--borderless usa-table--stacked-header width-full">
+            <caption className="usa-sr-only">{t('admin.listTitle')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('fields.name')}</th>
+                <th scope="col">{t('fields.status')}</th>
+                <th scope="col">{t('admin.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {officials.map((official) => (
+                <tr key={official.id}>
+                  <th scope="row" data-label={t('fields.name')}>{official.name}</th>
+                  <td data-label={t('fields.status')}>
+                    {t('values.' + official.status, { defaultValue: official.status })}
+                  </td>
+                  <td data-label={t('admin.actions')}>
+                    <div className="usa-button-group">
+                      {official.id === principal.id ? null : (
+                        <button
+                          type="button"
+                          className="usa-button usa-button--outline"
+                          onClick={() => setStatus(official, official.status === 'active' ? 'disabled' : 'active')}
+                        >
+                          {official.status === 'active'
+                            ? t('admin.disable', { name: official.name })
+                            : t('admin.enable', { name: official.name })}
+                        </button>
+                      )}
+                      <button type="button" className="usa-button usa-button--outline" onClick={() => reenroll(official)}>
+                        {t('admin.reenroll', { name: official.name })}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Panel>
     </>
   )
 }

@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { api, Created, messageOf, votingWindow } from '../api'
+import { AccessCode } from '../components/AccessCode'
+import { ErrorAlert, PageHeading, Panel } from '../components/Page'
 import { Field, Step } from '../forms'
 import { Principal, workspaceSession } from '../session'
 import { Reconciliation } from './Reconciliation'
@@ -82,12 +86,12 @@ function loadDraft(): Draft {
 }
 
 export function Workspace() {
+  const { t } = useTranslation()
   const draft = useState(loadDraft)[0]
   const [span] = useState(votingWindow)
   const [ids, setIds] = useState<Ids>({ ...blank, ...draft })
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [closed, setClosed] = useState(draft.closed)
   const [styled, setStyled] = useState(draft.styled)
   const [assigned, setAssigned] = useState(draft.assigned)
@@ -111,7 +115,7 @@ export function Workspace() {
         }
       } catch (caught) {
         if (!gone) {
-          setError(messageOf(caught))
+          setError(messageOf(caught, t))
         }
       }
     }
@@ -165,22 +169,8 @@ export function Workspace() {
       })
       setCode(row.code)
       setCastDone(true)
-      setCopied(false)
     } catch (caught) {
-      setError(messageOf(caught))
-    }
-  }
-
-  async function copyCode() {
-    if (!code) {
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopied(true)
-    } catch (caught) {
-      setCopied(false)
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
@@ -190,7 +180,7 @@ export function Workspace() {
       const row = await api<Created>('POST', '/showcase/elections/' + ids.electionId + '/close', {})
       setClosed(row.status ?? 'closed')
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
@@ -200,509 +190,469 @@ export function Workspace() {
 
   return (
     <>
-      <h1>Configure an election</h1>
-      <p>
-        Create each part, then run a showcase demonstration.
-        A production activate or close still needs a signature made outside this app.
-        This browser does not hold a production private key.
-      </p>
-      {error ? <p className="banner" role="alert">{error}</p> : null}
-
-      <section className="card">
-        <h2>{principal?.kind === 'official' ? 'Your tenant' : 'Demo tenant'}</h2>
-        <p>{tenantText(principal, demo)}</p>
-      </section>
+      <PageHeading>{t('workspace.title')}</PageHeading>
+      <p className="usa-intro">{t('workspace.intro')}</p>
+      <ErrorAlert message={error} />
+      <Panel title={principal?.kind === 'official' ? t('workspace.yourTenant') : t('workspace.demoTenant')}>
+        <p>{tenantText(principal, demo, t)}</p>
+      </Panel>
       <Step
         key={'locality-' + ids.tenantId}
-        title="Locality"
-        detail="The city or town the election belongs to."
+        title={t('workspace.locality.title')}
+        detail={t('workspace.locality.detail')}
         path="/localities"
-        submitLabel="Create locality"
-        fields={localityFields()}
+        submitLabel={t('workspace.locality.submit')}
+        fields={localityFields(t)}
         disabled={!ids.tenantId}
         onCreated={save('localityId')}
-        onError={setError}
       />
       <Step
         key={'address-' + ids.localityId}
-        title="Address"
-        detail="The address used by the precinct and the polling place."
+        title={t('workspace.address.title')}
+        detail={t('workspace.address.detail')}
         path="/addresses"
-        submitLabel="Create address"
-        fields={addressFields(ids)}
+        submitLabel={t('workspace.address.submit')}
+        fields={addressFields(ids, t)}
         disabled={!ids.localityId}
         onCreated={save('addressId')}
-        onError={setError}
       />
       <Step
         key={'precinct-' + ids.addressId}
-        title="Precinct"
-        detail="Where the voter's ballot style is drawn from."
+        title={t('workspace.precinct.title')}
+        detail={t('workspace.precinct.detail')}
         path="/precincts"
-        submitLabel="Create precinct"
-        fields={precinctFields(ids)}
+        submitLabel={t('workspace.precinct.submit')}
+        fields={precinctFields(ids, t)}
         disabled={!ids.addressId}
         onCreated={save('precinctId')}
-        onError={setError}
       />
       <Step
         key={'district-' + ids.localityId}
-        title="District"
-        detail="Optional. An at-large seat does not need one."
+        title={t('workspace.district.title')}
+        detail={t('workspace.district.detail')}
         path="/districts"
-        submitLabel="Create district"
-        fields={districtFields(ids)}
+        submitLabel={t('workspace.district.submit')}
+        fields={districtFields(ids, t)}
         disabled={!ids.localityId}
         onCreated={save('districtId')}
-        onError={setError}
       />
       <Step
         key={'precinct-district-' + ids.districtId + '-' + ids.precinctId}
-        title="Precinct district"
-        detail="Optional. Ties the precinct to one district of that type."
+        title={t('workspace.precinctDistrict.title')}
+        detail={t('workspace.precinctDistrict.detail')}
         path="/precinct-districts"
-        submitLabel="Assign district"
+        submitLabel={t('workspace.precinctDistrict.submit')}
         fields={linkFields(ids)}
         disabled={!ids.districtId || !ids.precinctId}
         onCreated={() => undefined}
-        onError={setError}
       />
       <Step
         key={'seat-' + ids.localityId}
-        title="Seat"
-        detail="The office on the ballot. Appointments is how many winners the seat has."
+        title={t('workspace.seat.title')}
+        detail={t('workspace.seat.detail')}
         path="/seats"
-        submitLabel="Create seat"
-        fields={seatFields(ids)}
+        submitLabel={t('workspace.seat.submit')}
+        fields={seatFields(ids, t)}
         disabled={!ids.localityId}
         onCreated={save('seatId')}
-        onError={setError}
       />
       <Step
         key={'term-' + ids.seatId}
-        title="Term"
-        detail="The term the race fills."
+        title={t('workspace.term.title')}
+        detail={t('workspace.term.detail')}
         path="/terms"
-        submitLabel="Create term"
+        submitLabel={t('workspace.term.submit')}
         fields={termFields(ids)}
         disabled={!ids.seatId}
         onCreated={save('termId')}
-        onError={setError}
       />
       <Step
         key={'showcase-election-' + ids.localityId + '-' + span.start}
-        title="Showcase election"
-        detail="The host generates the operator, import, and viewing keys. The window must include now."
+        title={t('workspace.showcaseElection.title')}
+        detail={t('workspace.showcaseElection.detail')}
         path="/showcase/elections"
-        submitLabel="Create demonstration"
-        fields={electionFields(ids, span)}
+        submitLabel={t('workspace.showcaseElection.submit')}
+        fields={electionFields(ids, span, t)}
         disabled={!ids.localityId}
         onCreated={save('electionId')}
-        onError={setError}
       />
       <Step
-        key={'production-election-' + ids.electionId}
-        title="Production election"
-        detail="Optional. Paste public keys generated outside this app. Leave this blank for a demonstration."
+        key={'production-election-' + ids.localityId + '-' + ids.electionId}
+        title={t('workspace.productionElection.title')}
+        detail={t('workspace.productionElection.detail')}
         path="/elections"
-        submitLabel="Create election with outside keys"
-        fields={productionElectionFields(ids, span)}
+        submitLabel={t('workspace.productionElection.submit')}
+        fields={productionElectionFields(ids, span, t)}
         disabled={!ids.localityId}
         onCreated={save('electionId')}
-        onError={setError}
       />
       <Step
         key={'race-' + ids.electionId + '-' + ids.termId}
-        title="Race"
-        detail="One chain is created for this race."
+        title={t('workspace.race.title')}
+        detail={t('workspace.race.detail')}
         path="/races"
-        submitLabel="Create race"
-        fields={raceFields(ids)}
+        submitLabel={t('workspace.race.submit')}
+        fields={raceFields(ids, t)}
         disabled={!ids.electionId || !ids.termId}
         onCreated={save('raceId')}
-        onError={setError}
       />
       <Step
         key={'candidate-person-' + ids.tenantId}
-        title="Candidate person"
-        detail="A fictional name is enough. A showcase tenant rejects an SSN and a voter id."
+        title={t('workspace.candidatePerson.title')}
+        detail={t('workspace.candidatePerson.detail')}
         path="/persons"
-        submitLabel="Create candidate person"
-        fields={personFields('Ada', 'One')}
+        submitLabel={t('workspace.candidatePerson.submit')}
+        fields={personFields(t('defaults.candidateFirst'), t('defaults.candidateLast'))}
         disabled={!ids.tenantId}
         onCreated={save('candidatePersonId')}
-        onError={setError}
       />
       <Step
         key={'voter-' + ids.tenantId}
-        title="Voter"
-        detail="Accepted onto the pollbook when the demonstration ballot is cast. Not written onto the ballot."
+        title={t('workspace.voter.title')}
+        detail={t('workspace.voter.detail')}
         path="/persons"
-        submitLabel="Create voter"
-        fields={personFields('Cam', 'Voter')}
+        submitLabel={t('workspace.voter.submit')}
+        fields={personFields(t('defaults.voterFirst'), t('defaults.voterLast'))}
         disabled={!ids.tenantId}
         onCreated={save('voterId')}
-        onError={setError}
       />
       <Step
         key={'candidate-' + ids.candidatePersonId}
-        title="Candidate"
-        detail="The candidate row points at the person."
+        title={t('workspace.candidate.title')}
+        detail={t('workspace.candidate.detail')}
         path="/candidates"
-        submitLabel="Create candidate"
+        submitLabel={t('workspace.candidate.submit')}
         fields={candidateFields(ids)}
         disabled={!ids.candidatePersonId}
         onCreated={save('candidateId')}
-        onError={setError}
       />
       <Step
         key={'slot-' + ids.candidateId + '-' + ids.raceId}
-        title="Race slot"
-        detail="One choice on the race. Write-in stays false for this demonstration."
+        title={t('workspace.slot.title')}
+        detail={t('workspace.slot.detail')}
         path="/race-candidates"
-        submitLabel="Add to the race"
+        submitLabel={t('workspace.slot.submit')}
         fields={slotFields(ids)}
         disabled={!ids.candidateId || !ids.raceId}
         onCreated={save('slotId')}
-        onError={setError}
       />
       <Step
         key={'style-' + ids.raceId + '-' + ids.precinctId}
-        title="Ballot style"
-        detail="The precinct includes this race."
+        title={t('workspace.style.title')}
+        detail={t('workspace.style.detail')}
         path="/ballot-styles"
-        submitLabel="Add ballot style"
+        submitLabel={t('workspace.style.submit')}
         fields={styleFields(ids)}
         disabled={!ids.raceId || !ids.precinctId || !ids.electionId}
         onCreated={() => setStyled(true)}
-        onError={setError}
       />
       <Step
         key={'place-' + ids.addressId}
-        title="Recording place"
-        detail="The polling place named on the ballot. This is not the voter's home."
+        title={t('workspace.place.title')}
+        detail={t('workspace.place.detail')}
         path="/places"
-        submitLabel="Create place"
-        fields={placeFields(ids)}
+        submitLabel={t('workspace.place.submit')}
+        fields={placeFields(ids, t)}
         disabled={!ids.localityId}
         onCreated={save('placeId')}
-        onError={setError}
       />
       <Step
         key={'showcase-device-' + ids.tenantId}
-        title="Showcase device"
-        detail="Create this before activate. The host generates the device key."
+        title={t('workspace.showcaseDevice.title')}
+        detail={t('workspace.showcaseDevice.detail')}
         path="/showcase/devices"
-        submitLabel="Create demonstration device"
-        fields={showcaseDeviceFields()}
+        submitLabel={t('workspace.showcaseDevice.submit')}
+        fields={showcaseDeviceFields(t)}
         disabled={!ids.tenantId}
         onCreated={save('deviceId')}
-        onError={setError}
       />
       <Step
         key={'production-device-' + ids.tenantId}
-        title="Production device"
-        detail="Optional. Paste a device public key generated on the machine. Create it before activate."
+        title={t('workspace.productionDevice.title')}
+        detail={t('workspace.productionDevice.detail')}
         path="/devices"
-        submitLabel="Register outside device"
-        fields={deviceFields()}
+        submitLabel={t('workspace.productionDevice.submit')}
+        fields={deviceFields(t)}
         disabled={!ids.tenantId}
         onCreated={() => undefined}
-        onError={setError}
       />
       <Step
         key={'assignment-' + ids.electionId + '-' + ids.precinctId}
-        title="Precinct assignment"
-        detail="The precinct is open for this election."
+        title={t('workspace.assignment.title')}
+        detail={t('workspace.assignment.detail')}
         path="/precinct-assignments"
-        submitLabel="Assign precinct"
+        submitLabel={t('workspace.assignment.submit')}
         fields={assignmentFields(ids)}
         disabled={!ids.electionId || !ids.precinctId}
         onCreated={() => setAssigned(true)}
-        onError={setError}
       />
       <Step
         key={'activate-' + ids.electionId}
-        title="Activate the demonstration"
-        detail="The host signs the definition. Do this after the device, the style, and the assignment exist."
+        title={t('workspace.activate.title')}
+        detail={t('workspace.activate.detail')}
         path={'/showcase/elections/' + ids.electionId + '/activate'}
-        submitLabel="Activate"
+        submitLabel={t('workspace.activate.submit')}
         fields={[]}
         disabled={!ids.electionId || !ids.deviceId || !styled || !assigned}
         onCreated={() => setActive(true)}
-        onError={setError}
       />
 
       {code ? (
-        <section className="card">
-          <h2>Access code</h2>
-          <p className="warn">
-            This code is shown once. It is not saved in this browser.
-            Copy it before you leave or clear this page.
-          </p>
-          <p className="code">{code}</p>
-          <div className="actions">
-            <button type="button" onClick={() => void copyCode()}>
-              {copied ? 'Copied' : 'Copy'}
+        <Panel title={t('workspace.code.title')}>
+          <div className="usa-alert usa-alert--warning usa-alert--slim margin-bottom-2">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text">{t('workspace.code.once')}</p>
+            </div>
+          </div>
+          <AccessCode code={code} />
+          <div className="usa-button-group margin-top-2">
+            <button type="button" className="usa-button usa-button--outline" onClick={() => setCode(null)}>
+              {t('workspace.code.clear')}
             </button>
-            <button type="button" className="secondary" onClick={() => setCode(null)}>Clear the code</button>
-            <Link to={'/elections/' + ids.electionId} state={{ code }}>Open the public lookup</Link>
+            <Link className="usa-button usa-button--outline" to={'/elections/' + ids.electionId} state={{ code }}>
+              {t('workspace.code.lookup')}
+            </Link>
           </div>
-        </section>
+        </Panel>
       ) : castDone ? (
-        <section className="card">
-          <h2>Access code</h2>
-          <p className="warn">The access code was shown once and is no longer on this page.</p>
-          <Link to={'/elections/' + ids.electionId}>Open the public lookup</Link>
-        </section>
+        <Panel title={t('workspace.code.title')}>
+          <p>{t('workspace.code.gone')}</p>
+          <Link className="usa-button usa-button--outline" to={'/elections/' + ids.electionId}>
+            {t('workspace.code.lookup')}
+          </Link>
+        </Panel>
       ) : (
-        <form className="card" onSubmit={(event) => void cast(event)}>
-          <h2>Cast a demonstration ballot</h2>
-          <p>
-            One first-past-the-post choice, value Y, for the slot above.
-            The voter is accepted on the pollbook and is not stored on the ballot.
-          </p>
-          <div className="actions">
-            <button type="submit" disabled={!ready || !ids.voterId || !active}>Cast ballot</button>
-          </div>
-        </form>
+        <Panel title={t('workspace.cast.title')}>
+          <form onSubmit={(event) => void cast(event)}>
+            <p>{t('workspace.cast.detail')}</p>
+            {!ready || !ids.voterId || !active ? <p className="usa-hint">{t('form.waiting')}</p> : null}
+            <button type="submit" className="usa-button" disabled={!ready || !ids.voterId || !active}>
+              {t('workspace.cast.submit')}
+            </button>
+          </form>
+        </Panel>
       )}
 
-      <section className="card">
-        <h2>Close the demonstration</h2>
-        <p>The host signs each race chain and the canvass statement. Open disputes do not block close.</p>
-        <div className="actions">
-          <button type="button" disabled={!ids.electionId} onClick={() => void closeElection()}>Close</button>
-          {closed ? <span className="saved">Status {closed}</span> : null}
+      <Panel title={t('workspace.close.title')}>
+        <p>{t('workspace.close.detail')}</p>
+        <button type="button" className="usa-button" disabled={!ids.electionId} onClick={() => void closeElection()}>
+          {t('workspace.close.submit')}
+        </button>
+        <div role="status">
+          {closed ? (
+            <p className="margin-top-2">
+              {t('workspace.close.status', { status: t('values.' + closed, { defaultValue: closed }) })}
+            </p>
+          ) : null}
         </div>
-      </section>
+      </Panel>
 
       <Reconciliation electionId={ids.electionId} ownPlaceId={ids.placeId} />
 
       <Step
         key={'production-activate-' + ids.electionId}
-        title="Production activate"
-        detail="Paste the operator signature over the definition hash. The hash comes from outside this app."
+        title={t('workspace.productionActivate.title')}
+        detail={t('workspace.productionActivate.detail')}
         path={'/elections/' + ids.electionId + '/activate'}
-        submitLabel="Activate with outside signature"
-        fields={[{ name: 'signature', label: 'Operator signature', value: '' }]}
+        submitLabel={t('workspace.productionActivate.submit')}
+        fields={[{ name: 'signature', label: t('fields.operatorSignature'), value: '' }]}
         disabled={!ids.electionId}
         onCreated={() => undefined}
-        onError={setError}
       />
       <Step
         key={'production-close-' + ids.electionId + '-' + ids.raceId}
-        title="Production close"
-        detail="Paste one chain signature and the canvass signature. Both are made outside this app."
+        title={t('workspace.productionClose.title')}
+        detail={t('workspace.productionClose.detail')}
         path={'/elections/' + ids.electionId + '/close'}
-        submitLabel="Close with outside signatures"
-        fields={closeFields(ids)}
+        submitLabel={t('workspace.productionClose.submit')}
+        fields={closeFields(ids, t)}
         disabled={!ids.electionId || !ids.raceId}
         build={closeBody}
         onCreated={() => undefined}
-        onError={setError}
       />
     </>
   )
 }
 
-function tenantText(principal: Principal | null, demo: DemoTenant | null): string {
+function tenantText(principal: Principal | null, demo: DemoTenant | null, t: TFunction): string {
   if (!principal) {
-    return 'Starting a session.'
+    return t('workspace.starting')
   }
   if (principal.kind === 'official') {
-    return 'Signed in as ' + principal.name + '. Everything here is created in your tenant.'
+    return t('workspace.officialTenant', { name: principal.name })
   }
-  const name = demo ? demo.name : 'the demo tenant'
-  return 'Everything here is created in the shared demo tenant ' + name
-    + '. It has no legal effect. A system admin creates every other tenant.'
+  if (demo) {
+    return t('workspace.visitorTenant', { name: demo.name })
+  }
+  return t('workspace.visitorTenantUnnamed')
 }
 
-function localityFields(): Field[] {
+const districtTypes = [
+  'congressional',
+  'state-senate',
+  'state-house',
+  'county-commission',
+  'city-council',
+  'school-board',
+  'other',
+]
+
+function localityFields(t: TFunction): Field[] {
   return [
-    { name: 'name', label: 'Name', value: 'Town' },
-    { name: 'type', label: 'Type', value: 'city' },
+    { name: 'name', value: t('defaults.locality') },
+    { name: 'type', value: 'city' },
   ]
 }
 
-function addressFields(ids: Ids): Field[] {
+function addressFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'street1', label: 'Street', value: '1 Main' },
-    { name: 'postalCode', label: 'Postal code', value: '00000' },
+    { name: 'localityId', value: ids.localityId },
+    { name: 'street1', value: t('defaults.street') },
+    { name: 'postalCode', value: '00000' },
   ]
 }
 
-function precinctFields(ids: Ids): Field[] {
+function precinctFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'name', label: 'Name', value: 'Precinct 1' },
-    { name: 'addressId', label: 'Address', value: ids.addressId },
+    { name: 'name', value: t('defaults.precinct') },
+    { name: 'addressId', value: ids.addressId },
   ]
 }
 
-function districtFields(ids: Ids): Field[] {
+function districtFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'name', label: 'Name', value: 'Ward 1' },
-    {
-      name: 'type',
-      label: 'Type',
-      value: 'city-council',
-      options: ['congressional', 'state-senate', 'state-house', 'county-commission', 'city-council', 'school-board', 'other'],
-    },
+    { name: 'localityId', value: ids.localityId },
+    { name: 'name', value: t('defaults.district') },
+    { name: 'type', value: 'city-council', options: districtTypes },
   ]
 }
 
 function linkFields(ids: Ids): Field[] {
   return [
-    { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
-    { name: 'votingDistrictId', label: 'District', value: ids.districtId },
-    {
-      name: 'districtType',
-      label: 'District type',
-      value: 'city-council',
-      options: ['congressional', 'state-senate', 'state-house', 'county-commission', 'city-council', 'school-board', 'other'],
-    },
+    { name: 'votingPrecinctId', value: ids.precinctId },
+    { name: 'votingDistrictId', value: ids.districtId },
+    { name: 'districtType', value: 'city-council', options: districtTypes },
   ]
 }
 
-function seatFields(ids: Ids): Field[] {
+function seatFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'name', label: 'Name', value: 'Mayor' },
-    { name: 'jurisdiction', label: 'Jurisdiction', value: 'local', options: ['federal', 'state', 'local'] },
+    { name: 'localityId', value: ids.localityId },
+    { name: 'name', value: t('defaults.seat') },
+    { name: 'jurisdiction', value: 'local', options: ['federal', 'state', 'local'] },
     {
       name: 'type',
-      label: 'Type',
       value: 'mayor',
       options: ['president', 'vice-president', 'senator', 'representative', 'governor', 'mayor', 'council', 'other'],
     },
-    { name: 'appointments', label: 'Appointments', value: '1', kind: 'number' },
-    { name: 'termLength', label: 'Term length', value: '4', kind: 'number' },
+    { name: 'appointments', value: '1', kind: 'number' },
+    { name: 'termLength', value: '4', kind: 'number' },
   ]
 }
 
 function termFields(ids: Ids): Field[] {
   return [
-    { name: 'seatId', label: 'Seat', value: ids.seatId },
+    { name: 'seatId', value: ids.seatId },
   ]
 }
 
-function electionFields(ids: Ids, span: { start: string; end: string }): Field[] {
+function electionFields(ids: Ids, span: { start: string; end: string }, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'name', label: 'Name', value: 'General' },
-    { name: 'votingStart', label: 'Voting start', value: span.start },
-    { name: 'votingEnd', label: 'Voting end', value: span.end },
+    { name: 'localityId', value: ids.localityId },
+    { name: 'name', value: t('defaults.election') },
+    { name: 'votingStart', value: span.start },
+    { name: 'votingEnd', value: span.end },
   ]
 }
 
-function productionElectionFields(ids: Ids, span: { start: string; end: string }): Field[] {
+function productionElectionFields(ids: Ids, span: { start: string; end: string }, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'name', label: 'Name', value: 'General' },
-    { name: 'votingStart', label: 'Voting start', value: span.start },
-    { name: 'votingEnd', label: 'Voting end', value: span.end },
-    { name: 'operatorPublicKey', label: 'Operator public key', value: '' },
-    { name: 'importPublicKey', label: 'Import public key', value: '' },
-    { name: 'viewingPublicKey', label: 'Viewing public key', value: '' },
+    ...electionFields(ids, span, t),
+    { name: 'operatorPublicKey', value: '' },
+    { name: 'importPublicKey', value: '' },
+    { name: 'viewingPublicKey', value: '' },
   ]
 }
 
-function raceFields(ids: Ids): Field[] {
+function raceFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'electionId', label: 'Election', value: ids.electionId },
-    { name: 'termId', label: 'Term', value: ids.termId },
-    { name: 'name', label: 'Name', value: 'Mayor' },
-    { name: 'type', label: 'Type', value: 'general', options: ['general', 'primary', 'special'] },
-    {
-      name: 'method',
-      label: 'Method',
-      value: 'first-past-the-post',
-      options: ['first-past-the-post', 'referendum', 'ranked-choice'],
-    },
+    { name: 'electionId', value: ids.electionId },
+    { name: 'termId', value: ids.termId },
+    { name: 'name', value: t('defaults.race') },
+    { name: 'type', value: 'general', options: ['general', 'primary', 'special'] },
+    { name: 'method', value: 'first-past-the-post', options: ['first-past-the-post', 'referendum', 'ranked-choice'] },
   ]
 }
 
 function personFields(first: string, last: string): Field[] {
   return [
-    { name: 'firstName', label: 'First name', value: first },
-    { name: 'lastName', label: 'Last name', value: last },
+    { name: 'firstName', value: first },
+    { name: 'lastName', value: last },
   ]
 }
 
 function candidateFields(ids: Ids): Field[] {
   return [
-    { name: 'personId', label: 'Person', value: ids.candidatePersonId },
-    { name: 'partyAffiliation', label: 'Party', value: '' },
+    { name: 'personId', value: ids.candidatePersonId },
+    { name: 'partyAffiliation', value: '', optional: true },
   ]
 }
 
 function slotFields(ids: Ids): Field[] {
   return [
-    { name: 'raceId', label: 'Race', value: ids.raceId },
-    { name: 'candidateId', label: 'Candidate', value: ids.candidateId },
-    { name: 'writeIn', label: 'Write-in', value: 'false', kind: 'boolean' },
-    { name: 'referendumChoice', label: 'Referendum choice', value: '' },
+    { name: 'raceId', value: ids.raceId },
+    { name: 'candidateId', value: ids.candidateId },
+    { name: 'writeIn', value: 'false', kind: 'boolean' },
+    { name: 'referendumChoice', value: '', optional: true },
   ]
 }
 
 function styleFields(ids: Ids): Field[] {
   return [
-    { name: 'electionId', label: 'Election', value: ids.electionId },
-    { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
-    { name: 'raceId', label: 'Race', value: ids.raceId },
+    { name: 'electionId', value: ids.electionId },
+    { name: 'votingPrecinctId', value: ids.precinctId },
+    { name: 'raceId', value: ids.raceId },
   ]
 }
 
-function placeFields(ids: Ids): Field[] {
+function placeFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'localityId', label: 'Locality', value: ids.localityId },
-    { name: 'addressId', label: 'Address', value: ids.addressId },
-    { name: 'name', label: 'Name', value: 'Town Hall' },
-    { name: 'kind', label: 'Kind', value: 'polling-place', options: ['polling-place', 'central-office'] },
+    { name: 'localityId', value: ids.localityId },
+    { name: 'addressId', value: ids.addressId },
+    { name: 'name', value: t('defaults.place') },
+    { name: 'kind', value: 'polling-place', options: ['polling-place', 'central-office'] },
   ]
 }
 
-function showcaseDeviceFields(): Field[] {
+function showcaseDeviceFields(t: TFunction): Field[] {
   return [
-    { name: 'name', label: 'Name', value: 'Machine 1' },
-    {
-      name: 'kind',
-      label: 'Kind',
-      value: 'polling-place-machine',
-      options: ['polling-place-machine', 'central-workstation'],
-    },
+    { name: 'name', value: t('defaults.device') },
+    { name: 'kind', value: 'polling-place-machine', options: ['polling-place-machine', 'central-workstation'] },
   ]
 }
 
-function deviceFields(): Field[] {
+function deviceFields(t: TFunction): Field[] {
   return [
-    { name: 'name', label: 'Name', value: 'Machine 2' },
-    {
-      name: 'kind',
-      label: 'Kind',
-      value: 'polling-place-machine',
-      options: ['polling-place-machine', 'central-workstation'],
-    },
-    { name: 'publicKey', label: 'Public key', value: '' },
-    { name: 'status', label: 'Status', value: 'active', options: ['active', 'retired'] },
+    { name: 'name', value: t('defaults.outsideDevice') },
+    { name: 'kind', value: 'polling-place-machine', options: ['polling-place-machine', 'central-workstation'] },
+    { name: 'publicKey', value: '' },
+    { name: 'status', value: 'active', options: ['active', 'retired'] },
   ]
 }
 
 function assignmentFields(ids: Ids): Field[] {
   return [
-    { name: 'electionId', label: 'Election', value: ids.electionId },
-    { name: 'votingPrecinctId', label: 'Precinct', value: ids.precinctId },
-    { name: 'assignmentStatus', label: 'Status', value: 'current', options: ['current', 'historical'] },
+    { name: 'electionId', value: ids.electionId },
+    { name: 'votingPrecinctId', value: ids.precinctId },
+    { name: 'assignmentStatus', value: 'current', options: ['current', 'historical'] },
   ]
 }
 
-function closeFields(ids: Ids): Field[] {
+function closeFields(ids: Ids, t: TFunction): Field[] {
   return [
-    { name: 'raceId', label: 'Race', value: ids.raceId },
-    { name: 'signature', label: 'Chain signature', value: '' },
-    { name: 'canvassSignature', label: 'Canvass signature', value: '' },
+    { name: 'raceId', value: ids.raceId },
+    { name: 'signature', label: t('fields.chainSignature'), value: '' },
+    { name: 'canvassSignature', value: '' },
   ]
 }
 

@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useLocation, useParams } from 'react-router-dom'
 import { api, messageOf } from '../api'
+import { TextAreaField, TextField } from '../components/Fields'
+import { ErrorAlert, PageHeading, Panel, SuccessAlert } from '../components/Page'
+import { formatDateTime, formatNumber } from '../i18n'
 
 type Election = {
   name: string
@@ -32,6 +36,7 @@ type DisputeList = {
 }
 
 export function Lookup() {
+  const { t, i18n } = useTranslation()
   const params = useParams()
   const location = useLocation()
   const electionId = params.electionId ?? ''
@@ -43,6 +48,8 @@ export function Lookup() {
   const [result, setResult] = useState<LookupResult | null>(null)
   const [claims, setClaims] = useState<Dispute[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [filed, setFiled] = useState<string | null>(null)
 
   useEffect(() => {
     let gone = false
@@ -57,7 +64,7 @@ export function Lookup() {
         }
       } catch (caught) {
         if (!gone) {
-          setError(messageOf(caught))
+          setError(messageOf(caught, t))
         }
       }
     }
@@ -65,11 +72,17 @@ export function Lookup() {
     return () => {
       gone = true
     }
-  }, [electionId])
+  }, [electionId, t])
 
   async function lookup(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    if (!code.trim()) {
+      setCodeError(t('form.required', { field: t('fields.code') }))
+      document.getElementById('lookup-code')?.focus()
+      return
+    }
+    setCodeError(null)
     try {
       const found = await api<LookupResult>('POST', '/elections/' + electionId + '/lookup', {
         code,
@@ -78,13 +91,14 @@ export function Lookup() {
       setResult(found)
     } catch (caught) {
       setResult(null)
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
   async function fileClaim(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setFiled(null)
     try {
       await api('POST', '/elections/' + electionId + '/disputes', {
         code,
@@ -98,8 +112,9 @@ export function Lookup() {
       setClaims(listed.disputes)
       const counted = await api<{ count: number }>('GET', '/elections/' + electionId + '/disputes/count')
       setCount(counted.count)
+      setFiled(t('lookup.filed'))
     } catch (caught) {
-      setError(messageOf(caught))
+      setError(messageOf(caught, t))
     }
   }
 
@@ -108,67 +123,96 @@ export function Lookup() {
     setPassphrase('')
     setResult(null)
     setClaims([])
+    setFiled(null)
   }
 
   return (
     <>
-      <h1>{election ? election.name : 'Ballot lookup'}</h1>
-      {election ? <p>Status {election.status}</p> : null}
-      {election?.demonstration ? (
-        <p className="demo">This is a demonstration. It has no legal effect.</p>
+      <PageHeading>{election ? election.name : t('lookup.title')}</PageHeading>
+      {election ? (
+        <p>{t('lookup.status', { status: t('values.' + election.status, { defaultValue: election.status }) })}</p>
       ) : null}
-      {count !== null ? <p>Disputes filed: {count}</p> : null}
-      {error ? <p className="banner" role="alert">{error}</p> : null}
-      <form className="card" onSubmit={(event) => void lookup(event)}>
-        <h2>Open your ballot</h2>
-        <p>The code stays on this page until you leave or clear it. It is not put in the address.</p>
-        <label>
-          Access code
-          <input value={code} autoComplete="off" onChange={(event) => setCode(event.target.value)} />
-        </label>
-        <label>
-          Viewing passphrase
-          <input
+      {election?.demonstration ? (
+        <div className="usa-alert usa-alert--warning usa-alert--slim margin-y-2">
+          <div className="usa-alert__body">
+            <p className="usa-alert__text">{t('lookup.demonstration')}</p>
+          </div>
+        </div>
+      ) : null}
+      {count !== null ? <p>{t('lookup.disputes', { count, formatted: formatNumber(count, i18n.language) })}</p> : null}
+      <ErrorAlert message={error} />
+      <Panel title={t('lookup.openTitle')}>
+        <form className="usa-form maxw-none" noValidate onSubmit={(event) => void lookup(event)}>
+          <p>{t('lookup.openBody')}</p>
+          <TextField
+            id="lookup-code"
+            label={t('fields.code')}
+            value={code}
+            required
+            error={codeError}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={setCode}
+          />
+          <TextField
+            id="lookup-passphrase"
+            label={t('fields.passphrase')}
+            hint={t('home.passphraseHint')}
             value={passphrase}
             type="password"
             autoComplete="off"
-            onChange={(event) => setPassphrase(event.target.value)}
+            onChange={setPassphrase}
           />
-        </label>
-        <div className="actions">
-          <button type="submit">Look up</button>
-          <button type="button" className="secondary" onClick={clearSecret}>Clear</button>
-        </div>
-      </form>
+          <div className="usa-button-group margin-top-3">
+            <button type="submit" className="usa-button">{t('lookup.lookUp')}</button>
+            <button type="button" className="usa-button usa-button--outline" onClick={clearSecret}>
+              {t('lookup.clear')}
+            </button>
+          </div>
+        </form>
+      </Panel>
       {result ? (
-        <section className="card">
-          <h2>Recorded ballot</h2>
-          <p>Type {result.ballot.type}. Sealed {result.ballot.timestamp}. There is no edit.</p>
-          <ul>
+        <Panel title={t('lookup.recordedTitle')}>
+          <p>
+            {t('lookup.recorded', {
+              type: t('values.' + result.ballot.type, { defaultValue: result.ballot.type }),
+              time: formatDateTime(result.ballot.timestamp, i18n.language),
+            })}
+          </p>
+          <h3>{t('lookup.votesTitle', { count: result.votes.length })}</h3>
+          <ul className="usa-list">
             {result.votes.map((vote) => (
               <li key={vote.raceCandidateId}>{vote.value}</li>
             ))}
           </ul>
-          <form onSubmit={(event) => void fileClaim(event)}>
-            <label>
-              What looks wrong
-              <textarea value={statement} onChange={(event) => setStatement(event.target.value)} />
-            </label>
-            <div className="actions">
-              <button type="submit">File a dispute</button>
-            </div>
+          <form className="usa-form maxw-none" onSubmit={(event) => void fileClaim(event)}>
+            <TextAreaField
+              id="lookup-statement"
+              label={t('fields.statement')}
+              hint={t('lookup.statementHint')}
+              value={statement}
+              onChange={setStatement}
+            />
+            <button type="submit" className="usa-button margin-top-3">{t('lookup.file')}</button>
           </form>
-        </section>
+          <SuccessAlert message={filed} />
+        </Panel>
       ) : null}
       {claims.length > 0 ? (
-        <section className="card">
-          <h2>Your disputes</h2>
-          <ul>
+        <Panel title={t('lookup.claimsTitle')}>
+          <ul className="usa-list">
             {claims.map((claim) => (
-              <li key={claim.id}>{claim.status}{claim.statement ? ': ' + claim.statement : ''}</li>
+              <li key={claim.id}>
+                {claim.statement
+                  ? t('lookup.claimWithStatement', {
+                    status: t('values.' + claim.status, { defaultValue: claim.status }),
+                    statement: claim.statement,
+                  })
+                  : t('values.' + claim.status, { defaultValue: claim.status })}
+              </li>
             ))}
           </ul>
-        </section>
+        </Panel>
       ) : null}
     </>
   )

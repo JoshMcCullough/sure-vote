@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next'
+
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -11,16 +13,33 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   const text = await response.text()
   const parsed = text === '' ? null : JSON.parse(text) as unknown
   if (!response.ok) {
-    throw new Error(errorText(parsed))
+    throw new ApiError(errorText(parsed))
   }
   return parsed as T
 }
 
-export function messageOf(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message
+export class ApiError extends Error {}
+
+export class KeyedError extends Error {
+  readonly key: string
+
+  constructor(key: string) {
+    super(key)
+    this.key = key
   }
-  return 'request failed'
+}
+
+export function messageOf(error: unknown, t: TFunction): string {
+  if (error instanceof KeyedError) {
+    return t(error.key)
+  }
+  if (error instanceof ApiError && error.message) {
+    return t('errors.server', { message: error.message })
+  }
+  if (error instanceof Error && error.message) {
+    return t('errors.browser', { message: error.message })
+  }
+  return t('errors.requestFailed')
 }
 
 function errorText(parsed: unknown): string {
@@ -30,7 +49,7 @@ function errorText(parsed: unknown): string {
       return value
     }
   }
-  return 'request failed'
+  return ''
 }
 
 export type Created = {
