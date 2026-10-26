@@ -1,10 +1,10 @@
 # Election app
 
-Two React apps share one npm workspace in `ui/`. The public app (`ui/apps/public`) is the lookup in [system.md](./system.md): static, with no sign-in, no cookies, and no session code, calling only public read endpoints plus the voter's own dispute. The workspace app (`ui/apps/workspace`) is sign-in, the election workspace, reconciliation, and `/admin`; on a showcase tenant it runs a demonstration and can open the lookup for the ballot it cast. `ui/packages/shared` holds the USWDS theme and wrappers, the i18n setup and locales, the API client, the lookup page, and the smoke helpers. Each app is a client of the HTTP API, and each deploys with the API surface in [deployment.md](./deployment.md). The UI is not the security boundary: the API surface is.
+Two React apps share one npm workspace in `ui/`. The public app (`ui/apps/public`) is the lookup in [system.md](./system.md): static, with no sign-in, no cookies, and no session code, calling only public read endpoints plus the voter's own dispute. The workspace app (`ui/apps/workspace`) is sign-in, the election workspace, reconciliation, and `/admin`; on a showcase tenant it runs a demonstration and links to the public lookup host for the ballot it cast. `ui/packages/shared` holds the USWDS theme and wrappers, the i18n setup and locales, the API client, the lookup page, and the smoke helpers. Each app is a client of the HTTP API, and each deploys with the API surface in [deployment.md](./deployment.md). The UI is not the security boundary: the API surface is.
 
 Checking a published chain still does not require this app. [verification.md](./verification.md) stays sufficient on its own.
 
-The workspace app is served at `/app/` and the public app at `/voter/`, each on the same origin as its API surface. Routes live under those prefixes so they do not collide with `GET /elections/{id}`. Fetch calls use the unprefixed API paths. `SUREVOTE_STATIC` (default `ui/apps/workspace/dist`) and `SUREVOTE_STATIC_PUBLIC` (default `ui/apps/public/dist`) point at the builds. The public surface mounts only `/voter`, the workspace surface only `/app`, and the demo and `all` surfaces both. Each page is sent with its Content-Security-Policy (`Pages`), and CloudFront repeats it.
+The workspace app is served at `/app/` and the public app at `/voter/`, each on the same origin as its API surface. Routes live under those prefixes so they do not collide with `GET /elections/{id}`. Fetch calls use the unprefixed API paths. `SUREVOTE_STATIC` (default `ui/apps/workspace/dist`) and `SUREVOTE_STATIC_PUBLIC` (default `ui/apps/public/dist`) point at the builds. The public surface mounts only `/voter`, the workspace and demo surfaces only `/app`, `all` both, and ingest neither. Each page is sent with its Content-Security-Policy (`Pages`), and CloudFront repeats it.
 
 ## Public area
 
@@ -13,7 +13,7 @@ A voter, or a person the voter asked to type the code, opens one ballot. A mail-
 Routes:
 
 - `/voter/` opens a ballot from the code and passphrase alone with `POST /lookup`, then opens that ballot's election page with the code and passphrase in router state, not in the address. It can also open a lookup by election id. On the lookup host CloudFront redirects `/` here.
-- `/voter/elections/:electionId` is the lookup. The workspace app mounts the same page at `/app/elections/:electionId` so a demonstration can open the ballot it just cast without putting the code in the address.
+- `/voter/elections/:electionId` is the lookup. The workspace app does not mount it. After a demonstration cast, the workspace links to `/voter/elections/:electionId` on the public lookup host (`lookupUrl` from `GET /auth/config`, set by `SUREVOTE_LOOKUP_URL`; same origin when unset, as in `all`). The link opens a new tab so the code stays on the workspace page, and it does not carry the code: the voter pastes it there.
 
 The workspace app's `/app/` is its own home. It reads `surface` from `GET /auth/config` and, on the demo, hides the official sign-in and officials links. That is presentation only; the demo surface does not mount those routes.
 
