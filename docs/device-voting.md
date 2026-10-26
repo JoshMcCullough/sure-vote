@@ -38,7 +38,7 @@ The host is not trusted to forget. The design limits what it can correlate. It c
 The voter needs a credential the issuer trusts before the window opens.
 
 1. The voter is on the roll (`Person`, `VoterRegistration`) with device voting allowed for that election.
-2. The authority sends a one-time enrollment code by a channel it already uses for that voter: the registration address by mail, or in person at the clerk. The code is short-lived and single-use, like an official's enrollment token.
+2. Decided: enrollment supports both a mailed code and in person, and mail is the default. The authority sends a one-time enrollment code to the registration address by mail, or hands it over in person at the clerk after the usual identity check. Identity proofing beyond the roll stays the authority's call. The code is short-lived and single-use, like an official's enrollment token.
 3. In the app, the voter enters the code and registers a passkey with the tenant's relying party. The issuer stores the WebAuthn credential on the voter, the same way `Credential` works for officials today.
 4. At issuance time the voter signs in with that passkey. The issuer keeps a server-side session for that sign-in only. It never reaches the casting host.
 
@@ -51,10 +51,12 @@ A lost phone before issuance is a new enrollment code from the clerk, which revo
   - RFC 9474 signs a fully blind message and cannot carry public metadata. A single key per election would need partially blind signatures (`draft-irtf-cfrg-partially-blind-rsa`), which is not yet an RFC and has fewer reviewed implementations.
   - The style is already visible on the ballot: the payload names the precinct, and the races it holds show the style. A per-style key therefore narrows the anonymity set no further than the ballot itself does.
   - Small styles are still a risk, because the style alone can come close to naming a voter. See [Small styles](#small-styles).
-  - Lifecycle: the public keys are listed in the election definition, so the operator signature publishes and freezes them at activate, before any issuance window opens. The only later change is an operator-signed [key revocation](#signing-key-compromise). The private keys sign on demand only while issuance is open, in an HSM that can do raw RSA on a blinded message, such as AWS CloudHSM or a YubiHSM 2. AWS KMS signs only whole messages and cannot do this. After polls close the keys sign nothing. After certification (the signed close), each private key is destroyed, or archived offline under the two-officer rule when the authority's retention rules require it. The public keys stay in the definition for good.
+  - Lifecycle: the public keys are listed in the election definition, so the operator signature publishes and freezes them at activate, before any issuance window opens. The only later change is an operator-signed [key revocation](#signing-key-compromise). The private keys sign on demand only while issuance is open, in an HSM that can do raw RSA on a blinded message. Decided: the election authority holds them, never the host. That is a YubiHSM 2 on a signer the authority runs, which the issuer calls, or AWS CloudHSM in an account the authority owns; never in the host's account, because the host already runs the casting endpoint. AWS KMS signs only whole messages and cannot do this. After polls close the keys sign nothing. After certification (the signed close), each private key is destroyed, or archived offline under the two-officer rule when the authority's retention rules require it. The public keys stay in the definition for good.
 - **Voter passkey.** Ordinary WebAuthn, used only at the issuer. It cannot be exposed by re-issuance or by any official, by design: its private key never leaves the voter's authenticator, and the issuer, and any official helping the voter, only ever see a one-time WebAuthn assertion bound to that sign-in's challenge. Nothing a passkey sign-in reveals lets anyone sign in again, so a passkey never needs replacing because of a recovery.
 - **Recovery seed.** 128 random bits generated in the app, shown once as a 12-word BIP39-style phrase, one per voter per tenant. Every token of that voter in that tenant is derived from it, so the phrase is the tokens' backup. See [Recovery phrase](#recovery-phrase).
-- **Escrow key.** A threshold ElGamal key (k-of-n), new for each election, held as shares by k-of-n election officials after a distributed key generation, so no official ever holds the whole private key. Its public key is in the signed definition. Shares are destroyed after certification. See [Escrow](#escrow).
+- **Escrow key.** Decided: threshold ElGamal on ristretto255 (k-of-n), new for each election, generated with Pedersen distributed key generation among the n officials on the authority's workstations before activation, so no official ever holds the whole private key. Each official's share lives on a hardware token. Its public key is in the signed definition. Shares are destroyed after certification. See [Escrow](#escrow).
+- **Check-in key.** An HPKE (RFC 9180) key pair held by the issuer, its public key in the signed definition. The app seals the token to it at [in-person check-in](#in-person-check-in), so the check-in device and the poll worker never see the token.
+- **Signing key or escrow key compromised.** The two fail differently. A compromised style signing key lets its holder create fake tokens that cast valid-looking ballots: an integrity failure, handled in [Signing-key compromise](#signing-key-compromise). A compromised escrow key lets its holder decrypt escrowed `(m, r)` and so learn voters' token ids, which, with a live-instrumented casting host, could expose votes: a privacy failure. It cannot create a token or a ballot, so it never changes the count.
 - **Access code.** 32 random bytes generated in the app at cast, with `voterAccessHash` computed in the app as for in person (SHA-256 over the raw bytes; see [verification.md](./verification.md)). The code is never sent.
 - No device key. A per-device signing key would be a device id on every ballot.
 
@@ -140,14 +142,14 @@ If the voter's style changes after a token was issued and before they cast, for 
 
 ### Signing-key compromise
 
-If a style's private key is compromised, anyone holding it can mint valid tokens for that style.
+This is about a ballot-style blind-signing key, not the escrow key. If a style's private signing key is compromised, anyone holding it can mint valid tokens for that style and cast ballots with them: an integrity failure. An escrow-key compromise is a privacy failure instead and does not affect the count (see [Keys](#keys)).
 
 1. The authority signs a `DeviceKeyRevocation` with the operator key: the old key id, the new public key, and the instant of revocation. It is published to the ledger and in head notices. Because the definition is locked after activate, this signed record is the only way a style key changes, and it can only add a key for a style that already has one.
 2. From that instant the casting endpoint refuses the old key, and the issuer signs only with the new one.
 3. Voters with an unspent old-key token are notified and re-request from the app: the app surrenders the old token and requests a new one under the new key. Old tokens can no longer be cast, so surrender cannot race a cast.
 4. Device ballots carry the style key id that authorized them (`deviceKeyId` in the payload), so validators can count ballots per key. That reveals only whether a ballot was cast before or after the revocation, which the hour or day timestamp already shows.
 
-Tokens already cast under the compromised key cannot be told apart individually: a forged token's signature is as valid as an honest one, and no ballot is linked to a voter. Proposed: they stay counted. Validators compare, per compromised key, the cast count with the issued count minus surrenders and revocations. If cast does not exceed that, there is no evidence of forgery. If it does, the excess is a lower bound on forged ballots: the authority publishes it, and when it is at least the margin of any race on that style, the result for that race goes to the jurisdiction's recount or contest process. The individual ballots cannot be removed. This is open; see [Open questions](#open-questions).
+Tokens already cast under the compromised signing key cannot be told apart individually: a forged token's signature is as valid as an honest one, and no ballot is linked to a voter. Proposed: they stay counted. Validators compare, per compromised key, the cast count with the issued count minus surrenders and revocations. If cast does not exceed that, there is no evidence of forgery. If it does, the excess is a lower bound on forged ballots: the authority publishes it, and when it is at least the margin of any race on that style, the result for that race goes to the jurisdiction's recount or contest process. The individual ballots cannot be removed. This is a recommendation pending Josh's OK; see [Open questions](#open-questions).
 
 ### Threat notes
 
@@ -162,16 +164,32 @@ Tokens already cast under the compromised key cannot be told apart individually:
 
 A voter with a device issuance who turns up in person must not end up with two counted ballots. There are two paths.
 
+### In-person check-in
+
+Decided. A voter who was issued a device token and votes in person hands the token in at check-in, and it is consumed when the ballot is issued.
+
+1. The poll worker checks ID as usual and finds the voter in the poll book. A voter who was never issued a token checks in normally and none of this applies.
+2. If the poll book shows a device issuance, the check-in device asks the issuer for a challenge. The issuer creates a random challenge bound to this check-in device, this voter's poll-book entry, and this check-in, single-use and valid for two minutes.
+3. The voter taps their phone to the check-in device by NFC, or scans a QR the check-in device shows when NFC is not available. The app receives the challenge and the check-in device id, shows "Hand in your device ballot so you can vote here?", and on the voter's confirmation (with the phone's local biometric or PIN) derives `m`, `r`, and `s` and seals them to the issuer's check-in key with HPKE, using the challenge and check-in device id as associated data. It returns the sealed blob over the same NFC or QR channel.
+4. The check-in device forwards the blob unopened with the issuance request. The issuer opens it, checks the challenge is the live one for this check-in and device and marks it used, checks `Blind(K, m, r)` equals the `blinded` on this voter's device issuance and that `s` verifies.
+5. In the same transaction that records the in-person `BallotIssuance`, the issuer inserts `SpentToken(tokenId, reason = surrendered-in-person)` and marks the device issuance `voided` with reason "token surrendered in person". The token is consumed when check-in completes and the ballot is issued, not before. If any check fails, nothing is written and the voter is not issued a regular ballot.
+6. From then on any device cast with that token is refused with "token already spent".
+
+The challenge makes a captured blob useless: it cannot be replayed at a later check-in, and it cannot be relayed to another check-in device or another voter's entry, because the issuer accepts it only for the check-in it was issued to. NFC's short range and the QR on the check-in device's own screen keep the voter's phone at that table.
+
+The poll worker learns only that this voter is not voting by device: the check-in device shows "device ballot handed in" or a failure, never the token.
+
+If the poll book shows a token was issued and the voter cannot surrender it, because the phone and phrase are gone, the surrender fails, or the token was already spent, the voter gets a [provisional ballot](#provisional-ballot), decided through escrow.
+
 ### Surrender
 
-If the voter still has the app or the phrase, they surrender the token before voting in person, from the app ahead of time or at the poll worker's device. Rotation, style changes, and key compromise use the same surrender.
+Outside a polling place, the app surrenders a token itself, for a mid-election [rotation](#rotating-the-phrase), a [style change](#ballot-style-changes), or a [key compromise](#signing-key-compromise).
 
-1. The voter presents `m`, `r`, and `s` (the app derives them; at the polls the app shows them as a QR for the pollbook).
-2. The app's passkey session, or the pollbook signed in as the official handling this voter, sends them to the issuer. The issuer checks that `Blind(K, m, r)` equals the `blinded` on this voter's device issuance, so the token is this voter's and nobody else's, and that `s` verifies.
-3. In one transaction it inserts `SpentToken(tokenId, reason = surrendered)`. The unique constraint makes surrender and a concurrent cast race safely: one of them wins. If the token was already spent, surrender fails and, at the polls, the voter is offered a provisional ballot.
-4. On success the device issuance is marked `voided` with reason "token surrendered". At the polls the voter is accepted on the pollbook as usual; in the app the voter may request a new token when the reason allows it.
+1. In the voter's passkey session, the app sends `m`, `r`, and `s` to the issuer. The issuer checks that `Blind(K, m, r)` equals the `blinded` on this voter's device issuance, so the token is this voter's and nobody else's, and that `s` verifies.
+2. In one transaction it inserts `SpentToken(tokenId, reason = surrendered)`. The unique constraint makes surrender and a concurrent cast race safely: one of them wins. If the token was already spent, surrender fails.
+3. On success the device issuance is marked `voided` with reason "token surrendered", and the voter may request a new token when the reason allows it.
 
-Surrender reveals `tokenId` next to the voter's identity. That is safe: it shows only that this token was never used, which says nothing about how anyone voted. The token is burned, so it can never be linked to a ballot later.
+Either kind of surrender reveals `tokenId` next to the voter's identity, to the issuer only. That is safe: it shows only that this token was never used, which says nothing about how anyone voted. The token is burned, so it can never be linked to a ballot later.
 
 ### Provisional ballot
 
@@ -187,7 +205,7 @@ Decided: adopted, with a k-of-n threshold of election officials.
 - **Opening.** k of the n officials jointly decrypt that one voter's ciphertext. They check `Blind(K, m, r)` equals the stored `blinded`. A mismatch means the app escrowed garbage; the provisional ballot is rejected.
 - They look up `tokenId = SHA-256(m)` in the spent list:
   - not spent: insert `SpentToken(tokenId, reason = revoked)` and count the provisional ballot (or, for a style change or a rotation, allow a new issuance);
-  - spent (cast or surrendered): reject the provisional ballot.
+  - spent (cast, surrendered, or surrendered in person): reject the provisional ballot.
 - **Publication.** Every opening is an `EscrowOpening` (election, `tokenId`, purpose, outcome, the k officials' signatures), and every revocation is its `SpentToken` row. Both are appended to the public ledger when they happen and appear in head notices, without the voter's name. An opening without a matching provisional ballot, style change, or rotation shows up in the reconciliation.
 
 **Requirement.** Escrow is safe only if the spent list can never be joined to a ballot. If it could, opening a voter's escrow would reveal their vote. So:
@@ -278,7 +296,7 @@ The issuer never calls the casting host and the casting host never calls the iss
 - Different hostnames, certificates, load balancers, and WAF web ACLs. CloudFront logging stays off on both, as in `infra/`.
 - The casting host keeps no IP or request log. It cannot rate-limit by IP for the same reason, and the relay would defeat that anyway. Its rate limit is the token: a request without a valid signature is rejected before any write, and signature checks are cheap enough to absorb abuse at the edge.
 - The issuer logs sign-ins as it does for officials. Those logs never sit next to casting data.
-- Separate database roles. The casting role can insert `SpentToken` and write the pending store, and cannot read `person`, `voter_registration`, `credential`, or `ballot_issuance`. The issuer role can insert surrendered and revoked `SpentToken` rows and cannot read ballots or the pending store. Both are still the host. This separation is what an honest host keeps; it is not a proof against a dishonest one.
+- Separate database roles. The casting role can insert `SpentToken` and write the pending store, and cannot read `person`, `voter_registration`, `credential`, or `ballot_issuance`. The issuer role can insert surrendered, surrendered-in-person, and revoked `SpentToken` rows and cannot read ballots or the pending store. Both are still the host. This separation is what an honest host keeps; it is not a proof against a dishonest one.
 
 ## What validators can check
 
@@ -299,7 +317,7 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
   - `merge`: a tiny precinct, through `deviceMergeWithPrecinctId`, shares a style key and is reported with a neighboring precinct that has the same races, so its device ballots name the merged group, not the precinct;
   - `flag`: the definition marks the style as small, the issuer warns the voter that their ballot may be identifiable, and the canvass statement lists the flagged styles.
 - **The app is a trusted client.** It sees the selections, the seed, and the code. Open source and reproducible builds help. A voter can check the result by looking the ballot up on another device with the code.
-- **Coercion.** Same as in person: the access code is a bearer token, and someone standing over the voter sees the ballot. The phrase adds a second bearer secret a coercer can demand. This design adds no coercion resistance.
+- **Coercion.** Decided for version one: the token is a bearer credential and there is no re-voting; this is to be revisited later. Same as in person: the access code is a bearer token, and someone standing over the voter sees the ballot. The phrase adds a second bearer secret a coercer can demand. This design adds no coercion resistance.
 - **Escrow.** It adds the official-collusion and live-host risks in [Escrow](#escrow).
 
 ## Data model changes (proposed, not built)
@@ -310,8 +328,9 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 - `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey`, `revokedAt`, operator signature. Public, insert-only, appended to the ledger.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row also has the style key id, `blindedMessage`, `blindSignature`, and `escrowCiphertext`, and no recording place.
 - `BallotIssuance.status` gains `style-changed`.
+- `CheckInChallenge`: `electionId`, check-in device, poll-book entry, challenge, expiry, used. Private, issuer only. `Election.deviceCheckInPublicKey` in the signed definition.
 - `BallotIssuanceEvent`: private, per issuance: `reissued`, `phrase-rotated`, `surrendered` (each of these three with an `assisted` flag: empty, `assisted`, or `assisted-shared`), `style-changed`, `key-revoked`, `escrow-opened`, `notified`, with a time.
-- `SpentToken`: `electionId`, `keyId`, `tokenId`, `message`, `signature`, `reason` (`cast`, `surrendered`, `revoked`). Insert-only, unique on `(electionId, tokenId)`. No ballot reference and no timestamp columns, so the usual ledger audit fields are left off this table on purpose. Revoked rows are appended to the ledger when they commit; the full list is published at close.
+- `SpentToken`: `electionId`, `keyId`, `tokenId`, `message`, `signature`, `reason` (`cast`, `surrendered`, `surrendered-in-person`, `revoked`). Insert-only, unique on `(electionId, tokenId)`. No ballot reference and no timestamp columns, so the usual ledger audit fields are left off this table on purpose. Revoked rows are appended to the ledger when they commit; the full list is published at close.
 - `EscrowOpening`: `electionId`, `tokenId`, `purpose` (`provisional`, `style-change`, `rotation`), `outcome` (`revoked`, `spent`, `mismatch`), the k officials' signatures. Public, insert-only, appended to the ledger.
 - A pending device-ballot store outside the ledger database.
 - `BallotType.DEVICE`, and `deviceKeyId` on the device ballot payload.
@@ -319,18 +338,14 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 
 ## Open questions
 
-Decided and moved into the sections above: the issuance window, one key per style, secure storage with one recovery phrase per voter per tenant, rotation, voter-initiated byte-identical re-issuance, surrender, escrow with k-of-n officials, the closing order, and every configurable value in [Settings](#settings). Ambiguous district overrides keep refusing activation.
+Decided and moved into the sections above: the issuance window, one key per style, secure storage with one recovery phrase per voter per tenant, rotation, voter-initiated byte-identical re-issuance, assisted recovery, in-person check-in and surrender, escrow with k-of-n officials, the closing order, every configurable value in [Settings](#settings), enrollment (mailed code and in person, mailed by default), bearer tokens with no re-voting in version one, authority custody of the style signing keys, and the escrow key generation. Ambiguous district overrides keep refusing activation.
 
-These are not settings, so they stay open. Each has a recommendation that is pending Josh's OK and is not decided:
+One question stays open, with a recommendation pending Josh's OK:
 
-1. **Enrollment.** Mailed code, in person, or both? Recommended, pending Josh's OK: support both, with the mailed code as the default; identity proofing beyond the roll stays the authority's call.
-2. **Coercion and re-voting.** Recommended, pending Josh's OK: accept bearer semantics for version one, as for the in-person access code, and revisit a recast-and-last-counts scheme only if device voting is adopted beyond pilots. Re-voting conflicts with the one-token rule and with escrow.
-3. **HSM.** Recommended, pending Josh's OK: style keys in an HSM in the authority's custody, such as a YubiHSM 2 attached to an authority-run signer that the issuer calls, or CloudHSM in an account the authority owns. Not in the host's account: the host already runs the casting endpoint.
-4. **Ballots already cast under a compromised key.** Recommended, pending Josh's OK: the proposal in [Signing-key compromise](#signing-key-compromise): count them, publish per-key cast against issued, and refer an excess that reaches a race's margin to the jurisdiction's recount or contest process.
-5. **Escrow key ceremony.** Recommended, pending Josh's OK: Pedersen distributed key generation and threshold ElGamal over ristretto255, with each official's share on a hardware token, run on the authority workstations before activation.
+1. **Ballots already cast under a compromised ballot-style signing key.** This is the blind-signing key, not the escrow key. Recommended: the proposal in [Signing-key compromise](#signing-key-compromise): keep them counted, publish per-key cast against issued, and refer an excess that reaches a race's margin to the jurisdiction's recount or contest process.
 
 ## Not in this design
 
-The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added. The decided parts fix the token, key, and window shapes, but the enrollment and HSM questions still change the services' API and deployment.
+The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added. The decided parts fix the token, key, and window shapes, and the signing-key compromise question changes only the canvass procedure.
 
 [^no-escrow]: Without escrow, the jurisdiction's existing provisional-ballot rules would decide, using the device issuance, the voter's statement, and the style's issued and spent counts at close. If every token in the style was spent, the provisional is a likely second ballot; otherwise it is not decidable for one voter. No vote could ever be revealed, at the cost of either counting some double votes or rejecting some honest provisionals, and style changes and rotations after a lost device would have no revoke path. Not adopted.
