@@ -119,18 +119,15 @@ Decided: re-issuance happens only at the voter's request and the voter is always
 
 ### Assisted recovery
 
-Decided: a recovery that could let an official learn the voter's secret replaces that secret.
+Decided: an assisted recovery still happens in the voter's own app, so the phrase never reaches an official and no rotation is needed.
 
-- The passkey is never at risk ([Keys](#keys)). The phrase is the only secret a recovery can expose.
-- Recovery normally happens only in the voter's own app, on the voter's own device. Re-issuance there needs nothing from an official.
-- Any other recovery is marked `assisted`: the phrase is typed on a device that is not the voter's, such as a clerk's kiosk or pollbook, or in any flow where an official helps or could see it. The device sends `assisted = true` with the request, and the issuer also marks a recovery assisted whenever the request comes from an official's session.
-- An assisted recovery forces [rotation](#rotating-the-phrase) in the same flow and never ends with the old phrase still valid:
-  1. The voter's own app, or the assisting device under the voter's passkey session, generates a new seed and shows the new phrase only to the voter.
-  2. The old token is surrendered and burned, as in [Surrender](#surrender).
-  3. A new token is issued under the new phrase. If the old token was already cast, there is nothing to surrender and no new token, as for any re-issuance.
-  4. The surrender and the re-issue are both recorded as `BallotIssuanceEvent`s (`surrendered` and `reissued`, each with `assisted`), and the voter is notified.
-- Officials' devices never store the phrase or the seed: no persistence, no logs, no crash reports, no clipboard, and memory is wiped when the flow ends. The new phrase is never shown on an assisting device; the voter receives it in their own app, or the flow cannot finish until they install one.
-- The UI keeps officials from seeing the phrase where possible: the voter types it on a screen or keypad that faces the voter, input is masked, the official's screen shows only progress, and the flow asks the official to step away while the phrase is entered.
+- The passkey is never at risk ([Keys](#keys)). The phrase is the only secret a recovery could expose.
+- **Assisted.** The voter brings their own phone, old or new, to the clerk. The official only verifies the voter's identity and authorizes the re-issue, for example by issuing a new enrollment code. The voter enters the phrase in their own app on their own phone, and the re-issuance runs as in [Re-issuance](#re-issuance). The phrase never touches an official's or shared device, so the voter keeps it and nothing is rotated or surrendered.
+- **Assisted-shared.** If the voter has no phone of their own, recovery on a shared or official device is allowed only when the tenant turns on `deviceSharedRecoveryAllowed` ([Settings](#settings), off by default). The flow is marked `assisted-shared`:
+  - the device never persists the phrase or the seed: no storage, no logs, no crash reports, no clipboard, and memory is wiped when the flow ends;
+  - the voter types the phrase on a masked screen or keypad that faces them, the official's screen shows only progress, and the flow asks the official to step away while it is entered;
+  - at the end the app offers [rotation](#rotating-the-phrase) without forcing it, and explains that rotating replaces the phrase and, mid-election, the token.
+- The re-issue, and any rotation the voter accepts, are recorded as `BallotIssuanceEvent`s with the `assisted` flag (`assisted` or `assisted-shared`), and the voter is notified. The issuer sets the flag from the request and whenever the request comes through an official's session.
 
 ### Ballot style changes
 
@@ -157,7 +154,7 @@ Tokens already cast under the compromised key cannot be told apart individually:
 - Treat the phrase as a bearer secret, like the token itself. It derives `m` and `r`; turning them into a usable `s` also needs the blind signature, which lives only on the voter's phone and with the issuer, behind the voter's passkey. So the phrase alone is not quite a ballot, but the phrase plus the old phone, or plus a passkey enrolled by someone impersonating the voter at the clerk, is. Whoever casts first wins, and the voter cannot undo it. That is the same loss as a stolen mailed ballot, and the voter learns of it when their own cast or surrender is refused.
 - The phrase alone also lets its holder compute that voter's token ids in every election of the tenant and, after close, see in the public spent list whether and how each token was used (cast, surrendered, or revoked). It never shows a ballot.
 - One phrase covers every election of the tenant until it is rotated, so a theft covers them too. Rotation after exposure limits that to elections where the token was already cast.
-- An official who saw the phrase during an assisted recovery learns only a phrase that the same flow retires; see [Assisted recovery](#assisted-recovery).
+- An assisted recovery keeps the phrase on the voter's own phone. Only an `assisted-shared` recovery puts it on another device, which never stores it and is opt-in per tenant; see [Assisted recovery](#assisted-recovery).
 - The server stores `blinded`, the blind signature, and the escrow ciphertext. None of them link the voter to `tokenId` without `r` or k officials.
 - 128 bits of seed is beyond brute force; the 12-word checksum catches typos, not attackers.
 
@@ -241,6 +238,7 @@ Decided: every timing or size choice is a setting with a default. Election-level
 | `deviceCastCutoffMinutes` | election | 30 | 5 to 240 | The app sends no later than this long before polls close. Inside the last `cutoff + max` minutes the app shrinks the delay range to fit automatically. |
 | `deviceCastDelayVoterShortenable` | election | `false` | boolean | Whether the voter may choose "send now" inside that final period. Off by default: the automatic shrink already guarantees the ballot lands in time, and a voter-chosen instant send is a timing marker. |
 | `deviceBallotTimestampPrecision` | election | `day` | `hour`, `day` | How the casting endpoint rounds a device ballot's `timestamp`. |
+| `deviceSharedRecoveryAllowed` | tenant | `false` | boolean | Whether a voter with no phone of their own may recover on a shared or official device (`assisted-shared`). |
 | `deviceReissueLimitPerDay` | tenant | 3 | 1 to 10 | Voter-initiated re-issuances per voter per UTC day. |
 | `deviceStyleMinimumVoters` | election | 100 | 10 to 10000 | Eligible voters a style needs before it counts as not small. |
 | `deviceSmallStyleAction` | election | `off` | `off`, `merge`, `flag` | What happens to a small style ([Small styles](#small-styles)). |
@@ -307,12 +305,12 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 ## Data model changes (proposed, not built)
 
 - `ElectionDeviceKey`: `electionId`, `ballotStyleKey` (the precinct, or merged precinct group, and party it covers), `keyId`, `publicKey`, `small` (Boolean), listed in the signed definition.
-- The [settings](#settings): fields on `Election`, `ElectionDistrictSetting` (`election`, `votingDistrict`, `deviceTokenLeadDays`), `ElectionVotingPrecinctAssignment` (`deviceTokenLeadDays`, `deviceMergeWithPrecinctId`), `Tenant.deviceReissueLimitPerDay`, and the optional `TenantDeviceSetting` defaults.
+- The [settings](#settings): fields on `Election`, `ElectionDistrictSetting` (`election`, `votingDistrict`, `deviceTokenLeadDays`), `ElectionVotingPrecinctAssignment` (`deviceTokenLeadDays`, `deviceMergeWithPrecinctId`), `Tenant.deviceReissueLimitPerDay`, `Tenant.deviceSharedRecoveryAllowed`, and the optional `TenantDeviceSetting` defaults.
 - `Election.escrowPublicKey` and `ElectionEscrowTrustee` (`election`, `tenantOfficial`, share index, public share), in the signed definition; `EscrowShareDestruction` (trustee, signature), published at close.
 - `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey`, `revokedAt`, operator signature. Public, insert-only, appended to the ledger.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row also has the style key id, `blindedMessage`, `blindSignature`, and `escrowCiphertext`, and no recording place.
 - `BallotIssuance.status` gains `style-changed`.
-- `BallotIssuanceEvent`: private, per issuance: `reissued`, `phrase-rotated`, `surrendered` (each of these three with an `assisted` flag), `style-changed`, `key-revoked`, `escrow-opened`, `notified`, with a time.
+- `BallotIssuanceEvent`: private, per issuance: `reissued`, `phrase-rotated`, `surrendered` (each of these three with an `assisted` flag: empty, `assisted`, or `assisted-shared`), `style-changed`, `key-revoked`, `escrow-opened`, `notified`, with a time.
 - `SpentToken`: `electionId`, `keyId`, `tokenId`, `message`, `signature`, `reason` (`cast`, `surrendered`, `revoked`). Insert-only, unique on `(electionId, tokenId)`. No ballot reference and no timestamp columns, so the usual ledger audit fields are left off this table on purpose. Revoked rows are appended to the ledger when they commit; the full list is published at close.
 - `EscrowOpening`: `electionId`, `tokenId`, `purpose` (`provisional`, `style-change`, `rotation`), `outcome` (`revoked`, `spent`, `mismatch`), the k officials' signatures. Public, insert-only, appended to the ledger.
 - A pending device-ballot store outside the ledger database.
@@ -323,13 +321,13 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 
 Decided and moved into the sections above: the issuance window, one key per style, secure storage with one recovery phrase per voter per tenant, rotation, voter-initiated byte-identical re-issuance, surrender, escrow with k-of-n officials, the closing order, and every configurable value in [Settings](#settings). Ambiguous district overrides keep refusing activation.
 
-These are not settings, so they stay open, each with a recommendation:
+These are not settings, so they stay open. Each has a recommendation that is pending Josh's OK and is not decided:
 
-1. **Enrollment.** Mailed code, in person, or both? Recommended: support both, with the mailed code as the default; identity proofing beyond the roll stays the authority's call.
-2. **Coercion and re-voting.** Recommended: accept bearer semantics for version one, as for the in-person access code, and revisit a recast-and-last-counts scheme only if device voting is adopted beyond pilots. Re-voting conflicts with the one-token rule and with escrow.
-3. **HSM.** Recommended: style keys in an HSM in the authority's custody, such as a YubiHSM 2 attached to an authority-run signer that the issuer calls, or CloudHSM in an account the authority owns. Not in the host's account: the host already runs the casting endpoint.
-4. **Ballots already cast under a compromised key.** Recommended: the proposal in [Signing-key compromise](#signing-key-compromise): count them, publish per-key cast against issued, and refer an excess that reaches a race's margin to the jurisdiction's recount or contest process.
-5. **Escrow key ceremony.** Recommended: Pedersen distributed key generation and threshold ElGamal over ristretto255, with each official's share on a hardware token, run on the authority workstations before activation.
+1. **Enrollment.** Mailed code, in person, or both? Recommended, pending Josh's OK: support both, with the mailed code as the default; identity proofing beyond the roll stays the authority's call.
+2. **Coercion and re-voting.** Recommended, pending Josh's OK: accept bearer semantics for version one, as for the in-person access code, and revisit a recast-and-last-counts scheme only if device voting is adopted beyond pilots. Re-voting conflicts with the one-token rule and with escrow.
+3. **HSM.** Recommended, pending Josh's OK: style keys in an HSM in the authority's custody, such as a YubiHSM 2 attached to an authority-run signer that the issuer calls, or CloudHSM in an account the authority owns. Not in the host's account: the host already runs the casting endpoint.
+4. **Ballots already cast under a compromised key.** Recommended, pending Josh's OK: the proposal in [Signing-key compromise](#signing-key-compromise): count them, publish per-key cast against issued, and refer an excess that reaches a race's margin to the jurisdiction's recount or contest process.
+5. **Escrow key ceremony.** Recommended, pending Josh's OK: Pedersen distributed key generation and threshold ElGamal over ristretto255, with each official's share on a hardware token, run on the authority workstations before activation.
 
 ## Not in this design
 
