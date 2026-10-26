@@ -1,0 +1,61 @@
+{
+  "_meta": {
+    "language": "es",
+    "reviewed": false,
+    "machineTranslated": true,
+    "note": "Machine draft from en.json. A fluent Spanish speaker familiar with election terms must review it before production use, then set reviewed to true."
+  },
+  "nav": {
+    "lookup": "Consulta"
+  },
+  "fields": {
+    "code": "Código de acceso",
+    "passphrase": "Frase de consulta",
+    "electionLookup": "Identificador de la elección",
+    "statement": "Qué parece incorrecto"
+  },
+  "home": {
+    "lookupTitle": "Consulta pública",
+    "lookupBody": "Abra una boleta con su código de acceso. La página no cambia la boleta. Para verificar una cadena publicada no hace falta esta aplicación.",
+    "passphraseHint": "Solo una boleta por correo necesita la frase de consulta.",
+    "openBallot": "Abrir mi boleta",
+    "openLookup": "Abrir la consulta"
+  },
+  "lookup": {
+    "vote": {
+      "unnamedRace": "Contienda",
+      "unnamedChoice": "una opción sin nombre",
+      "writeIn": "Por escrito: {{name}}",
+      "yes": "Sí",
+      "no": "No",
+      "ranked": "Preferencia {{rank}}: {{name}}",
+      "chosen": "{{name}}",
+      "raw": "Valor registrado: {{value}}"
+    },
+    "title": "Consulta de boleta",
+    "status": "Estado: {{status}}",
+    "demonstration": "Esto es una demostración. No tiene efecto legal.",
+    "disputes_one": "{{formatted}} reclamo presentado",
+    "disputes_many": "{{formatted}} de reclamos presentados",
+    "disputes_other": "{{formatted}} reclamos presentados",
+    "openTitle": "Abra su boleta",
+    "openBody": "El código permanece en esta página hasta que salga o lo borre. No se pone en la dirección.",
+    "lookUp": "Consultar",
+    "clear": "Borrar",
+    "recordedTitle": "Boleta registrada",
+    "recorded": "Tipo: {{type}}. Sellada el {{time}}. Una boleta registrada no se puede modificar.",
+    "votesTitle_one": "{{count}} voto",
+    "votesTitle_many": "{{count}} de votos",
+    "votesTitle_other": "{{count}} votos",
+    "statementHint": "Opcional. Describa qué no coincide con lo que votó.",
+    "file": "Presentar un reclamo",
+    "filed": "Se presentó su reclamo.",
+    "claimsTitle": "Sus reclamos",
+    "claimWithStatement": "{{status}}: {{statement}}"
+  },
+  "voter": {
+    "title": "Revise su boleta",
+    "intro": "Abra la boleta registrada para usted con su código de acceso. Esta página lee el registro público y no puede cambiarlo.",
+    "footer": "Esta consulta no requiere inicio de sesión ni usa cookies. Para verificar una cadena publicada no se necesita este sitio."
+  }
+}

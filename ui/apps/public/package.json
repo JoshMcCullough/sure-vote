@@ -1,0 +1,12 @@
+{
+  "name": "@surevote/public",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "The public ballot lookup. No sign-in, no cookies, public read endpoints only.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && node scripts/bundle-check.mjs",
+    "preview": "vite preview"
+  }
+}

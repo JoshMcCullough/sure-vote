@@ -23,9 +23,10 @@ public final class Main {
         final var surface = Surface.parse(text("SUREVOTE_SURFACE"));
         final var app = application();
         final var port = port();
-        final var root = staticRoot();
+        final var pages = new Pages(staticRoot("SUREVOTE_STATIC", "ui/apps/workspace/dist"),
+            staticRoot("SUREVOTE_STATIC_PUBLIC", "ui/apps/public/dist"));
         final var reader = locked(surface, app, reader(app));
-        final var server = ApiServer.start(app, port, root, surface);
+        final var server = ApiServer.start(app, port, pages, surface);
         final var served = server.withPublicReader(reader);
         final var bound = served.port();
         System.out.println("SureVote listening on " + bound + " as the " + surface.wire() + " surface");
@@ -231,9 +232,9 @@ public final class Main {
         }
     }
 
-    private static Path staticRoot() {
-        final var configured = System.getenv("SUREVOTE_STATIC");
-        final var path = root(configured);
+    private static Path staticRoot(final String variable, final String fallback) {
+        final var configured = System.getenv(variable);
+        final var path = root(configured, fallback);
         final var index = path.resolve("index.html");
         if (Files.isRegularFile(index)) {
             return path;
@@ -243,9 +244,9 @@ public final class Main {
         }
     }
 
-    private static Path root(final String configured) {
+    private static Path root(final String configured, final String fallback) {
         if (configured == null || configured.isBlank()) {
-            return Path.of("ui/dist");
+            return Path.of(fallback);
         }
         else {
             return Path.of(configured);

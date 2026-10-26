@@ -1,0 +1,339 @@
+{
+  "_meta": {
+    "language": "en",
+    "reviewed": true,
+    "source": true
+  },
+  "app": {
+    "footer": "Officials and system admins sign in with a passkey.",
+    "demoFooter": "This demonstration runs only in the demo tenant. Nothing here is a real election."
+  },
+  "nav": {
+    "workspace": "Workspace",
+    "officials": "Officials",
+    "signIn": "Sign in",
+    "home": "Home"
+  },
+  "fields": {
+    "enrollmentToken": "Enrollment token",
+    "kind": "Kind",
+    "id": "Id",
+    "tenant": "Tenant",
+    "name": "Name",
+    "status": "Status",
+    "type": "Type",
+    "localityId": "Locality",
+    "street1": "Street",
+    "postalCode": "Postal code",
+    "addressId": "Address",
+    "votingPrecinctId": "Precinct",
+    "votingDistrictId": "District",
+    "districtType": "District type",
+    "jurisdiction": "Jurisdiction",
+    "appointments": "Appointments",
+    "termLength": "Term length in years",
+    "seatId": "Seat",
+    "votingStart": "Voting start",
+    "votingEnd": "Voting end",
+    "operatorPublicKey": "Operator public key",
+    "importPublicKey": "Import public key",
+    "viewingPublicKey": "Viewing public key",
+    "electionId": "Election",
+    "termId": "Term",
+    "method": "Method",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "personId": "Person",
+    "partyAffiliation": "Party",
+    "raceId": "Race",
+    "candidateId": "Candidate",
+    "writeIn": "Write-in",
+    "referendumChoice": "Referendum choice",
+    "publicKey": "Public key",
+    "assignmentStatus": "Status",
+    "signature": "Signature",
+    "operatorSignature": "Operator signature",
+    "chainSignature": "Chain signature",
+    "canvassSignature": "Canvass signature"
+  },
+  "values": {
+    "system-admin": "System admin",
+    "official": "Official",
+    "visitor": "Visitor",
+    "inactive": "inactive",
+    "disabled": "disabled",
+    "impeached": "impeached",
+    "suspended": "suspended",
+    "retired": "retired",
+    "current": "current",
+    "production": "production",
+    "showcase": "showcase",
+    "congressional": "Congressional",
+    "state-senate": "State senate",
+    "state-house": "State house",
+    "county-commission": "County commission",
+    "city-council": "City council",
+    "school-board": "School board",
+    "other": "Other",
+    "federal": "Federal",
+    "state": "State",
+    "local": "Local",
+    "president": "President",
+    "vice-president": "Vice president",
+    "senator": "Senator",
+    "representative": "Representative",
+    "governor": "Governor",
+    "mayor": "Mayor",
+    "council": "Council",
+    "general": "General",
+    "primary": "Primary",
+    "special": "Special",
+    "first-past-the-post": "First past the post",
+    "referendum": "Referendum",
+    "ranked-choice": "Ranked choice",
+    "polling-place": "Polling place",
+    "central-office": "Central office",
+    "polling-place-machine": "Polling place machine",
+    "central-workstation": "Central workstation"
+  },
+  "home": {
+    "title": "SureVote election workspace",
+    "intro": "SureVote keeps an election authority's record and a public ballot ledger. This workspace configures the parts of an election. Voters check their ballots on the separate public lookup.",
+    "workspaceTitle": "Workspace",
+    "workspaceBody": "Configure a tenant, geography, contests, and recording places. On a showcase tenant, activate a demonstration, cast one ballot, and close it. The access code appears once and is not saved in this browser.",
+    "workspaceKeys": "This browser does not hold a production operator, import, viewing, or device key. On a production tenant, activate and close take a signature made outside this app.",
+    "openWorkspace": "Open the workspace"
+  },
+  "defaults": {
+    "locality": "Town",
+    "street": "1 Main",
+    "precinct": "Precinct 1",
+    "district": "Ward 1",
+    "seat": "Mayor",
+    "election": "General",
+    "race": "Mayor",
+    "candidateFirst": "Ada",
+    "candidateLast": "One",
+    "voterFirst": "Cam",
+    "voterLast": "Voter",
+    "place": "Town Hall",
+    "device": "Machine 1",
+    "outsideDevice": "Machine 2"
+  },
+  "signIn": {
+    "title": "Sign in",
+    "intro": "Officials and system admins sign in with a passkey. A security key or a platform passkey both work.",
+    "signedInTitle": "Signed in",
+    "signedIn": "{{name}}, signed in as {{kind}}.",
+    "signedInTenant": "{{name}}, signed in as {{kind}} in tenant {{tenant}}.",
+    "manageOfficials": "Manage officials",
+    "addPasskey": "Add another passkey",
+    "passkeyAdded": "Another passkey was added.",
+    "signOut": "Sign out",
+    "signedOut": "Signed out.",
+    "passkeyTitle": "Passkey",
+    "passkeyBody": "Use a passkey you already enrolled.",
+    "passkeyButton": "Sign in with a passkey",
+    "done": "Signed in.",
+    "enrollTitle": "Enroll a passkey",
+    "enrollBody": "Paste the one-time enrollment token you were given. It works once and expires after 24 hours.",
+    "enrollButton": "Enroll and sign in",
+    "enrolled": "Passkey enrolled. You are signed in.",
+    "devTitle": "Development sign-in",
+    "devBody": "This host allows sign-in without a passkey. A production host turns it off.",
+    "devButton": "Sign in without a passkey",
+    "devDone": "Signed in without a passkey."
+  },
+  "admin": {
+    "title": "Officials",
+    "signInLink": "Sign in as an official or a system admin",
+    "signInBody": "You need to sign in to manage officials.",
+    "intro": "An official gets a one-time enrollment token and enrolls a passkey on the sign-in page. A disabled official is signed out at once.",
+    "tokenTitle": "Enrollment token, shown once",
+    "tokenBody": "Give this token to the official. It is not shown again.",
+    "tenantTitle": "Tenant",
+    "chooseTenant": "Choose a tenant",
+    "tenantOption": "{{name}} ({{kind}}, {{status}})",
+    "addTitle": "Add an official",
+    "add": "Add official",
+    "listTitle": "Officials in this tenant",
+    "none": "None yet.",
+    "actions": "Actions",
+    "disable": "Disable {{name}}",
+    "enable": "Enable {{name}}",
+    "reenroll": "New enrollment token for {{name}}"
+  },
+  "accessCode": {
+    "label_one": "Access code ({{count}} character)",
+    "label_other": "Access code ({{count}} characters)",
+    "copy": "Copy access code",
+    "copied": "Access code copied to the clipboard.",
+    "copyFailed": "Could not copy. Select the code and copy it yourself.",
+    "showSpelled": "Spell out the code",
+    "hideSpelled": "Hide the spelled-out code",
+    "group": "Group {{number}}: {{chars}}",
+    "upper": "capital {{char}}",
+    "lower": "lowercase {{char}}",
+    "digit": "digit {{char}}",
+    "hyphen": "hyphen",
+    "underscore": "underscore"
+  },
+  "reconciliation": {
+    "title": "Reconciliation",
+    "body": "Counts per recording place. A polling place matches when issued plus received equals its ballots. A central office handles mail: unreturned mailed ballots stay issued, so it matches when received equals ballots. Received marks are written in batches, so a recent ballot can show as not matched yet.",
+    "load": "Load report",
+    "refresh": "Refresh",
+    "empty": "No ballots or issuances yet.",
+    "caption_one": "Reconciliation for {{count}} recording place",
+    "caption_other": "Reconciliation for {{count}} recording places",
+    "place": "Place",
+    "kind": "Kind",
+    "issued": "Issued",
+    "received": "Received",
+    "ballots": "Ballots",
+    "matched": "Matched",
+    "mail": "Mail (central office)",
+    "polling": "Polling place",
+    "yes": "Yes",
+    "no": "No",
+    "thisPlace": "This place ({{id}})"
+  },
+  "workspace": {
+    "title": "Configure an election",
+    "intro": "Create each part, then run a showcase demonstration. A production activate or close still needs a signature made outside this app. This browser does not hold a production private key.",
+    "yourTenant": "Your tenant",
+    "demoTenant": "Demo tenant",
+    "starting": "Starting a session.",
+    "officialTenant": "Signed in as {{name}}. Everything here is created in your tenant.",
+    "visitorTenant": "Everything here is created in the shared demo tenant {{name}}. It has no legal effect. A system admin creates every other tenant.",
+    "visitorTenantUnnamed": "Everything here is created in the shared demo tenant. It has no legal effect. A system admin creates every other tenant.",
+    "locality": {
+      "title": "Locality",
+      "detail": "The city or town the election belongs to.",
+      "submit": "Create locality"
+    },
+    "address": {
+      "title": "Address",
+      "detail": "The address used by the precinct and the polling place.",
+      "submit": "Create address"
+    },
+    "precinct": {
+      "title": "Precinct",
+      "detail": "Where the voter's ballot style is drawn from.",
+      "submit": "Create precinct"
+    },
+    "district": {
+      "title": "District",
+      "detail": "Optional. An at-large seat does not need one.",
+      "submit": "Create district"
+    },
+    "precinctDistrict": {
+      "title": "Precinct district",
+      "detail": "Optional. Ties the precinct to one district of that type.",
+      "submit": "Assign district"
+    },
+    "seat": {
+      "title": "Seat",
+      "detail": "The office on the ballot. Appointments is how many winners the seat has.",
+      "submit": "Create seat"
+    },
+    "term": {
+      "title": "Term",
+      "detail": "The term the race fills.",
+      "submit": "Create term"
+    },
+    "showcaseElection": {
+      "title": "Showcase election",
+      "detail": "The host generates the operator, import, and viewing keys. The window must include now.",
+      "submit": "Create demonstration"
+    },
+    "productionElection": {
+      "title": "Production election",
+      "detail": "Optional. Paste public keys generated outside this app. Leave this blank for a demonstration.",
+      "submit": "Create election with outside keys"
+    },
+    "race": {
+      "title": "Race",
+      "detail": "One chain is created for this race.",
+      "submit": "Create race"
+    },
+    "candidatePerson": {
+      "title": "Candidate person",
+      "detail": "A fictional name is enough. A showcase tenant rejects an SSN and a voter id.",
+      "submit": "Create candidate person"
+    },
+    "voter": {
+      "title": "Voter",
+      "detail": "Accepted onto the pollbook when the demonstration ballot is cast. Not written onto the ballot.",
+      "submit": "Create voter"
+    },
+    "candidate": {
+      "title": "Candidate",
+      "detail": "The candidate row points at the person.",
+      "submit": "Create candidate"
+    },
+    "slot": {
+      "title": "Race slot",
+      "detail": "One choice on the race. Write-in stays No for this demonstration.",
+      "submit": "Add to the race"
+    },
+    "style": {
+      "title": "Ballot style",
+      "detail": "The precinct includes this race.",
+      "submit": "Add ballot style"
+    },
+    "place": {
+      "title": "Recording place",
+      "detail": "The polling place named on the ballot. This is not the voter's home.",
+      "submit": "Create place"
+    },
+    "showcaseDevice": {
+      "title": "Showcase device",
+      "detail": "Create this before activate. The host generates the device key.",
+      "submit": "Create demonstration device"
+    },
+    "productionDevice": {
+      "title": "Production device",
+      "detail": "Optional. Paste a device public key generated on the machine. Create it before activate.",
+      "submit": "Register outside device"
+    },
+    "assignment": {
+      "title": "Precinct assignment",
+      "detail": "The precinct is open for this election.",
+      "submit": "Assign precinct"
+    },
+    "activate": {
+      "title": "Activate the demonstration",
+      "detail": "The host signs the definition. Do this after the device, the style, and the assignment exist.",
+      "submit": "Activate"
+    },
+    "cast": {
+      "title": "Cast a demonstration ballot",
+      "detail": "One first-past-the-post choice, value Y, for the slot above. The voter is accepted on the pollbook and is not stored on the ballot.",
+      "submit": "Cast ballot"
+    },
+    "code": {
+      "title": "Access code",
+      "once": "This code is shown once. It is not saved in this browser. Copy it before you leave or clear this page.",
+      "clear": "Clear the code",
+      "lookup": "Open the public lookup",
+      "gone": "The access code was shown once and is no longer on this page."
+    },
+    "close": {
+      "title": "Close the demonstration",
+      "detail": "The host signs each race chain and the canvass statement. Open disputes do not block close.",
+      "submit": "Close",
+      "status": "Status: {{status}}"
+    },
+    "productionActivate": {
+      "title": "Production activate",
+      "detail": "Paste the operator signature over the definition hash. The hash comes from outside this app.",
+      "submit": "Activate with outside signature"
+    },
+    "productionClose": {
+      "title": "Production close",
+      "detail": "Paste one chain signature and the canvass signature. Both are made outside this app.",
+      "submit": "Close with outside signatures"
+    }
+  }
+}

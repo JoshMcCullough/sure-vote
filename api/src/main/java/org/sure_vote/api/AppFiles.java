@@ -11,10 +11,12 @@ import com.sun.net.httpserver.HttpHandler;
 
 final class AppFiles implements HttpHandler {
     private final Path root;
+    private final String policy;
 
-    AppFiles(final Path root) {
+    AppFiles(final Path root, final String policy) {
         final var absolute = root.toAbsolutePath();
         this.root = absolute.normalize();
+        this.policy = policy;
     }
 
     @Override
@@ -179,6 +181,9 @@ final class AppFiles implements HttpHandler {
         final var type = this.type(file);
         final var headers = exchange.getResponseHeaders();
         headers.set("Content-Type", type);
+        headers.set("Content-Security-Policy", this.policy);
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Referrer-Policy", "no-referrer");
         exchange.sendResponseHeaders(200, bytes.length);
         this.writeBody(exchange, bytes);
     }

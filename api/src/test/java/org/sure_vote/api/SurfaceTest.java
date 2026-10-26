@@ -4,9 +4,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -129,6 +132,45 @@ class SurfaceTest {
     }
 
     @Test
+    void theConfigNamesTheSurface() throws Exception {
+        final var demo = this.start(Surface.DEMO);
+        final var workspace = this.start(Surface.WORKSPACE);
+        final var demoConfig = this.send(demo, "GET", "/auth/config", null, null);
+        final var workspaceConfig = this.send(workspace, "GET", "/auth/config", null, null);
+        assertEquals("{\"devSignIn\":true,\"surface\":\"demo\"}", demoConfig.body());
+        assertEquals("{\"devSignIn\":true,\"surface\":\"workspace\"}", workspaceConfig.body());
+    }
+
+    @Test
+    void eachSurfaceMountsOnlyItsApps() throws Exception {
+        final var workspaceRoot = page("workspace");
+        final var voterRoot = page("voter");
+        final var pages = new Pages(workspaceRoot, voterRoot);
+        final var publicBase = this.started(pages, Surface.PUBLIC);
+        final var workspaceBase = this.started(pages, Surface.WORKSPACE);
+        final var demoBase = this.started(pages, Surface.DEMO);
+        final var voter = this.send(publicBase, "GET", "/voter/", null, null);
+        final var hidden = this.send(publicBase, "GET", "/app/", null, null);
+        final var app = this.send(workspaceBase, "GET", "/app/", null, null);
+        final var noVoter = this.send(workspaceBase, "GET", "/voter/", null, null);
+        final var demoApp = this.send(demoBase, "GET", "/app/", null, null);
+        final var demoVoter = this.send(demoBase, "GET", "/voter/", null, null);
+        final var voterHeaders = voter.headers();
+        final var appHeaders = app.headers();
+        final var voterPolicy = voterHeaders.firstValue("Content-Security-Policy");
+        final var appPolicy = appHeaders.firstValue("Content-Security-Policy");
+        assertEquals("voter", voter.body());
+        assertEquals(404, hidden.statusCode());
+        assertEquals("workspace", app.body());
+        assertEquals(404, noVoter.statusCode());
+        assertEquals("workspace", demoApp.body());
+        assertEquals("voter", demoVoter.body());
+        assertEquals(Optional.of(Pages.VOTER_POLICY), voterPolicy);
+        assertEquals(Optional.of(Pages.WORKSPACE_POLICY), appPolicy);
+        assertEquals(Optional.empty(), voterHeaders.firstValue("Set-Cookie"));
+    }
+
+    @Test
     void theWorkspaceRefusesVisitors() throws Exception {
         final var all = this.start(Surface.ALL);
         final var visitor = this.visitor(all);
@@ -183,9 +225,20 @@ class SurfaceTest {
     }
 
     private String start(final Surface surface) {
-        final var server = ApiServer.start(this.app, 0, null, surface);
+        return this.started(Pages.none(), surface);
+    }
+
+    private String started(final Pages pages, final Surface surface) {
+        final var server = ApiServer.start(this.app, 0, pages, surface);
         this.servers.add(server);
         return "http://127.0.0.1:" + server.port();
+    }
+
+    private static Path page(final String body) throws Exception {
+        final var root = Files.createTempDirectory("surevote-" + body);
+        final var index = root.resolve("index.html");
+        Files.writeString(index, body);
+        return root;
     }
 
     private String visitor(final String base) throws Exception {

@@ -59,7 +59,7 @@ jobs:
       - run: npm run synth
 
   ui:
-    name: UI build and browser smoke
+    name: UI build and browser smoke (demo, public, workspace)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -88,6 +88,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-failure
-          path: ui/smoke-failure.png
+          path: ui/smoke-failure*.png
           if-no-files-found: ignore
           retention-days: 7

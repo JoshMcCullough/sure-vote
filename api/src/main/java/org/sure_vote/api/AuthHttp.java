@@ -34,11 +34,13 @@ final class AuthHttp {
     private final SureVote app;
     private final ObjectMapper json;
     private final Requests requests;
+    private final Surface surface;
 
-    AuthHttp(final SureVote app, final ObjectMapper json, final Requests requests) {
+    AuthHttp(final SureVote app, final ObjectMapper json, final Requests requests, final Surface surface) {
         this.app = app;
         this.json = json;
         this.requests = requests;
+        this.surface = surface;
     }
 
     boolean handles(final List<String> parts) {
@@ -177,6 +179,7 @@ final class AuthHttp {
     private void config(final HttpExchange exchange) throws IOException {
         final var resource = new AuthConfigResource();
         resource.setDevSignIn(this.app.devSignInEnabled());
+        resource.setSurface(this.surface.wire());
         this.writeJson(exchange, 200, resource);
     }
 

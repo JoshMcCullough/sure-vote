@@ -1,0 +1,57 @@
+{
+  "_meta": {
+    "language": "es",
+    "reviewed": false,
+    "machineTranslated": true,
+    "note": "Machine draft from en.json. A fluent Spanish speaker familiar with election terms must review it before production use, then set reviewed to true."
+  },
+  "app": {
+    "name": "SureVote",
+    "home": "Página de inicio de SureVote",
+    "documentTitle": "{{page}} | SureVote",
+    "loading": "Cargando…",
+    "translationDraft": "Esta traducción es un borrador automático que aún no se ha revisado."
+  },
+  "nav": {
+    "skip": "Saltar al contenido principal",
+    "label": "Principal",
+    "menu": "Menú",
+    "close": "Cerrar el menú",
+    "language": "Idioma"
+  },
+  "errors": {
+    "server": "El servidor rechazó la solicitud: {{message}}",
+    "browser": "El navegador no pudo completar la solicitud: {{message}}",
+    "requestFailed": "La solicitud falló. Revise su conexión e inténtelo de nuevo.",
+    "adminWorkspace": "Un administrador del sistema no configura elecciones. Cierre la sesión para usar la demostración.",
+    "noPasskey": "No se eligió ninguna llave de acceso."
+  },
+  "form": {
+    "required": "Ingrese un valor en {{field}}.",
+    "number": "{{field}} debe ser un número.",
+    "summary_one": "Hay {{count}} problema en este formulario",
+    "summary_many": "Hay {{count}} problemas en este formulario",
+    "summary_other": "Hay {{count}} problemas en este formulario",
+    "saved": "Se guardó {{id}}.",
+    "waiting": "Complete primero los pasos anteriores."
+  },
+  "notFound": {
+    "title": "Página no encontrada",
+    "body": "No hay ninguna página en esta dirección.",
+    "home": "Ir a la página de inicio de SureVote"
+  },
+  "values": {
+    "true": "Sí",
+    "false": "No",
+    "upcoming": "próxima",
+    "active": "activa",
+    "historical": "histórica",
+    "open": "abierta",
+    "dismissed": "desestimada",
+    "noted": "registrada",
+    "in-person": "en persona",
+    "mail-in": "por correo",
+    "absentee": "en ausencia",
+    "online": "en línea"
+  }
+}

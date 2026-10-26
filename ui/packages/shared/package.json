@@ -1,0 +1,7 @@
+{
+  "name": "@surevote/shared",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "USWDS theme and wrappers, i18n setup and locales, the API client, and the smoke helpers shared by the SureVote apps."
+}

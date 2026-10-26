@@ -1,0 +1,58 @@
+{
+  "_meta": {
+    "language": "en",
+    "reviewed": true,
+    "source": true
+  },
+  "nav": {
+    "lookup": "Lookup"
+  },
+  "fields": {
+    "code": "Access code",
+    "passphrase": "Viewing passphrase",
+    "electionLookup": "Election id",
+    "statement": "What looks wrong"
+  },
+  "home": {
+    "lookupTitle": "Public lookup",
+    "lookupBody": "Open one ballot with its access code. The page does not change the ballot. Checking a published chain does not require this app.",
+    "passphraseHint": "Only a mail-in ballot needs the viewing passphrase.",
+    "openBallot": "Open my ballot",
+    "openLookup": "Open lookup"
+  },
+  "lookup": {
+    "vote": {
+      "unnamedRace": "Race",
+      "unnamedChoice": "an unnamed choice",
+      "writeIn": "Write-in: {{name}}",
+      "yes": "Yes",
+      "no": "No",
+      "ranked": "Choice {{rank}}: {{name}}",
+      "chosen": "{{name}}",
+      "raw": "Recorded value: {{value}}"
+    },
+    "title": "Ballot lookup",
+    "status": "Status: {{status}}",
+    "demonstration": "This is a demonstration. It has no legal effect.",
+    "disputes_one": "{{formatted}} dispute filed",
+    "disputes_other": "{{formatted}} disputes filed",
+    "openTitle": "Open your ballot",
+    "openBody": "The code stays on this page until you leave or clear it. It is not put in the address.",
+    "lookUp": "Look up",
+    "clear": "Clear",
+    "recordedTitle": "Recorded ballot",
+    "recorded": "Type: {{type}}. Sealed {{time}}. A recorded ballot cannot be edited.",
+    "votesTitle_one": "{{count}} vote",
+    "votesTitle_other": "{{count}} votes",
+    "statementHint": "Optional. Describe what does not match what you voted.",
+    "file": "File a dispute",
+    "filed": "Your dispute was filed.",
+    "claimsTitle": "Your disputes",
+    "claimWithStatement": "{{status}}: {{statement}}"
+  },
+  "voter": {
+    "title": "Check your ballot",
+    "intro": "Open the ballot recorded for you with its access code. This page reads the public record and cannot change it.",
+    "footer": "This lookup has no sign-in and sets no cookies. Checking a published chain does not require this site."
+  }
+}

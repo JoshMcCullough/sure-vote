@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "language": "en",
+    "reviewed": true,
+    "source": true
+  },
+  "app": {
+    "name": "SureVote",
+    "home": "SureVote home",
+    "documentTitle": "{{page}} | SureVote",
+    "loading": "Loading…",
+    "translationDraft": "This translation is a machine draft that has not been reviewed yet."
+  },
+  "nav": {
+    "skip": "Skip to main content",
+    "label": "Main",
+    "menu": "Menu",
+    "close": "Close the menu",
+    "language": "Language"
+  },
+  "errors": {
+    "server": "The server refused the request: {{message}}",
+    "browser": "The browser could not finish the request: {{message}}",
+    "requestFailed": "The request failed. Check your connection and try again.",
+    "adminWorkspace": "A system admin does not configure elections. Sign out to use the demo.",
+    "noPasskey": "No passkey was chosen."
+  },
+  "form": {
+    "required": "Enter a value for {{field}}.",
+    "number": "{{field}} must be a number.",
+    "summary_one": "There is {{count}} problem with this form",
+    "summary_other": "There are {{count}} problems with this form",
+    "saved": "Saved {{id}}.",
+    "waiting": "Complete the earlier steps first."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "There is no page at this address.",
+    "home": "Go to the SureVote home page"
+  },
+  "values": {
+    "true": "Yes",
+    "false": "No",
+    "upcoming": "upcoming",
+    "active": "active",
+    "historical": "historical",
+    "open": "open",
+    "dismissed": "dismissed",
+    "noted": "noted",
+    "in-person": "in person",
+    "mail-in": "mail-in",
+    "absentee": "absentee",
+    "online": "online"
+  }
+}

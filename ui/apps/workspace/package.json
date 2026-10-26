@@ -1,0 +1,12 @@
+{
+  "name": "@surevote/workspace",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sign-in, the election workspace, reconciliation, and the officials admin page.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  }
+}

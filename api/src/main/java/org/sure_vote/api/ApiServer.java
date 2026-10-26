@@ -93,7 +93,7 @@ public final class ApiServer implements HttpHandler {
         this.requests = new Requests(app, surface);
         this.workspace = new WorkspaceHttp(app, this.json, this.requests);
         this.system = new SystemHttp(app, this.json, this.requests);
-        this.auth = new AuthHttp(app, this.json, this.requests);
+        this.auth = new AuthHttp(app, this.json, this.requests, surface);
     }
 
     public ApiServer withPublicReader(final SureVote publicReader) {
@@ -110,12 +110,12 @@ public final class ApiServer implements HttpHandler {
     }
 
     public static ApiServer start(final SureVote app, final int port, final Path staticRoot) {
-        return start(app, port, staticRoot, Surface.ALL);
+        return start(app, port, new Pages(staticRoot, null), Surface.ALL);
     }
 
-    public static ApiServer start(final SureVote app, final int port, final Path staticRoot, final Surface surface) {
+    public static ApiServer start(final SureVote app, final int port, final Pages pages, final Surface surface) {
         try {
-            return listen(app, port, staticRoot, surface);
+            return listen(app, port, pages, surface);
         }
         catch (final IOException failure) {
             throw new IllegalStateException("HTTP server failed to start", failure);
@@ -125,33 +125,29 @@ public final class ApiServer implements HttpHandler {
     private static ApiServer listen(
         final SureVote app,
         final int port,
-        final Path staticRoot,
+        final Pages pages,
         final Surface surface
     ) throws IOException {
         final var server = HttpServer.create(new InetSocketAddress(port), 0);
         final var api = new ApiServer(app, server, surface);
-        final var pages = files(staticRoot);
+        final var workspace = surface != Surface.PUBLIC;
+        final var voter = surface != Surface.WORKSPACE;
         server.createContext("/", api::handle);
-        mount(server, pages);
+        mount(server, "/app", workspace, pages.workspace(), Pages.WORKSPACE_POLICY);
+        mount(server, "/voter", voter, pages.voter(), Pages.VOTER_POLICY);
         server.start();
         return api;
     }
 
-    private static AppFiles files(final Path staticRoot) {
-        if (staticRoot == null) {
-            return null;
-        }
-        else {
-            return new AppFiles(staticRoot);
-        }
-    }
-
-    private static void mount(final HttpServer server, final AppFiles pages) {
-        if (pages == null) {
-            return;
-        }
-        else {
-            server.createContext("/app", pages);
+    private static void mount(
+        final HttpServer server,
+        final String path,
+        final boolean served,
+        final Path root,
+        final String policy
+    ) {
+        if (served && root != null) {
+            server.createContext(path, new AppFiles(root, policy));
         }
     }
 

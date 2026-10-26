@@ -42,10 +42,11 @@ bin/
 ### UI ###
 ui/node_modules/
 ui/dist/
+ui/apps/*/dist/
 
 ### Infra ###
 infra/node_modules/
 infra/dist/
 infra/cdk.out/
 !infra/bin/
-ui/smoke-failure.png
+ui/smoke-failure*.png

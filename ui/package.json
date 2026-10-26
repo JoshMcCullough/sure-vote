@@ -4,11 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && node scripts/i18n-check.mjs && vite build",
-    "preview": "vite preview",
+    "dev:public": "npm run dev -w @surevote/public",
+    "dev:workspace": "npm run dev -w @surevote/workspace",
+    "build": "npm run i18n:check && npm run build -w @surevote/public && npm run build -w @surevote/workspace",
     "smoke": "smoke/run.sh",
-    "i18n:check": "node scripts/i18n-check.mjs"
+    "i18n:check": "node packages/shared/scripts/i18n-check.mjs"
   },
   "dependencies": {
     "@trussworks/react-uswds": "^13.0.0",
@@ -29,5 +29,10 @@
     "sass-embedded": "^1.106.1",
     "typescript": "^5.9.3",
     "vite": "^7.1.10"
-  }
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/public",
+    "apps/workspace"
+  ]
 }
