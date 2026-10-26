@@ -149,7 +149,7 @@ This is about a ballot-style blind-signing key, not the escrow key. If a style's
 3. Voters with an unspent old-key token are notified and re-request from the app: the app surrenders the old token and requests a new one under the new key. Old tokens can no longer be cast, so surrender cannot race a cast.
 4. Device ballots carry the style key id that authorized them (`deviceKeyId` in the payload), so validators can count ballots per key. That reveals only whether a ballot was cast before or after the revocation, which the hour or day timestamp already shows.
 
-Tokens already cast under the compromised signing key cannot be told apart individually: a forged token's signature is as valid as an honest one, and no ballot is linked to a voter. Proposed: they stay counted. Validators compare, per compromised key, the cast count with the issued count minus surrenders and revocations. If cast does not exceed that, there is no evidence of forgery. If it does, the excess is a lower bound on forged ballots: the authority publishes it, and when it is at least the margin of any race on that style, the result for that race goes to the jurisdiction's recount or contest process. The individual ballots cannot be removed. This is a recommendation pending Josh's OK; see [Open questions](#open-questions).
+Decided: tokens already cast under the compromised signing key stay counted. They cannot be told apart individually: a forged token's signature is as valid as an honest one, and no ballot is linked to a voter. The system publishes, per compromised key, the cast count against the issued count minus surrenders and revocations. If cast does not exceed that, there is no evidence of forgery. If it does, the excess is evidence of forgery and a lower bound on forged ballots; any race on that style where the excess reaches the margin goes to the jurisdiction's recount or contest rules. The individual ballots cannot be removed.
 
 ### Threat notes
 
@@ -338,14 +338,10 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 
 ## Open questions
 
-Decided and moved into the sections above: the issuance window, one key per style, secure storage with one recovery phrase per voter per tenant, rotation, voter-initiated byte-identical re-issuance, assisted recovery, in-person check-in and surrender, escrow with k-of-n officials, the closing order, every configurable value in [Settings](#settings), enrollment (mailed code and in person, mailed by default), bearer tokens with no re-voting in version one, authority custody of the style signing keys, and the escrow key generation. Ambiguous district overrides keep refusing activation.
-
-One question stays open, with a recommendation pending Josh's OK:
-
-1. **Ballots already cast under a compromised ballot-style signing key.** This is the blind-signing key, not the escrow key. Recommended: the proposal in [Signing-key compromise](#signing-key-compromise): keep them counted, publish per-key cast against issued, and refer an excess that reaches a race's margin to the jurisdiction's recount or contest process.
+None. Every device-voting question is decided, in the sections above: the issuance window, one key per style, secure storage with one recovery phrase per voter per tenant, rotation, voter-initiated byte-identical re-issuance, assisted recovery, in-person check-in and surrender, escrow with k-of-n officials, the closing order, every configurable value in [Settings](#settings), enrollment (mailed code and in person, mailed by default), bearer tokens with no re-voting in version one, authority custody of the style signing keys, the escrow key generation, and ballots already cast under a compromised ballot-style signing key. Ambiguous district overrides keep refusing activation.
 
 ## Not in this design
 
-The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added. The decided parts fix the token, key, and window shapes, and the signing-key compromise question changes only the canvass procedure.
+The app itself, the issuer and casting services, the token code, and the schema changes above. They are not started. No scaffold was added. The decided parts fix the token, key, and window shapes.
 
 [^no-escrow]: Without escrow, the jurisdiction's existing provisional-ballot rules would decide, using the device issuance, the voter's statement, and the style's issued and spent counts at close. If every token in the style was spent, the provisional is a likely second ballot; otherwise it is not decidable for one voter. No vote could ever be revealed, at the cost of either counting some double votes or rejecting some honest provisionals, and style changes and rotations after a lost device would have no revoke path. Not adopted.
