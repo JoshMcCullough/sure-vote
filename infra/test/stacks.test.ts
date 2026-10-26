@@ -16,6 +16,7 @@ function stacks(context: Record<string, string> = {}) {
         demo: Template.fromStack(built.demo),
         workspace: Template.fromStack(built.workspace),
         queue: Template.fromStack(built.queue),
+        ingest: Template.fromStack(built.ingest),
         built,
     };
 }
@@ -106,7 +107,13 @@ test("the app synthesizes a cloud assembly", () => {
     const { app } = stacks();
     const assembly = app.synth();
     const names = assembly.stacks.map((stack) => stack.stackName).sort();
-    assert.deepEqual(names, ["SureVoteDemoEdge", "SureVoteEdge", "SureVoteReceivedQueue", "SureVoteWorkspaceAccess"]);
+    assert.deepEqual(names, [
+        "SureVoteDemoEdge",
+        "SureVoteEdge",
+        "SureVoteIngestEdge",
+        "SureVoteReceivedQueue",
+        "SureVoteWorkspaceAccess",
+    ]);
 });
 
 function distributionConfig(template: Template) {
@@ -202,4 +209,75 @@ test("the workspace subnets are a comma-separated parameter", () => {
     workspace.hasResourceProperties("AWS::EC2::VerifiedAccessEndpoint", {
         LoadBalancerOptions: Match.objectLike({ SubnetIds: ["subnet-a", "subnet-b", "subnet-c"] }),
     });
+});
+
+test("ingest is its own host, blocks by default, and admits only each authority's allowlist", () => {
+    const allowlists = JSON.stringify({ "county-a": ["203.0.113.0/24"], "validator-b": ["198.51.100.7/32"] });
+    const { ingest, built } = stacks({ ingestAllowlists: allowlists, ingestRateLimit: "200", ingestAuthorityRateLimit: "900" });
+    assert.equal(built.ingest.region, "us-east-1");
+    ingest.resourceCountIs("AWS::CloudFront::Distribution", 1);
+    ingest.resourceCountIs("AWS::WAFv2::IPSet", 2);
+    ingest.hasResourceProperties("AWS::WAFv2::IPSet", { Scope: "CLOUDFRONT", Addresses: ["203.0.113.0/24"] });
+    ingest.hasResourceProperties("AWS::WAFv2::IPSet", { Addresses: ["198.51.100.7/32"] });
+    ingest.hasResourceProperties("AWS::WAFv2::WebACL", {
+        DefaultAction: { Block: {} },
+        Rules: Match.arrayWith([
+            Match.objectLike({ Name: "RatePerIp", Statement: { RateBasedStatement: { Limit: 200, AggregateKeyType: "IP" } } }),
+            Match.objectLike({
+                Name: "Rate-county-a",
+                Action: { Block: {} },
+                Statement: { RateBasedStatement: Match.objectLike({ Limit: 900, AggregateKeyType: "CONSTANT" }) },
+            }),
+            Match.objectLike({ Name: "Allow-county-a", Action: { Allow: {} } }),
+            Match.objectLike({ Name: "Allow-validator-b", Action: { Allow: {} } }),
+        ]),
+    });
+    ingest.hasResourceProperties("AWS::CloudFront::OriginRequestPolicy", {
+        OriginRequestPolicyConfig: Match.objectLike({
+            CookiesConfig: { CookieBehavior: "none" },
+            HeadersConfig: {
+                HeaderBehavior: "whitelist",
+                Headers: Match.arrayWith(["SureVote-Key-Id", "SureVote-Timestamp", "SureVote-Nonce", "SureVote-Signature"]),
+            },
+        }),
+    });
+    const config = distributionConfig(ingest);
+    assert.ok(config.WebACLId);
+    assert.equal(config.Origins[0].DomainName, "ingest-origin.surevote.example");
+    assert.match(headerPolicy(ingest), /default-src 'none'/);
+});
+
+test("the ingest rule names are checked and allow rules come after the rate rules", () => {
+    assert.throws(() => stacks({ ingestAllowlists: "{}" }), /needs at least one authority/);
+    assert.throws(() => stacks({ ingestAllowlists: JSON.stringify({ "County A": ["192.0.2.0/24"] }) }), /lowercase/);
+    assert.throws(() => stacks({ ingestAllowlists: JSON.stringify({ county: ["192.0.2.0"] }) }), /IPv4 CIDRs/);
+    assert.throws(() => stacks({ ingestDomain: "lookup.surevote.example" }), /must be different hosts/);
+    const { ingest } = stacks();
+    const acl = Object.values(ingest.findResources("AWS::WAFv2::WebACL"))[0].Properties;
+    const priority = (name: string) => acl.Rules.find((rule: { Name: string }) => rule.Name === name).Priority;
+    assert.ok(priority("RatePerIp") < priority("Rate-authority-example"));
+    assert.ok(priority("Rate-authority-example") < priority("Allow-authority-example"));
+});
+
+test("workspace access logs go to S3 and are kept 22 months by default, as a parameter", () => {
+    const { workspace } = stacks();
+    workspace.hasResourceProperties("AWS::EC2::VerifiedAccessInstance", {
+        LoggingConfigurations: Match.objectLike({ S3: Match.objectLike({ Enabled: true }), IncludeTrustContext: true }),
+    });
+    workspace.hasResource("AWS::S3::Bucket", {
+        DeletionPolicy: "Retain",
+        Properties: Match.objectLike({
+            LifecycleConfiguration: { Rules: [Match.objectLike({ ExpirationInDays: 670, Status: "Enabled" })] },
+        }),
+    });
+    workspace.resourceCountIs("AWS::Logs::LogGroup", 0);
+    const longer = stacks({ workspaceLogRetentionDays: "1100" }).workspace;
+    longer.hasResourceProperties("AWS::S3::Bucket", {
+        LifecycleConfiguration: { Rules: [Match.objectLike({ ExpirationInDays: 1100 })] },
+    });
+});
+
+test("the demo serves only the workspace and names the public lookup it links to", () => {
+    const { demo } = stacks({ lookupDomain: "lookup.county.example" });
+    demo.hasOutput("DemoLookupUrl", { Value: "https://lookup.county.example" });
 });

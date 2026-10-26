@@ -12,6 +12,9 @@ export const WORKSPACE_POLICY = "default-src 'none'; script-src 'self'; style-sr
     + "font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; "
     + "frame-ancestors 'none'";
 
+/** Ingest answers JSON only, so its responses may load nothing. */
+export const API_POLICY = "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
 export function webAcl(scope: Construct, id: string, metric: string, limit: number): wafv2.CfnWebACL {
     return new wafv2.CfnWebACL(scope, id, {
         scope: "CLOUDFRONT",
@@ -80,11 +83,11 @@ export function aliases(
     };
 }
 
-function visibility(name: string): wafv2.CfnWebACL.VisibilityConfigProperty {
+export function visibility(name: string): wafv2.CfnWebACL.VisibilityConfigProperty {
     return { cloudWatchMetricsEnabled: true, metricName: name, sampledRequestsEnabled: false };
 }
 
-function managed(name: string, priority: number): wafv2.CfnWebACL.RuleProperty {
+export function managed(name: string, priority: number): wafv2.CfnWebACL.RuleProperty {
     return {
         name,
         priority,

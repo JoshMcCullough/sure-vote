@@ -33,7 +33,7 @@ export class DemoStack extends Stack {
         });
         this.acl = webAcl(this, "DemoAcl", "surevote-demo", settings.demoRateLimit);
         this.distribution = new cloudfront.Distribution(this, "Demo", {
-            comment: "SureVote public demo: the demo API surface, locked to the showcase tenant",
+            comment: "SureVote public demo: the workspace app on the demo API surface, locked to the showcase tenant",
             webAclId: this.acl.attrArn,
             enableLogging: false,
             priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
@@ -52,5 +52,9 @@ export class DemoStack extends Stack {
         });
         new CfnOutput(this, "DemoDistributionDomain", { value: this.distribution.distributionDomainName });
         new CfnOutput(this, "DemoHost", { value: settings.demoDomain });
+        new CfnOutput(this, "DemoLookupUrl", {
+            description: "Set SUREVOTE_LOOKUP_URL on the demo surface to this, so a demonstration cast links to the public lookup",
+            value: "https://" + settings.lookupDomain,
+        });
     }
 }
