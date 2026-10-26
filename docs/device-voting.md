@@ -52,7 +52,7 @@ A lost phone before issuance is a new enrollment code from the clerk, which revo
   - The style is already visible on the ballot: the payload names the precinct, and the races it holds show the style. A per-style key therefore narrows the anonymity set no further than the ballot itself does.
   - Small styles are still a risk, because the style alone can come close to naming a voter. See [Small styles](#small-styles).
   - Lifecycle: the public keys are listed in the election definition, so the operator signature publishes and freezes them at activate, before any issuance window opens. The only later change is an operator-signed [key revocation](#signing-key-compromise). The private keys sign on demand only while issuance is open, in an HSM that can do raw RSA on a blinded message, such as AWS CloudHSM or a YubiHSM 2. AWS KMS signs only whole messages and cannot do this. After polls close the keys sign nothing. After certification (the signed close), each private key is destroyed, or archived offline under the two-officer rule when the authority's retention rules require it. The public keys stay in the definition for good.
-- **Voter passkey.** Ordinary WebAuthn, used only at the issuer.
+- **Voter passkey.** Ordinary WebAuthn, used only at the issuer. It cannot be exposed by re-issuance or by any official, by design: its private key never leaves the voter's authenticator, and the issuer, and any official helping the voter, only ever see a one-time WebAuthn assertion bound to that sign-in's challenge. Nothing a passkey sign-in reveals lets anyone sign in again, so a passkey never needs replacing because of a recovery.
 - **Recovery seed.** 128 random bits generated in the app, shown once as a 12-word BIP39-style phrase, one per voter per tenant. Every token of that voter in that tenant is derived from it, so the phrase is the tokens' backup. See [Recovery phrase](#recovery-phrase).
 - **Escrow key.** A threshold ElGamal key (k-of-n), new for each election, held as shares by k-of-n election officials after a distributed key generation, so no official ever holds the whole private key. Its public key is in the signed definition. Shares are destroyed after certification. See [Escrow](#escrow).
 - **Access code.** 32 random bytes generated in the app at cast, with `voterAccessHash` computed in the app as for in person (SHA-256 over the raw bytes; see [verification.md](./verification.md)). The code is never sent.
@@ -117,6 +117,21 @@ Decided: re-issuance happens only at the voter's request and the voter is always
 4. Re-issuance is rate-limited per voter by `deviceReissueLimitPerDay` ([Settings](#settings)) and recorded as a private `BallotIssuanceEvent` (`reissued`, time). The voter is notified every time, in the app and through the enrollment channel, so a voter learns if someone else re-issued.
 5. If the token was already spent, the re-issued token is refused at casting with "token already spent". That tells the voter someone used it.
 
+### Assisted recovery
+
+Decided: a recovery that could let an official learn the voter's secret replaces that secret.
+
+- The passkey is never at risk ([Keys](#keys)). The phrase is the only secret a recovery can expose.
+- Recovery normally happens only in the voter's own app, on the voter's own device. Re-issuance there needs nothing from an official.
+- Any other recovery is marked `assisted`: the phrase is typed on a device that is not the voter's, such as a clerk's kiosk or pollbook, or in any flow where an official helps or could see it. The device sends `assisted = true` with the request, and the issuer also marks a recovery assisted whenever the request comes from an official's session.
+- An assisted recovery forces [rotation](#rotating-the-phrase) in the same flow and never ends with the old phrase still valid:
+  1. The voter's own app, or the assisting device under the voter's passkey session, generates a new seed and shows the new phrase only to the voter.
+  2. The old token is surrendered and burned, as in [Surrender](#surrender).
+  3. A new token is issued under the new phrase. If the old token was already cast, there is nothing to surrender and no new token, as for any re-issuance.
+  4. The surrender and the re-issue are both recorded as `BallotIssuanceEvent`s (`surrendered` and `reissued`, each with `assisted`), and the voter is notified.
+- Officials' devices never store the phrase or the seed: no persistence, no logs, no crash reports, no clipboard, and memory is wiped when the flow ends. The new phrase is never shown on an assisting device; the voter receives it in their own app, or the flow cannot finish until they install one.
+- The UI keeps officials from seeing the phrase where possible: the voter types it on a screen or keypad that faces the voter, input is masked, the official's screen shows only progress, and the flow asks the official to step away while the phrase is entered.
+
 ### Ballot style changes
 
 If the voter's style changes after a token was issued and before they cast, for example an approved precinct move, the old token must not stay usable.
@@ -142,6 +157,7 @@ Tokens already cast under the compromised key cannot be told apart individually:
 - Treat the phrase as a bearer secret, like the token itself. It derives `m` and `r`; turning them into a usable `s` also needs the blind signature, which lives only on the voter's phone and with the issuer, behind the voter's passkey. So the phrase alone is not quite a ballot, but the phrase plus the old phone, or plus a passkey enrolled by someone impersonating the voter at the clerk, is. Whoever casts first wins, and the voter cannot undo it. That is the same loss as a stolen mailed ballot, and the voter learns of it when their own cast or surrender is refused.
 - The phrase alone also lets its holder compute that voter's token ids in every election of the tenant and, after close, see in the public spent list whether and how each token was used (cast, surrendered, or revoked). It never shows a ballot.
 - One phrase covers every election of the tenant until it is rotated, so a theft covers them too. Rotation after exposure limits that to elections where the token was already cast.
+- An official who saw the phrase during an assisted recovery learns only a phrase that the same flow retires; see [Assisted recovery](#assisted-recovery).
 - The server stores `blinded`, the blind signature, and the escrow ciphertext. None of them link the voter to `tokenId` without `r` or k officials.
 - 128 bits of seed is beyond brute force; the 12-word checksum catches typos, not attackers.
 
@@ -296,7 +312,7 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 - `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey`, `revokedAt`, operator signature. Public, insert-only, appended to the ledger.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row also has the style key id, `blindedMessage`, `blindSignature`, and `escrowCiphertext`, and no recording place.
 - `BallotIssuance.status` gains `style-changed`.
-- `BallotIssuanceEvent`: private, per issuance: `reissued`, `phrase-rotated`, `surrendered`, `style-changed`, `key-revoked`, `escrow-opened`, `notified`, with a time.
+- `BallotIssuanceEvent`: private, per issuance: `reissued`, `phrase-rotated`, `surrendered` (each of these three with an `assisted` flag), `style-changed`, `key-revoked`, `escrow-opened`, `notified`, with a time.
 - `SpentToken`: `electionId`, `keyId`, `tokenId`, `message`, `signature`, `reason` (`cast`, `surrendered`, `revoked`). Insert-only, unique on `(electionId, tokenId)`. No ballot reference and no timestamp columns, so the usual ledger audit fields are left off this table on purpose. Revoked rows are appended to the ledger when they commit; the full list is published at close.
 - `EscrowOpening`: `electionId`, `tokenId`, `purpose` (`provisional`, `style-change`, `rotation`), `outcome` (`revoked`, `spent`, `mismatch`), the k officials' signatures. Public, insert-only, appended to the ledger.
 - A pending device-ballot store outside the ledger database.
