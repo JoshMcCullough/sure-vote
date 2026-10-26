@@ -10,20 +10,14 @@ public enum Surface {
     ALL(EnumSet.allOf(RouteGroup.class), EnumSet.allOf(PrincipalKind.class)),
     PUBLIC(EnumSet.of(RouteGroup.HEALTH, RouteGroup.PUBLIC), EnumSet.noneOf(PrincipalKind.class)),
     WORKSPACE(
-        EnumSet.of(
-            RouteGroup.HEALTH,
-            RouteGroup.OFFICIAL,
-            RouteGroup.MACHINE,
-            RouteGroup.SESSION,
-            RouteGroup.SIGN_IN,
-            RouteGroup.SYSTEM
-        ),
+        EnumSet.of(RouteGroup.HEALTH, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SIGN_IN, RouteGroup.SYSTEM),
         EnumSet.of(PrincipalKind.OFFICIAL, PrincipalKind.SYSTEM_ADMIN)
     ),
     DEMO(
-        EnumSet.of(RouteGroup.HEALTH, RouteGroup.PUBLIC, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SHOWCASE),
+        EnumSet.of(RouteGroup.HEALTH, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SHOWCASE),
         EnumSet.of(PrincipalKind.VISITOR)
-    );
+    ),
+    INGEST(EnumSet.of(RouteGroup.HEALTH, RouteGroup.MACHINE), EnumSet.noneOf(PrincipalKind.class));
 
     private final Set<RouteGroup> groups;
     private final Set<PrincipalKind> principals;
@@ -50,6 +44,14 @@ public enum Surface {
 
     boolean serves(final RouteGroup group) {
         return this.groups.contains(group);
+    }
+
+    boolean servesWorkspaceApp() {
+        return this == ALL || this == WORKSPACE || this == DEMO;
+    }
+
+    boolean servesVoterApp() {
+        return this == ALL || this == PUBLIC;
     }
 
     boolean accepts(final PrincipalKind kind) {

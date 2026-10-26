@@ -113,32 +113,36 @@ class SurfaceTest {
     void theSurfacesMatchTheTopology() {
         assertEquals(Set.of(RouteGroup.HEALTH, RouteGroup.PUBLIC), this.served(Surface.PUBLIC));
         assertEquals(
-            Set.of(
-                RouteGroup.HEALTH,
-                RouteGroup.OFFICIAL,
-                RouteGroup.MACHINE,
-                RouteGroup.SESSION,
-                RouteGroup.SIGN_IN,
-                RouteGroup.SYSTEM
-            ),
+            Set.of(RouteGroup.HEALTH, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SIGN_IN, RouteGroup.SYSTEM),
             this.served(Surface.WORKSPACE)
         );
         assertEquals(
-            Set.of(RouteGroup.HEALTH, RouteGroup.PUBLIC, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SHOWCASE),
+            Set.of(RouteGroup.HEALTH, RouteGroup.OFFICIAL, RouteGroup.SESSION, RouteGroup.SHOWCASE),
             this.served(Surface.DEMO)
         );
+        assertEquals(Set.of(RouteGroup.HEALTH, RouteGroup.MACHINE), this.served(Surface.INGEST));
+        assertEquals(Set.of(RouteGroup.values()), this.served(Surface.ALL));
         assertEquals(Surface.ALL, Surface.parse(""));
         assertEquals(Surface.DEMO, Surface.parse("demo"));
+        assertEquals(Surface.INGEST, Surface.parse("ingest"));
     }
 
     @Test
     void theConfigNamesTheSurface() throws Exception {
         final var demo = this.start(Surface.DEMO);
         final var workspace = this.start(Surface.WORKSPACE);
+        final var linked = this.server(Surface.DEMO);
+        final var lookup = linked.withLookupUrl("https://Lookup.SureVote.example/");
+        final var linkedBase = "http://127.0.0.1:" + lookup.port();
         final var demoConfig = this.send(demo, "GET", "/auth/config", null, null);
         final var workspaceConfig = this.send(workspace, "GET", "/auth/config", null, null);
-        assertEquals("{\"devSignIn\":true,\"surface\":\"demo\"}", demoConfig.body());
-        assertEquals("{\"devSignIn\":true,\"surface\":\"workspace\"}", workspaceConfig.body());
+        final var linkedConfig = this.send(linkedBase, "GET", "/auth/config", null, null);
+        assertEquals("{\"devSignIn\":true,\"surface\":\"demo\",\"lookupUrl\":\"\"}", demoConfig.body());
+        assertEquals("{\"devSignIn\":true,\"surface\":\"workspace\",\"lookupUrl\":\"\"}", workspaceConfig.body());
+        assertEquals(
+            "{\"devSignIn\":true,\"surface\":\"demo\",\"lookupUrl\":\"https://lookup.surevote.example\"}",
+            linkedConfig.body()
+        );
     }
 
     @Test
@@ -149,12 +153,15 @@ class SurfaceTest {
         final var publicBase = this.started(pages, Surface.PUBLIC);
         final var workspaceBase = this.started(pages, Surface.WORKSPACE);
         final var demoBase = this.started(pages, Surface.DEMO);
+        final var ingestBase = this.started(pages, Surface.INGEST);
         final var voter = this.send(publicBase, "GET", "/voter/", null, null);
         final var hidden = this.send(publicBase, "GET", "/app/", null, null);
         final var app = this.send(workspaceBase, "GET", "/app/", null, null);
         final var noVoter = this.send(workspaceBase, "GET", "/voter/", null, null);
         final var demoApp = this.send(demoBase, "GET", "/app/", null, null);
         final var demoVoter = this.send(demoBase, "GET", "/voter/", null, null);
+        final var ingestApp = this.send(ingestBase, "GET", "/app/", null, null);
+        final var ingestVoter = this.send(ingestBase, "GET", "/voter/", null, null);
         final var voterHeaders = voter.headers();
         final var appHeaders = app.headers();
         final var voterPolicy = voterHeaders.firstValue("Content-Security-Policy");
@@ -164,7 +171,9 @@ class SurfaceTest {
         assertEquals("workspace", app.body());
         assertEquals(404, noVoter.statusCode());
         assertEquals("workspace", demoApp.body());
-        assertEquals("voter", demoVoter.body());
+        assertEquals(404, demoVoter.statusCode());
+        assertEquals(404, ingestApp.statusCode());
+        assertEquals(404, ingestVoter.statusCode());
         assertEquals(Optional.of(Pages.VOTER_POLICY), voterPolicy);
         assertEquals(Optional.of(Pages.WORKSPACE_POLICY), appPolicy);
         assertEquals(Optional.empty(), voterHeaders.firstValue("Set-Cookie"));
@@ -195,6 +204,37 @@ class SurfaceTest {
         assertEquals(404, county.statusCode());
         assertEquals(401, demoOfficial.statusCode());
         assertEquals(404, system.statusCode());
+    }
+
+    @Test
+    void ingestServesMachineRoutesAndNoSession() throws Exception {
+        final var all = this.start(Surface.ALL);
+        final var visitor = this.visitor(all);
+        final var base = this.start(Surface.INGEST);
+        final var ballot = "{\"electionId\":\"" + this.demo + "\"}";
+        final var unsigned = this.send(base, "POST", "/ballots", ballot, visitor);
+        final var path = "/elections/" + this.demo + "/validations";
+        final var filing = this.send(base, "POST", path, "{}", this.countyOfficial);
+        final var session = this.send(base, "GET", "/auth/session", null, this.countyOfficial);
+        final var workspace = this.send(base, "GET", "/workspace", null, this.countyOfficial);
+        final var lookup = this.send(base, "POST", "/lookup", "{}", null);
+        final var headers = unsigned.headers();
+        assertEquals(400, unsigned.statusCode(), unsigned.body());
+        assertEquals("{\"error\":\"Missing Election\"}", unsigned.body());
+        assertNotEquals(404, filing.statusCode());
+        assertEquals(404, session.statusCode());
+        assertEquals(404, workspace.statusCode());
+        assertEquals(404, lookup.statusCode());
+        assertEquals(Optional.empty(), headers.firstValue("Set-Cookie"));
+    }
+
+    @Test
+    void theWorkspaceNoLongerTakesMachineRequests() throws Exception {
+        final var base = this.start(Surface.WORKSPACE);
+        final var ballots = this.send(base, "POST", "/ballots", "{}", this.countyOfficial);
+        final var filing = this.send(base, "POST", "/elections/nope/validations", "{}", null);
+        assertEquals(404, ballots.statusCode());
+        assertEquals(404, filing.statusCode());
     }
 
     @Test
@@ -232,6 +272,12 @@ class SurfaceTest {
         final var server = ApiServer.start(this.app, 0, pages, surface);
         this.servers.add(server);
         return "http://127.0.0.1:" + server.port();
+    }
+
+    private ApiServer server(final Surface surface) {
+        final var server = ApiServer.start(this.app, 0, Pages.none(), surface);
+        this.servers.add(server);
+        return server;
     }
 
     private static Path page(final String body) throws Exception {

@@ -25,6 +25,7 @@ import org.sure_vote.entity.Address;
 import org.sure_vote.entity.AuthCeremony;
 import org.sure_vote.entity.Ballot;
 import org.sure_vote.entity.BallotDispute;
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.BallotIssuance;
 import org.sure_vote.entity.BallotStyle;
 import org.sure_vote.entity.Candidate;
@@ -186,6 +187,26 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         return this.execute(connection, sql);
     }
 
+    /**
+     * The public surface's dispute role: the reader's published tables, insert on {@code ballot_dispute}, and select on
+     * its {@code id} column only, for the duplicate-id check. It reads disputes back through {@code ballot_disputes}.
+     */
+    public static void grantDispute(final String url, final String user, final String password, final String role) {
+        if (role == null || !role.matches("[a-z_][a-z0-9_]{0,62}")) {
+            throw new IllegalArgumentException("dispute role must be a lowercase postgres identifier");
+        }
+        else {
+            final var owner = open(url, user, password);
+            owner.alone(connection -> owner.disputable(connection, role));
+        }
+    }
+
+    private Integer disputable(final Connection connection, final String role) throws SQLException {
+        final var sql = "grant insert, select (\"id\") on ballot_dispute to " + role;
+        this.readable(connection, role);
+        return this.execute(connection, sql);
+    }
+
     public static JdbcSureVoteRepository open(final String url, final String user, final String password) {
         final var source = new PGSimpleDataSource();
         source.setURL(url);
@@ -296,6 +317,16 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
     @Override
     public List<Ballot> ballotsByAccessHash(final String voterAccessHash) {
         return this.query(connection -> this.lookupBallots(connection, voterAccessHash));
+    }
+
+    @Override
+    public List<BallotDispute> disputesByAccessHash(final String voterAccessHash) {
+        return this.query(connection -> this.disputesOf(connection, voterAccessHash));
+    }
+
+    @Override
+    public int disputeCount(final UUID electionId) {
+        return this.query(connection -> this.disputesIn(connection, electionId));
     }
 
     @Override
@@ -645,6 +676,29 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
         try {
             statement.setString(1, voterAccessHash);
             return this.readList(statement, Ballot.class);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private List<BallotDispute> disputesOf(final Connection connection, final String voterAccessHash)
+        throws SQLException {
+        final var statement = connection.prepareStatement("select * from ballot_disputes(?)");
+        try {
+            statement.setString(1, voterAccessHash);
+            return this.readList(statement, BallotDispute.class);
+        }
+        finally {
+            statement.close();
+        }
+    }
+
+    private int disputesIn(final Connection connection, final UUID electionId) throws SQLException {
+        final var statement = connection.prepareStatement("select dispute_count(?)");
+        try {
+            statement.setObject(1, electionId);
+            return this.firstInt(statement);
         }
         finally {
             statement.close();

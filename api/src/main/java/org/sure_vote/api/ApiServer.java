@@ -96,6 +96,12 @@ public final class ApiServer implements HttpHandler {
         this.auth = new AuthHttp(app, this.json, this.requests, surface);
     }
 
+    /** The public lookup's origin, which the demo workspace links to after a demonstration cast. */
+    public ApiServer withLookupUrl(final String url) {
+        this.auth.lookupUrl(url);
+        return this;
+    }
+
     public ApiServer withPublicReader(final SureVote publicReader) {
         this.reader = publicReader;
         return this;
@@ -130,8 +136,8 @@ public final class ApiServer implements HttpHandler {
     ) throws IOException {
         final var server = HttpServer.create(new InetSocketAddress(port), 0);
         final var api = new ApiServer(app, server, surface);
-        final var workspace = surface != Surface.PUBLIC;
-        final var voter = surface != Surface.WORKSPACE;
+        final var workspace = surface.servesWorkspaceApp();
+        final var voter = surface.servesVoterApp();
         server.createContext("/", api::handle);
         mount(server, "/app", workspace, pages.workspace(), Pages.WORKSPACE_POLICY);
         mount(server, "/voter", voter, pages.voter(), Pages.VOTER_POLICY);

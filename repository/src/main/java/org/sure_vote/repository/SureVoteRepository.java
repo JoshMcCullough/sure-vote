@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.Identifiable;
 
 public interface SureVoteRepository {
@@ -29,6 +30,10 @@ public interface SureVoteRepository {
     int pruneNonces(Instant before);
 
     List<Ballot> ballotsByAccessHash(final String voterAccessHash);
+
+    List<BallotDispute> disputesByAccessHash(final String voterAccessHash);
+
+    int disputeCount(final UUID electionId);
 
     Optional<UUID> electionTenant(final UUID electionId);
 

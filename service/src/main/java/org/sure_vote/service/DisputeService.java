@@ -41,12 +41,14 @@ final class DisputeService {
     List<BallotDispute> forCode(final UUID electionId, final String code, final String passphrase) {
         final var found = this.lookup.lookup(electionId, code, passphrase);
         final var ballot = found.ballot();
-        return this.repository.inTenant(ballot.getTenantId(), () -> this.forBallot(ballot.getId()));
+        final var hash = ballot.getVoterAccessHash();
+        final var disputes = this.repository.disputesByAccessHash(hash);
+        return this.onBallot(disputes, ballot.getId());
     }
 
     int count(final UUID electionId) {
-        final var rows = this.counted(electionId);
-        return rows.size();
+        this.stores.require(Election.class, electionId);
+        return this.repository.disputeCount(electionId);
     }
 
     List<BallotDispute> list(final UUID electionId, final UUID actor) {
@@ -121,9 +123,8 @@ final class DisputeService {
         }
     }
 
-    private List<BallotDispute> forBallot(final UUID ballotId) {
+    private List<BallotDispute> onBallot(final List<BallotDispute> disputes, final UUID ballotId) {
         final var matched = new ArrayList<BallotDispute>();
-        final var disputes = this.repository.list(BallotDispute.class);
         for (final var dispute : disputes) {
             this.collectSameBallot(matched, dispute, ballotId);
         }

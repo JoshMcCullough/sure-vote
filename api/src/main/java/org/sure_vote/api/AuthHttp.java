@@ -35,12 +35,17 @@ final class AuthHttp {
     private final ObjectMapper json;
     private final Requests requests;
     private final Surface surface;
+    private volatile String lookupUrl = "";
 
     AuthHttp(final SureVote app, final ObjectMapper json, final Requests requests, final Surface surface) {
         this.app = app;
         this.json = json;
         this.requests = requests;
         this.surface = surface;
+    }
+
+    void lookupUrl(final String url) {
+        this.lookupUrl = LookupUrls.origin(url);
     }
 
     boolean handles(final List<String> parts) {
@@ -180,6 +185,7 @@ final class AuthHttp {
         final var resource = new AuthConfigResource();
         resource.setDevSignIn(this.app.devSignInEnabled());
         resource.setSurface(this.surface.wire());
+        resource.setLookupUrl(this.lookupUrl);
         this.writeJson(exchange, 200, resource);
     }
 

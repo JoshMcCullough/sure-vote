@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.sure_vote.entity.Ballot;
+import org.sure_vote.entity.BallotDispute;
 import org.sure_vote.entity.Candidate;
 import org.sure_vote.entity.ElectionStatus;
 import org.sure_vote.entity.Person;
@@ -193,6 +194,33 @@ public final class InMemorySureVoteRepository implements SureVoteRepository {
         final var stream = ballots.stream();
         final var matched = stream.filter(ballot -> voterAccessHash.equals(ballot.getVoterAccessHash()));
         return matched.toList();
+    }
+
+    @Override
+    public List<BallotDispute> disputesByAccessHash(final String voterAccessHash) {
+        final var ballots = this.ballotsByAccessHash(voterAccessHash);
+        final var ids = ballots
+            .stream()
+            .map(Ballot::getId)
+            .toList();
+        final var disputes = this.owned(BallotDispute.class);
+        final var stream = disputes.stream();
+        final var matched = stream.filter(dispute -> ids.contains(dispute.getBallotId()));
+        return matched.toList();
+    }
+
+    @Override
+    public int disputeCount(final UUID electionId) {
+        final var disputes = this.owned(BallotDispute.class);
+        final var stream = disputes.stream();
+        final var matched = stream.filter(dispute -> this.inElection(dispute, electionId));
+        return (int) matched.count();
+    }
+
+    private boolean inElection(final BallotDispute dispute, final UUID electionId) {
+        final var ballot = this.ownedRow(Ballot.class, dispute.getBallotId());
+        final var same = ballot.filter(row -> electionId.equals(row.getElectionId()));
+        return same.isPresent();
     }
 
     @Override
