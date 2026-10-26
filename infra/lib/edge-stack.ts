@@ -5,6 +5,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 import { SureVoteConfig } from "./config";
+import { aliases, rootRedirect, securityHeaders, VOTER_POLICY, webAcl } from "./edge-parts";
 
 export interface EdgeStackProps extends StackProps {
     readonly settings: SureVoteConfig;
@@ -21,8 +22,19 @@ export class EdgeStack extends Stack {
         const api = new origins.HttpOrigin(settings.apiDomain, {
             protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
         });
-        const forwarded = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER;
-        const headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS;
+        const forwarded = new cloudfront.OriginRequestPolicy(this, "NoCookies", {
+            comment: "The public lookup forwards no cookies and no auth headers",
+            cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+            headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+                "Accept",
+                "Accept-Language",
+                "Content-Type",
+                "Origin",
+            ),
+            queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+        });
+        const headers = securityHeaders(this, "VoterHeaders", VOTER_POLICY);
+        const redirect = rootRedirect(this, "RootToVoter", "/voter/");
         this.published = new s3.Bucket(this, "Published", {
             objectLockEnabled: true,
             objectLockDefaultRetention: s3.ObjectLockRetention.compliance(Duration.days(settings.publishedRetentionDays)),
@@ -32,25 +44,7 @@ export class EdgeStack extends Stack {
             enforceSSL: true,
             removalPolicy: RemovalPolicy.RETAIN,
         });
-        this.acl = new wafv2.CfnWebACL(this, "ApiAcl", {
-            scope: "CLOUDFRONT",
-            defaultAction: { allow: {} },
-            visibilityConfig: visibility("surevote-api"),
-            rules: [
-                {
-                    name: "RatePerIp",
-                    priority: 0,
-                    action: { block: {} },
-                    statement: {
-                        rateBasedStatement: { limit: settings.rateLimit, aggregateKeyType: "IP", evaluationWindowSec: 300 },
-                    },
-                    visibilityConfig: visibility("surevote-rate"),
-                },
-                managed("AWSManagedRulesAmazonIpReputationList", 1),
-                managed("AWSManagedRulesKnownBadInputsRuleSet", 2),
-                managed("AWSManagedRulesCommonRuleSet", 3),
-            ],
-        });
+        this.acl = webAcl(this, "ApiAcl", "surevote-api", settings.rateLimit);
         const heads = new cloudfront.CachePolicy(this, "HeadNotices", {
             comment: "Head notices: short cache so validators poll the edge, not the db",
             defaultTtl: Duration.seconds(settings.headTtlSeconds),
@@ -70,10 +64,11 @@ export class EdgeStack extends Stack {
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         });
         this.distribution = new cloudfront.Distribution(this, "Edge", {
-            comment: "SureVote API, head notices, and published bundles",
+            comment: "SureVote public lookup: the public API surface, head notices, and published bundles",
             webAclId: this.acl.attrArn,
             enableLogging: false,
             priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+            ...aliases(this, "LookupCertificate", settings.lookupDomain, settings.lookupCertificateArn),
             defaultBehavior: {
                 origin: api,
                 allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
@@ -81,6 +76,7 @@ export class EdgeStack extends Stack {
                 originRequestPolicy: forwarded,
                 responseHeadersPolicy: headers,
                 viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                functionAssociations: [{ function: redirect, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
             },
             additionalBehaviors: {
                 "/elections/*/heads": {
@@ -92,7 +88,7 @@ export class EdgeStack extends Stack {
                 },
                 "/elections/*/close-bundle": {
                     origin: api,
-                    allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+                    allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
                     cachePolicy: bundles,
                     originRequestPolicy: forwarded,
                     responseHeadersPolicy: headers,
@@ -109,19 +105,6 @@ export class EdgeStack extends Stack {
         });
         new CfnOutput(this, "DistributionDomain", { value: this.distribution.distributionDomainName });
         new CfnOutput(this, "PublishedBucket", { value: this.published.bucketName });
+        new CfnOutput(this, "LookupHost", { value: settings.lookupDomain });
     }
-}
-
-function visibility(name: string): wafv2.CfnWebACL.VisibilityConfigProperty {
-    return { cloudWatchMetricsEnabled: true, metricName: name, sampledRequestsEnabled: false };
-}
-
-function managed(name: string, priority: number): wafv2.CfnWebACL.RuleProperty {
-    return {
-        name,
-        priority,
-        overrideAction: { none: {} },
-        statement: { managedRuleGroupStatement: { vendorName: "AWS", name } },
-        visibilityConfig: visibility(name),
-    };
 }
