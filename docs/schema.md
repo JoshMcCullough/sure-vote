@@ -16,6 +16,9 @@ Mutable records include these fields. `createdBy` and `updatedBy` are stored as 
 ## Ledger fields
 `Ballot`, `Vote`, and `VoteChainEntry` are insert-only. They use `id`, `createdAt`, and `createdBy` only. They do not use `updatedAt`, `updatedBy`, `deletedAt`, `deletedBy`, or `version`.
 
+## Typed crypto values
+Every `publicKey`, `signature`, sealed value, and access hash below is written `<identifier>:<hex>`, using the identifiers in [verification.md](./verification.md#algorithm-identifiers). Every `signature` is `ecdsa-p256-sha256:` then 128 hex characters. Migration `V19__algorithm_identifiers.sql` enforces these forms in the database; the service also checks that each point is on the curve.
+
 ## Chain-header fields
 `VoteChain` uses the administrative audit fields except soft delete. Updates are limited to the tip and to `status`. See that entity.
 
@@ -86,7 +89,7 @@ Represents an individual voter or election official, containing personal informa
 - `fullName` (String): The person's full name, derived from the first, middle, and last names.
 - `email` (String, Optional): The person's email address. Private. A mail-in access code may be sent here when the voter checks email on the return envelope. Never copied onto a ledger row.
 - `phoneNumber` (String, Optional): The person's phone number. Private. A mail-in access code may be sent here by SMS when the voter checks phone on the return envelope. Never copied onto a ledger row.
-- `viewingPassphrase` (String, Optional): The mail-in viewing passphrase, sealed to the authority viewing key and stored as lowercase hex. The plaintext is not a column. Set at registration. Never copied onto a ledger row. Not used for in-person lookup. See [verification.md](./verification.md).
+- `viewingPassphrase` (String, Optional): The mail-in viewing passphrase, sealed to the authority viewing key and stored as `ecies-p256-hkdf-sha256-aes256gcm:` then lowercase hex. The plaintext is not a column. Set at registration. Never copied onto a ledger row. Not used for in-person lookup. See [verification.md](./verification.md).
 - `dateOfBirth` (Date): The person's date of birth.
 - `address` (Reference to Address): The person's physical address.
 - `citizenship` (Reference to Locality (type: country)): The person's citizenship status.
@@ -208,9 +211,9 @@ Represents an election for a seat, including the candidates and election dates.
 - `voteHashPayloadSchema` (String): The schema used to generate the payload to be hashed at the vote level.
 - `voteChainEntryHashPayloadSchema` (String): The schema used to generate the payload to be hashed at the vote chain entry level.
 - `hashAlgorithm` (String): The hashing algorithm used across all hashed artifacts in this election (ballots, votes, and vote chain entries).
-- `operatorPublicKey` (String): P-256 public key, uncompressed SEC1 hex (130 characters), that signs this election definition and each published chain head.
-- `importPublicKey` (String): P-256 public key, uncompressed SEC1 hex, that signs chain entries.
-- `viewingPublicKey` (String): P-256 public key, uncompressed SEC1 hex. Mail-in viewing passphrases are sealed to this key with ECIES.
+- `operatorPublicKey` (String): P-256 public key, `ecdsa-p256-sha256:` then uncompressed SEC1 hex (130 characters), that signs this election definition and each published chain head.
+- `importPublicKey` (String): P-256 public key, `ecdsa-p256-sha256:` then uncompressed SEC1 hex, that signs chain entries.
+- `viewingPublicKey` (String): P-256 public key, `ecies-p256-hkdf-sha256-aes256gcm:` then uncompressed SEC1 hex. Mail-in viewing passphrases are sealed to this key with ECIES.
 - `hash` (String): SHA-256 of the election-definition payload in [verification.md](./verification.md).
 - `signature` (String): Operator signature over `hash`.
 - `frozenAt` (Timestamp, optional): Set when a restore check finds that a witnessed head is no longer a prefix of this election's restored chain. Cleared when its `RestoreIncident` is filed. Not part of the signed definition.
@@ -281,7 +284,7 @@ A machine or workstation that records ballots and signs them. An in-person machi
 - Administrative audit fields
 - `name` (String): The label printed on the device, including its serial number.
 - `kind` (Enum): `polling-place-machine` or `central-workstation`.
-- `publicKey` (String): The P-256 public key, uncompressed SEC1 hex, that verifies ballots and votes this device signs.
+- `publicKey` (String): The P-256 public key, `ecdsa-p256-sha256:` then uncompressed SEC1 hex, that verifies ballots and votes this device signs.
 - `status` (Enum): `active` or `retired`.
 
 ### HeldKey
@@ -304,7 +307,7 @@ A recorded ballot. The row has no reference to `Person`. The voter holds an acce
 - `type` (Enum): `in-person`, `mail-in`, or `absentee`. `absentee` uses the same path as `mail-in`. `online` is reserved and unused until [system.md](./system.md) brings voter-device casting into scope.
 - `recordingDevice` (Reference to RecordingDevice): The machine or workstation that signed this ballot.
 - `recordingPlace` (Reference to RecordingPlace): The polling place or office where it was recorded. For mail-in this is the office, not the voter's home precinct.
-- `voterAccessHash` (String): Lookup hash defined in [verification.md](./verification.md). SHA-256 of the raw access code for an in-person ballot. Argon2id of the registration passphrase and the raw access code for a mail-in or absentee ballot. Unique per election. The access code and the passphrase are not stored on this row. This field is not the ballot integrity `hash`.
+- `voterAccessHash` (String): Lookup hash defined in [verification.md](./verification.md). `sha256:` then SHA-256 of the raw access code for an in-person ballot. `argon2id-v13:m=65536,t=3,p=1:` then Argon2id of the registration passphrase and the raw access code for a mail-in or absentee ballot. Unique per election. The access code and the passphrase are not stored on this row. This field is not the ballot integrity `hash`.
 - `payload` (String): Canonical JSON for this ballot. It includes the provenance fields, `voterAccessHash`, and `voteHashes`. It does not contain the access code. See [verification.md](./verification.md).
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
 - `signature` (String): Device signature over the ballot hash. The device is `recordingDevice`.
@@ -364,7 +367,7 @@ Represents a person, group, or service that has validated the integrity of a vot
 - Administrative audit fields
 - `name` (String): The name of the vote chain validator.
 - `description` (String, Optional): A description of the vote chain validator.
-- `publicKey` (String): The P-256 public key of the vote chain validator, uncompressed SEC1 hex, used for verifying signatures.
+- `publicKey` (String): The P-256 public key of the vote chain validator, `ecdsa-p256-sha256:` then uncompressed SEC1 hex, used for verifying signatures.
 
 ### VoteChainValidationResult
 Represents the result of a vote chain validation performed by a vote chain validator.
@@ -382,7 +385,7 @@ Represents the result of a vote chain validation performed by a vote chain valid
 - `evidenceHash` (String, Optional): Lowercase hex SHA-256 of the evidence file bytes. Null in the payload when there is no file.
 - `payload` (String): Canonical JSON for this result. See [verification.md](./verification.md).
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
-- `signature` (String): Validator signature over the raw bytes of `hash`.
+- `signature` (String): Validator signature over `hash`.
 
 The payload, hash, signature, and the columns they repeat do not change after insert.
 
@@ -393,7 +396,7 @@ The signed geographic totals for one election. One row, written when the electio
 - `election` (Reference to Election): The election. Unique.
 - `payload` (String): Canonical JSON for the statement. See [verification.md](./verification.md).
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
-- `signature` (String): Operator signature over the raw bytes of `hash`.
+- `signature` (String): Operator signature over `hash`.
 
 ### RestoreIncident
 A public record that a restored chain head differs from the latest head an outside validator witnessed. Insert-only. One row per election. The host does not promote that divergent restore without it. See [system.md](./system.md).
@@ -402,7 +405,7 @@ A public record that a restored chain head differs from the latest head an outsi
 - `election` (Reference to Election): The election. Unique.
 - `payload` (String): Canonical JSON. Keys, in order: `electionId`, `witnessedHeads`, `restoredHeads`, `reason`, `timestamp`. Each head array is sorted by `raceId`, and each object uses `raceId`, `length`, `headHash`. `timestamp` is the canonical UTC form.
 - `hash` (String): SHA-256 of the UTF-8 bytes of `payload`.
-- `signature` (String): Operator signature over the raw bytes of `hash`.
+- `signature` (String): Operator signature over `hash`.
 
 ### CloseBundle
 The operator signature over the bundle of an election's published ledger after close. Insert-only. One row per election. The bundle bytes are rebuilt from the closed ledger. See [verification.md](./verification.md).
@@ -410,7 +413,7 @@ The operator signature over the bundle of an election's published ledger after c
 - Ledger fields
 - `election` (Reference to Election): The election. Unique.
 - `hash` (String): SHA-256 of the UTF-8 bytes of the bundle.
-- `signature` (String): Operator signature over the raw bytes of `hash`.
+- `signature` (String): Operator signature over `hash`.
 
 ### TenantOfficial
 A person who acts for one tenant. Row-level security on `tenant_id`. See [auth-proposal.md](./auth-proposal.md).

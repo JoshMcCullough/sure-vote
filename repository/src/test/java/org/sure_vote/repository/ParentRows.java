@@ -1,6 +1,10 @@
 package org.sure_vote.repository;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.UUID;
 
 import org.sure_vote.entity.AssignmentStatus;
@@ -26,6 +30,7 @@ import org.sure_vote.entity.VotingPrecinct;
 final class ParentRows {
     static final Instant START = Instant.parse("2026-11-03T11:00:00Z");
     static final Instant END = Instant.parse("2026-11-04T01:00:00Z");
+    static final String SIGNATURE = "ecdsa-p256-sha256:" + "00".repeat(64);
     final UUID tenantId;
     final UUID localityId;
     final UUID precinctId;
@@ -107,6 +112,19 @@ final class ParentRows {
         return slot.getId();
     }
 
+    /** A well-formed in-person access hash ({@code sha256:<hex>}) standing for {@code label}. */
+    static String accessHash(final String label) {
+        try {
+            final var digest = MessageDigest.getInstance("SHA-256");
+            final var hash = digest.digest(label.getBytes(StandardCharsets.UTF_8));
+            final var hex = HexFormat.of();
+            return "sha256:" + hex.formatHex(hash);
+        }
+        catch (final NoSuchAlgorithmException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
     UUID ballot(final UUID electionId) {
         final var ballot = new Ballot();
         this.ballots = this.ballots + 1;
@@ -115,7 +133,7 @@ final class ParentRows {
         ballot.setElectionId(electionId);
         ballot.setVotingPrecinctId(this.precinctId);
         ballot.setTimestamp(START);
-        ballot.setVoterAccessHash("access-" + this.ballots + "-" + UUID.randomUUID());
+        ballot.setVoterAccessHash(accessHash("access-" + this.ballots + "-" + UUID.randomUUID()));
         this.repository.insert(ballot);
         return ballot.getId();
     }
@@ -136,7 +154,7 @@ final class ParentRows {
         final var validator = new VoteChainValidator();
         validator.setId(UUID.randomUUID());
         validator.setName("Witness");
-        validator.setPublicKey("04" + "ab".repeat(64));
+        validator.setPublicKey("ecdsa-p256-sha256:04" + "ab".repeat(64));
         this.repository.insert(validator);
         return validator.getId();
     }

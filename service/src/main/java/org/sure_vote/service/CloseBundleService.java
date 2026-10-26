@@ -51,7 +51,7 @@ final class CloseBundleService {
         final var payload = this.payload(electionId);
         final var election = this.stores.require(Election.class, electionId);
         final var hash = Digests.sha256Hex(payload);
-        final var signed = Digests.isLowerHex(signature, 128)
+        final var signed = Signatures.isSignature(signature)
             && Signatures.verify(election.getOperatorPublicKey(), Digests.unhex(hash), signature);
         final var existing = this.stored(electionId);
         this.stores.require(actor != null, "actor is required");

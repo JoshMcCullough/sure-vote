@@ -116,7 +116,7 @@ final class ShowcaseService {
     ) {
         draft.setOperatorPublicKey(operator.publicKey());
         draft.setImportPublicKey(importer.publicKey());
-        draft.setViewingPublicKey(Digests.hex(viewingPublic));
+        draft.setViewingPublicKey(Algorithms.typed(ViewingBoxes.ID, viewingPublic));
         return this.app.createElection(draft, actor);
     }
 

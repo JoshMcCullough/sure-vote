@@ -90,7 +90,7 @@ final class RestoreService {
     }
 
     private boolean signed(final Election election, final byte[] raw, final String signature) {
-        if (!Digests.isLowerHex(signature, 128)) {
+        if (!Signatures.isSignature(signature)) {
             return false;
         }
         else {

@@ -135,9 +135,8 @@ final class SampleElection {
     static SampleElection mailOffice() {
         final var world = new SampleElection();
         final var seed = AccessCodes.generate();
-        final var publicKey = ViewingBoxes.publicKey(seed);
         world.viewingSeed = seed;
-        world.viewingPublic = Digests.hex(publicKey);
+        world.viewingPublic = ViewingBoxes.typedPublicKey(seed);
         world.readyFptp();
         world.addOffice();
         world.activate();
@@ -326,7 +325,7 @@ final class SampleElection {
 
     ImportBallot sealedMail(final BallotType type, final UUID personId, final UUID recordedBy) {
         final var raw = AccessCodes.generate();
-        final var hash = AccessCodes.inPersonHash(raw);
+        final var hash = AccessCodes.MAIL_ACCESS_HASH + ":" + Digests.hex(raw);
         final var nonce = this.nextNonce();
         final var selection = new SealSelection(this.slotA, "Y", nonce);
         final var selections = List.of(selection);

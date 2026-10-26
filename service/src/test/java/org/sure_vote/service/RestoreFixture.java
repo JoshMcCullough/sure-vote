@@ -77,7 +77,7 @@ final class RestoreFixture {
         row.setResult(ValidationResultStatus.VALID);
         row.setPayload("{}");
         row.setHash("ef".repeat(32));
-        row.setSignature("00".repeat(64));
+        row.setSignature(Signatures.ID + ":" + "00".repeat(64));
         world.repository.insert(row);
     }
 

@@ -177,7 +177,7 @@ public final class MailRecorder {
         final SigningKey deviceKey,
         final SigningKey importKey
     ) {
-        final var viewing = Digests.hex(ViewingBoxes.publicKey(viewingSeed));
+        final var viewing = ViewingBoxes.typedPublicKey(viewingSeed);
         final var devicePublic = deviceKey.publicKey();
         final var importPublic = importKey.publicKey();
         if (!viewing.equals(election.getViewingPublicKey())) {
@@ -224,17 +224,7 @@ public final class MailRecorder {
             throw new ConstraintException("a viewing passphrase is required");
         }
         else {
-            final var publicKey = ViewingBoxes.publicKey(viewingSeed);
-            return ViewingBoxes.open(ciphertext(stored), publicKey, viewingSeed);
-        }
-    }
-
-    private static byte[] ciphertext(final String stored) {
-        try {
-            return Digests.unhex(stored);
-        }
-        catch (final IllegalArgumentException failure) {
-            throw new ConstraintException("viewing passphrase cannot be opened");
+            return ViewingBoxes.open(stored, viewingSeed);
         }
     }
 

@@ -14,18 +14,64 @@ import javax.crypto.spec.HKDFParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * ECIES over P-256: ephemeral ECDH, HKDF-SHA256, then AES-256-GCM.
- * The sealed form is the ephemeral public key (65 bytes, uncompressed SEC1), then the ciphertext, then the 16-byte tag.
- * HKDF has an empty salt; its info is {@code INFO || ephemeral public || recipient public}; it yields the 32-byte key
- * and the 12-byte nonce. Each seal has a fresh ephemeral key, so the derived nonce is never reused.
+ * {@code ecies-p256-hkdf-sha256-aes256gcm}: ephemeral ECDH over P-256, HKDF-SHA256, then AES-256-GCM.
+ * The sealed bytes are the ephemeral public key (65 bytes, uncompressed SEC1), then the ciphertext, then the 16-byte
+ * tag; stored, they are {@code ecies-p256-hkdf-sha256-aes256gcm:} then those bytes in hex. HKDF has an empty salt; its
+ * info is {@code UTF-8(identifier) || 0x00 || ephemeral public || recipient public}, so the identifier is bound into
+ * the key; it yields the 32-byte key and the 12-byte nonce. Each seal has a fresh ephemeral key, so the derived nonce
+ * is never reused. Viewing public keys are {@code ecies-p256-hkdf-sha256-aes256gcm:04...}.
  */
 final class ViewingBoxes {
-    static final byte[] INFO = "SureVote viewing box v1".getBytes(StandardCharsets.US_ASCII);
+    static final String ID = Algorithms.ECIES_P256;
+    static final byte[] INFO = info();
     private static final int KEY_BYTES = 32;
     private static final int NONCE_BYTES = 12;
     private static final int TAG_BYTES = 16;
 
     private ViewingBoxes() {
+    }
+
+    private static byte[] info() {
+        final var id = ID.getBytes(StandardCharsets.US_ASCII);
+        return Arrays.copyOf(id, id.length + 1);
+    }
+
+    static String typedPublicKey(final byte[] scalar) {
+        return Algorithms.typed(ID, publicKey(scalar));
+    }
+
+    /**
+     * True for {@code ecies-p256-hkdf-sha256-aes256gcm:04...}, an uncompressed point on the curve.
+     */
+    static boolean isPublicKey(final String publicKey) {
+        return ID.equals(Algorithms.id(publicKey)) && P256.isPoint(Algorithms.body(publicKey));
+    }
+
+    /**
+     * Seals to a typed viewing key and returns the typed box. Any other key identifier is refused.
+     */
+    static String seal(final byte[] message, final String recipient) {
+        if (!isPublicKey(recipient)) {
+            throw new ConstraintException("viewing public key is invalid");
+        }
+        else {
+            final var sealed = seal(message, Digests.unhex(Algorithms.body(recipient)));
+            return Algorithms.typed(ID, sealed);
+        }
+    }
+
+    /**
+     * Opens a typed box. A box with any identifier other than {@code ecies-p256-hkdf-sha256-aes256gcm} is refused.
+     */
+    static byte[] open(final String sealed, final byte[] recipientScalar) {
+        final var hex = Algorithms.body(sealed);
+        final var known = ID.equals(Algorithms.id(sealed)) && hex != null && Digests.isLowerHex(hex, hex.length());
+        if (!known || hex.length() % 2 != 0 || recipientScalar == null) {
+            throw new ConstraintException("viewing passphrase cannot be opened");
+        }
+        else {
+            return open(Digests.unhex(hex), publicKey(recipientScalar), recipientScalar);
+        }
     }
 
     static byte[] seal(final byte[] message, final byte[] recipientPublic) {

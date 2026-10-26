@@ -42,9 +42,7 @@ class MailRecordingTest {
         );
         final var saved = world.app.sealViewingPassphrase(personId, plaintext, world.viewingPublic, world.actor);
         final var stored = saved.getViewingPassphrase();
-        final var ciphertext = Digests.unhex(stored);
-        final var publicKey = Digests.unhex(world.viewingPublic);
-        final var opened = ViewingBoxes.open(ciphertext, publicKey, world.viewingSeed);
+        final var opened = ViewingBoxes.open(stored, world.viewingSeed);
         final var text = new String(opened, StandardCharsets.UTF_8);
         final var again = assertThrows(
             ConstraintException.class,

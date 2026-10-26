@@ -50,7 +50,7 @@ class ImportRulesTest {
         final var broken = this.copy(sealed, sealed.recordedBy(), "ZZ", sealed.signature(), sealed.votes());
         this.assertMessage(
             () -> world.app.importBallot(broken),
-            "voterAccessHash must be lowercase SHA-256 hex"
+            "voterAccessHash must be sha256:<hex> in person, or argon2id-v13:m=65536,t=3,p=1:<hex> by mail"
         );
     }
 
@@ -462,7 +462,7 @@ class ImportRulesTest {
         final var chain = rows.getFirst();
         final var next = Copies.chain(chain);
         next.setStatus(ChainStatus.CLOSED);
-        next.setSignature("00".repeat(64));
+        next.setSignature(Signatures.ID + ":" + "00".repeat(64));
         world.repository.replace(next);
     }
 }

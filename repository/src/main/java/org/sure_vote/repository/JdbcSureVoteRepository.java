@@ -148,7 +148,7 @@ public final class JdbcSureVoteRepository implements SureVoteRepository {
      * The highest migration this build ships. {@code SchemaVersionTest} keeps it equal to the newest file in
      * {@code db/migration}. Surfaces that do not migrate wait until the database has reached it.
      */
-    public static final String SCHEMA_VERSION = "18";
+    public static final String SCHEMA_VERSION = "19";
 
     /**
      * The highest migration applied to the database, or an empty string before the first. Any role the workspace

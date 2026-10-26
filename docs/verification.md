@@ -37,22 +37,28 @@ Chain-entry keys, in order: `voteHash`, `previousEntryHash`, `index`, `timestamp
 
 The access code is 32 bytes from a cryptographic random generator. The voter sees it as base64url without padding. The QR code encodes that text. Lookup decodes the text back to the 32 bytes before hashing. The integrity hashes above include `voterAccessHash`. They do not include the access code.
 
-- **In person.** `voterAccessHash` is lowercase hex of SHA-256 over the 32 raw bytes.
-- **Mail-in and absentee.** `voterAccessHash` is lowercase hex of Argon2id version 1.3 (version byte `0x13`) over the viewing passphrase, with the 32 raw code bytes as the salt. The passphrase is trimmed, then Unicode NFC, then UTF-8. There is no secret key and no associated data. The memory cost is 65536 KiB (64 MiB), with 3 iterations, parallelism 1, and a 32-byte output. The passphrase is the one set at registration. It is not printed on the letter.
+Each access hash names its algorithm, as described in [Algorithm identifiers](#algorithm-identifiers). The hash is inside the device-signed ballot payload, so the device signature covers the identifier and the parameters.
 
-The stored passphrase is an ECIES sealed box to the authority viewing public key, and the column is lowercase hex of it:
+- **In person.** `voterAccessHash` is `sha256:` then lowercase hex of SHA-256 over the 32 raw bytes.
+- **Mail-in and absentee.** `voterAccessHash` is `argon2id-v13:m=65536,t=3,p=1:` then lowercase hex of Argon2id version 1.3 (version byte `0x13`) over the viewing passphrase, with the 32 raw code bytes as the salt. `m` is the memory cost in KiB (64 MiB), `t` the iterations and `p` the parallelism; the output is 32 bytes. The passphrase is trimmed, then Unicode NFC, then UTF-8. There is no secret key and no associated data. The passphrase is the one set at registration. It is not printed on the letter.
+
+An in-person ballot must carry a `sha256:` hash and a mail-in or absentee ballot an `argon2id-v13:m=65536,t=3,p=1:` hash. Any other identifier or parameter set is refused on import and by the database. A future KDF, PBKDF2 for example, would be a new registry entry with its own prefix; none is accepted today.
+
+The stored passphrase is an ECIES sealed box to the authority viewing public key. The column is `ecies-p256-hkdf-sha256-aes256gcm:` then lowercase hex of the box:
 
 1. Pick an ephemeral P-256 key `e` and compute `E = e·G`, encoded as 65 bytes uncompressed SEC1.
-2. `Z` is the 32-byte X coordinate of `e·V`, where `V` is the viewing public key (ECDH, SP 800-56A).
-3. `okm` is 44 bytes of HKDF-SHA256 with an empty salt, input `Z`, and info `"SureVote viewing box v1" || E || V` (ASCII label, then the two 65-byte points).
+2. `Z` is the 32-byte X coordinate of `e·V`, where `V` is the viewing public key's point (ECDH, SP 800-56A).
+3. `okm` is 44 bytes of HKDF-SHA256 with an empty salt, input `Z`, and info `"ecies-p256-hkdf-sha256-aes256gcm" || 0x00 || E || V` (the ASCII identifier, one zero byte, then the two 65-byte points). The identifier is bound into the key, so a box cannot be relabelled as another algorithm and still open.
 4. The first 32 bytes of `okm` are the AES-256-GCM key and the last 12 are the nonce. A fresh `e` per seal keeps the nonce unique. There is no associated data.
 5. The box is `E || ciphertext || tag` (16-byte tag), so it is 81 bytes longer than the passphrase.
 
-The recording component unseals it with the viewing private key, which is the PIV ECDH operation on `E` when the key is on a YubiKey. Verifiers of the public chain do not unseal it. `CryptoRulesTest` holds a fixed vector computed with an independent implementation.
+A box with any other identifier is refused before unsealing. The recording component unseals it with the viewing private key, which is the PIV ECDH operation on `E` when the key is on a YubiKey. Verifiers of the public chain do not unseal it. The fixed vector is in [Reference vectors](#reference-vectors).
 
 ## Election definition
 
-The election payload keys, in order, are `electionId`, `hashAlgorithm`, `ballotHashPayloadSchema`, `voteHashPayloadSchema`, `voteChainEntryHashPayloadSchema`, `operatorPublicKey`, `importPublicKey`, `viewingPublicKey`, `devices`, `races`, `ballotStyle`, `precinctDistricts`, `precinctLocalities`, `localityParents`.
+The election payload keys, in order, are `electionId`, `hashAlgorithm`, `ballotHashPayloadSchema`, `voteHashPayloadSchema`, `voteChainEntryHashPayloadSchema`, `algorithms`, `operatorPublicKey`, `importPublicKey`, `viewingPublicKey`, `devices`, `races`, `ballotStyle`, `precinctDistricts`, `precinctLocalities`, `localityParents`.
+
+`algorithms` is the object `{"signature":"ecdsa-p256-sha256","viewingBox":"ecies-p256-hkdf-sha256-aes256gcm","inPersonAccessHash":"sha256","mailAccessHash":"argon2id-v13:m=65536,t=3,p=1"}`, in that key order. It names every algorithm the election uses, inside the operator-signed bytes. A verifier refuses a definition whose `algorithms` differs from that object, and checks that every key, signature, box and access hash in the election carries the matching identifier. The three keys are typed too: `operatorPublicKey` and `importPublicKey` start `ecdsa-p256-sha256:` and `viewingPublicKey` starts `ecies-p256-hkdf-sha256-aes256gcm:`.
 
 `devices` is an array of `{ "deviceId", "publicKey" }` sorted by `deviceId`, for every device that may sign ballots in this election.
 
@@ -66,28 +72,53 @@ The election payload keys, in order, are `electionId`, `hashAlgorithm`, `ballotH
 
 `localityParents` is an array of `{ "localityId", "parentLocalityId" }` sorted by locality id. `parentLocalityId` is `null` on a root. The array includes every precinct locality and every parent up through the election's locality.
 
-`Election.hash` is SHA-256 of that JSON. `Election.signature` is the operator signature over the raw hash bytes.
+`Election.hash` is SHA-256 of that JSON. `Election.signature` is the operator signature over that hash, as in [Signatures](#signatures).
 
-An empty race chain has no entry hash. Its head payload keys are `raceId`, `length`, and `length` is 0. `VoteChain.hash` is SHA-256 of that JSON. A non-empty chain's `hash` remains the latest entry's hash. That is the head: the tip, as in git's `HEAD`. The first entry is the genesis entry. In both cases the operator signature covers the 32 raw bytes of `VoteChain.hash`. A closed chain has both `hash` and `signature` set.
+An empty race chain has no entry hash. Its head payload keys are `raceId`, `length`, and `length` is 0. `VoteChain.hash` is SHA-256 of that JSON. A non-empty chain's `hash` remains the latest entry's hash. That is the head: the tip, as in git's `HEAD`. The first entry is the genesis entry. In both cases the operator signature covers `VoteChain.hash`, as in [Signatures](#signatures). A closed chain has both `hash` and `signature` set.
+
+## Algorithm identifiers
+
+Every key, signature, sealed box and access hash is written `<identifier>:<value>`: the identifier, one colon, then the value in lowercase hex (an access hash adds its parameters before the hex). The identifiers are:
+
+| Identifier | Kind | Status | Used for |
+| --- | --- | --- | --- |
+| `ecdsa-p256-sha256` | signature | active | every signature and signing public key below |
+| `ecies-p256-hkdf-sha256-aes256gcm` | sealed box | active | the viewing public key and sealed viewing passphrases |
+| `sha256` | access hash | active | in-person `voterAccessHash` |
+| `argon2id-v13` | access hash | active | mail-in and absentee `voterAccessHash`, always with `m=65536,t=3,p=1` |
+| `threshold-elgamal-p256-hkdf-sha256-aes256gcm` | escrow | active, device voting only | escrow ciphertexts in [device-voting.md](./device-voting.md) |
+| `rsabssa-sha384-psszero-deterministic` | blind token | active, device voting only | eligibility tokens in [device-voting.md](./device-voting.md) |
+| `ecdsa-p256+ml-dsa-65` | signature | reserved | the hybrid signature in [post-quantum.md](./post-quantum.md) |
+| `ecies-p256+ml-kem-768-hkdf-sha256-aes256gcm` | sealed box | reserved | the hybrid sealed box |
+| `threshold-elgamal-p256+ml-kem-768-hkdf-sha256-aes256gcm` | escrow | reserved | the hybrid escrow |
+
+Device voting is not built, so the escrow and blind-token identifiers have no code yet; their formats are fixed in device-voting.md so the first implementation uses them. The service registry is `Algorithms.java`.
+
+A verifier refuses:
+
+- a value with no identifier, or one not in the table;
+- a reserved identifier, until a later version of this document defines it;
+- an identifier of the wrong kind for its place, such as a sealed-box key where a signing key belongs;
+- a signature whose identifier differs from its key's identifier;
+- a definition whose `algorithms` object differs from the one in [Election definition](#election-definition).
+
+An identifier cannot be swapped after signing. Signatures carry it inside the signed message, the definition signature covers every key's identifier and the `algorithms` object, a device signature covers the ballot's access-hash identifier and parameters, and a sealed box binds its identifier into the HKDF info.
 
 ## Signatures
 
-Public keys and signatures are lowercase hex.
-
-- **Curve and hash.** ECDSA on NIST P-256 (secp256r1) with SHA-256 (FIPS 186-5).
-- **Public key.** Uncompressed SEC1: `04 || X || Y`, 65 bytes, 130 hex characters. The point must be on the curve. Compressed points and SPKI DER are refused.
-- **Signature.** IEEE P1363: `r || s`, each a 32-byte big-endian integer, 64 bytes, 128 hex characters. DER is refused.
+- **Curve and hash.** `ecdsa-p256-sha256`: ECDSA on NIST P-256 (secp256r1) with SHA-256 (FIPS 186-5).
+- **Public key.** `ecdsa-p256-sha256:` then uncompressed SEC1 `04 || X || Y`, 65 bytes, 130 hex characters. The point must be on the curve. Compressed points and SPKI DER are refused.
+- **Signature.** `ecdsa-p256-sha256:` then IEEE P1363 `r || s`, each a 32-byte big-endian integer, 64 bytes, 128 hex characters. DER is refused.
 - **Low S.** `s` must be at most `n / 2`, where `n` is the group order (`ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551`). A signer that gets a high `s` replaces it with `n - s`. A verifier refuses a high `s`, so each signature has one valid encoding and cannot be altered without the key. `r` and `s` must be between 1 and `n - 1`.
-- **What is signed.** The 32 raw bytes of the integrity hash are the ECDSA message digest `e` directly, not hashed again. So the signature is a standard ECDSA-SHA256 signature over the canonical payload bytes, and any ECDSA-P256-SHA256 verifier can check it against the payload. In Java that is `NONEwithECDSAinP1363Format` over the hash, or `SHA256withECDSAinP1363Format` over the payload.
-- `CryptoRulesTest` holds a fixed signature made by an independent implementation, and its high-S twin, which is refused.
-- P-256 signatures and sealed boxes do not survive a large quantum computer. The rules here do not change for that. [post-quantum.md](./post-quantum.md) describes the exposure and the proposed hybrid migration.
+- **What is signed.** Every signature in this document signs a 32-byte SHA-256 hash `h` (an integrity hash, a head, a bundle hash or a request hash). The signed message is the UTF-8 statement `{"alg":"ecdsa-p256-sha256","hash":"<h as 64 lowercase hex>"}`, with no spaces, and the signature is standard ECDSA-SHA256 over those bytes. So `SHA256withECDSAinP1363Format` in Java, `ec.ECDSA(hashes.SHA256())` in pyca/cryptography, or `openssl dgst -sha256 -verify` checks it against the statement. A signature over the bare hash, the old format, does not verify.
+- P-256 signatures and sealed boxes do not survive a large quantum computer. [post-quantum.md](./post-quantum.md) describes the exposure and the hybrid identifiers reserved above.
 
 - A ballot or vote signature verifies under `recordingDevice.publicKey`, and that device is in the signed `devices` list.
 - A chain-entry signature verifies under `Election.importPublicKey`.
 - A published chain head, the election definition, and the canvass statement verify under `Election.operatorPublicKey`.
 - A validation result verifies under that validator's own `publicKey`.
 
-A validation result stores its own canonical `payload`. The keys, in order, are `voteChainId`, `validatorId`, `validatedThroughHash`, `length`, `result`, `dateValidated`, `notes`, `evidenceHash`. `result` is `valid`, `invalid`, or `inconclusive`. `notes` and `evidenceHash` are `null` when absent. `evidenceHash` is lowercase hex SHA-256 of the evidence file bytes. The result's integrity hash is SHA-256 of that payload, and the validator signature covers those raw bytes. The signed fields are immutable after insert. A validation result does not change a tally and does not block certification. The operator-signed head is the published result. A dissenting result stays public beside it.
+A validation result stores its own canonical `payload`. The keys, in order, are `voteChainId`, `validatorId`, `validatedThroughHash`, `length`, `result`, `dateValidated`, `notes`, `evidenceHash`. `result` is `valid`, `invalid`, or `inconclusive`. `notes` and `evidenceHash` are `null` when absent. `evidenceHash` is lowercase hex SHA-256 of the evidence file bytes. The result's integrity hash is SHA-256 of that payload, and the validator signature covers that hash. The signed fields are immutable after insert. A validation result does not change a tally and does not block certification. The operator-signed head is the published result. A dissenting result stays public beside it.
 
 The canvass statement is one canonical payload for the election. Its keys, in order, are `electionId`, `races`, `places`.
 
@@ -103,13 +134,13 @@ A locality object uses `localityId`, `ballots`, `undervotes`, `candidates`, sort
 
 `places` is sorted by `recordingPlaceId`. Each uses `recordingPlaceId`, `acceptedIssuances`, `ballots`. A place appears when either count is greater than zero. `acceptedIssuances` counts `BallotIssuance` rows with status `issued` or `received`. The field keeps its name. Voided issuances are omitted. The two counts may differ.
 
-`CanvassStatement.hash` is SHA-256 of that payload. `CanvassStatement.signature` is the operator signature over the raw hash bytes.
+`CanvassStatement.hash` is SHA-256 of that payload. `CanvassStatement.signature` is the operator signature over that hash.
 
-A restore incident, when present, uses the payload in [schema.md](./schema.md). Its hash is SHA-256 of that JSON, and the operator signature covers the raw hash bytes. The restored heads in the incident are the chain heads the verifier is checking. The witnessed heads are the latest outside validator heads from before the restore. The incident does not remove entries. It records that the promoted chain and the last outside witness differ.
+A restore incident, when present, uses the payload in [schema.md](./schema.md). Its hash is SHA-256 of that JSON, and the operator signature covers that hash. The restored heads in the incident are the chain heads the verifier is checking. The witnessed heads are the latest outside validator heads from before the restore. The incident does not remove entries. It records that the promoted chain and the last outside witness differ.
 
 ## Close bundle
 
-After close, the operator signs one bundle per election, and `GET /elections/{id}/close-bundle` serves its exact bytes. The `SureVote-Bundle-Hash` header is SHA-256 of the body, and `SureVote-Bundle-Signature` is the operator signature over the raw hash bytes. The closing head notice carries the same value as `bundleHash`. The bundle is canonical JSON. Its keys, in order, are `electionId`, `definitionHash`, `definitionSignature`, `chains`, `entries`, `ballots`, `votes`, `canvass`, `restoreIncident`.
+After close, the operator signs one bundle per election, and `GET /elections/{id}/close-bundle` serves its exact bytes. The `SureVote-Bundle-Hash` header is SHA-256 of the body, and `SureVote-Bundle-Signature` is the typed operator signature over that hash. The closing head notice carries the same value as `bundleHash`. The bundle is canonical JSON. Its keys, in order, are `electionId`, `definitionHash`, `definitionSignature`, `chains`, `entries`, `ballots`, `votes`, `canvass`, `restoreIncident`.
 
 - `chains` is sorted by `raceId`. Each uses `raceId`, `voteChainId`, `length`, `hash`, `signature`.
 - `entries` is sorted by `raceId`, then `index`. Each uses `voteChainId`, `payload`, `hash`, `signature`.
@@ -121,7 +152,18 @@ Each `payload` is the stored canonical text as a JSON string, so a verifier hash
 
 ## Request signatures
 
-A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is ECDSA P-256 over those 32 raw bytes, encoded as above, in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.
+A signed `POST /ballots` or `POST /elections/{id}/validations` is authenticated separately from the ledger signatures above. The request hash is SHA-256 of the UTF-8 text `method\npath\nkeyId\ntimestamp\nnonce\nbodyHash`, where `path` is the raw request path and `bodyHash` is lowercase hex SHA-256 of the body bytes. The signature is the typed `ecdsa-p256-sha256` signature over that hash, made as in [Signatures](#signatures), in the `SureVote-Signature` header. It is not stored on a ledger row, and a verifier does not need it.
+
+## Reference vectors
+
+[vectors/generate.py](./vectors/generate.py) computes the formats above with pyca/cryptography (OpenSSL) and argon2-cffi, which share no code with the service, and [vectors/vectors.json](./vectors/vectors.json) is its output. `CryptoRulesTest` checks the service against those values. To reproduce them:
+
+```sh
+python3 -m venv /tmp/sv && /tmp/sv/bin/pip install cryptography argon2-cffi
+/tmp/sv/bin/python docs/vectors/generate.py | diff - docs/vectors/vectors.json
+```
+
+The vectors use the private scalars `11` and `22` repeated 32 times as the viewing (or signing) key and the ephemeral key, the hash `ab4e9d99…f48c0c`, the passphrase `correct horse battery` with the salt `33` repeated, and the in-person code `44` repeated. The reference signature is RFC 6979 deterministic ECDSA, so every value is deterministic and the `diff` prints nothing. The service itself signs with random nonces; either kind verifies the same way.
 
 ## Checks
 
@@ -131,7 +173,7 @@ A verifier does the following.
 2. Fetch the public ledger for that election: ballots, votes, chain headers, chain entries, any restore incident, and, when the election is `historical`, the canvass statement.
 3. Hash the stored `payload` of each vote, ballot, chain entry, validation result, canvass statement, and any restore incident, and confirm it equals the stored integrity hash. Confirm each ballot, vote, chain-entry, and validation-result payload field matches its column. The canvass payload is checked by recomputing it in step 8.
 4. Confirm each entry's `previousEntry` and `index` form one chain per race. Confirm each vote has exactly one entry, on the chain for that vote's race. Confirm a non-empty header `hash` equals the latest entry's hash, and an empty header `hash` equals the hash of the empty-head payload.
-5. Confirm the election-definition signature, each device signature, each import signature, each published head signature, each validator signature, and the canvass signature with the keys in [Signatures](#signatures).
+5. Confirm every identifier as in [Algorithm identifiers](#algorithm-identifiers). Confirm the election-definition signature, each device signature, each import signature, each published head signature, each validator signature, and the canvass signature with the keys in [Signatures](#signatures).
 6. Confirm every vote's race is in the signed ballot style for that ballot's precinct, and that the ballot meets the selection rules in [system.md](./system.md). Confirm `voteHashes` matches that ballot's vote hashes in the sort order above. Confirm each vote's `ballotHash` as defined above. Confirm `Ballot.timestamp` is inside the election's voting window, inclusive.
 7. Recompute `votesReceived`, `rank`, and `outcome` from the chain and compare them to the published caches.
 8. When the canvass statement is published, recompute it from the chains and the signed definition and confirm it matches the stored payload.

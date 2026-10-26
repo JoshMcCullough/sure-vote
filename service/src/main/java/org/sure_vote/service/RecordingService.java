@@ -79,8 +79,8 @@ final class RecordingService {
         this.stores.requireUnfrozen(election);
         this.stores.require(inside, "Ballot timestamp is outside the voting window");
         this.stores.require(
-            Digests.isLowerHex(request.voterAccessHash(), 64),
-            "voterAccessHash must be lowercase SHA-256 hex"
+            AccessCodes.isAccessHash(request.voterAccessHash(), request.type() != BallotType.IN_PERSON),
+            "voterAccessHash must be sha256:<hex> in person, or argon2id-v13:m=65536,t=3,p=1:<hex> by mail"
         );
         this.stores.require(this.unused(request.voterAccessHash()), "voter access code is already in use");
         this.stores.require(device.getStatus() == RecordingDeviceStatus.ACTIVE, "Recording device is not active");

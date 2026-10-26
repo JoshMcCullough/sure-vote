@@ -1,6 +1,6 @@
 # Post-quantum
 
-This page says which of Sure Vote's primitives a large quantum computer would break, what that would expose for each asset, and how the system would migrate. Nothing here changes code or a signed format. The algorithm identifiers at the end are a recommendation that waits for Josh's OK.
+This page says which of Sure Vote's primitives a large quantum computer would break, what that would expose for each asset, and how the system would migrate. The algorithm identifiers at the end are decided and implemented; the byte layouts are in [verification.md](./verification.md#algorithm-identifiers).
 
 ## Which primitives hold
 
@@ -47,13 +47,13 @@ The standards are final and the JDK has them. ML-KEM (FIPS 203) and ML-DSA (FIPS
    - **Verified Access** (workspace): AWS documents TLS 1.2 or later and recommends 1.3, with no post-quantum key exchange ([Verified Access data protection](https://docs.aws.amazon.com/verified-access/latest/ug/data-protection.html)). It is not in AWS's post-quantum table. Treat workspace sessions as classical until AWS says otherwise.
    - **Clients.** Hybrid TLS is used only when the client offers it. Current Chrome, Edge, and Firefox do. The JDK 25 TLS client this build uses does not. JDK 27 adds `X25519MLKEM768` and prefers it by default ([JEP 527](https://openjdk.org/jeps/527)), so Java clients get it by moving to JDK 27 or later. Until then, machine clients on the ingest host stay classical.
 
-## Crypto agility (recommendation, pending Josh's OK)
+## Crypto agility (decided)
 
-Today each format has one fixed algorithm, which is why the rules above can be exact. To let a hybrid scheme arrive without a flag day, the proposal is to name the algorithm in each signed or sealed object:
+Decided: every signed or sealed format names its algorithm, so a hybrid scheme can arrive without a flag day. The registry and byte layouts are in [verification.md](./verification.md#algorithm-identifiers); the service registry is `Algorithms.java`, and migration `V19__algorithm_identifiers.sql` replaced the bare-hex formats (no real data existed).
 
-- **Signed definition.** Each public key gets an `alg`, for example `"ecdsa-p256-sha256"`, and later `"ecdsa-p256+ml-dsa-65"`. The operator signature covers the identifiers, so a key cannot be re-labelled.
-- **Signatures.** Each stored signature names its `alg`. A verifier checks the signature only under the algorithm its key was registered with, never the one a message claims, so there is no downgrade.
-- **Sealed boxes.** A one-byte suite identifier before `E`, for example `0x01` for P-256 ECIES with HKDF-SHA256 and AES-256-GCM and `0x02` for the P-256 + ML-KEM-768 hybrid, bound into the HKDF info so it cannot be swapped.
-- Old elections keep verifying under their own identifiers, and new elections choose the suite at activation.
-
-None of this is implemented. Until Josh approves it, [verification.md](./verification.md) remains the only byte layout.
+- **Typed values.** Every key, signature, sealed box and access hash is `<identifier>:<hex>`, for example `ecdsa-p256-sha256:04…` or `ecies-p256-hkdf-sha256-aes256gcm:04…`. The hybrid names are reserved now: `ecdsa-p256+ml-dsa-65`, `ecies-p256+ml-kem-768-hkdf-sha256-aes256gcm` and `threshold-elgamal-p256+ml-kem-768-hkdf-sha256-aes256gcm`.
+- **Inside the signed bytes.** A signature signs `{"alg":"ecdsa-p256-sha256","hash":"<hex>"}`, so its identifier cannot be swapped. The signed definition carries typed keys and an `algorithms` object, so the operator signature covers every identifier the election uses. The access hash's identifier and Argon2id parameters are inside the device-signed ballot. A sealed box binds its identifier into the HKDF info.
+- **No downgrade.** A verifier refuses an unknown or reserved identifier, one of the wrong kind, and a signature whose identifier differs from its key's. A key is checked only under the algorithm it was registered with, never one a message claims.
+- **Access hashes.** Argon2id is written `argon2id-v13:m=65536,t=3,p=1:<hex>`, so its parameters travel with the hash. A second KDF, PBKDF2 for example, would be a new registry entry; none is added, and the FIPS question about Argon2id is still open.
+- **Device voting.** The escrow (`threshold-elgamal-p256-hkdf-sha256-aes256gcm`) and blind-token (`rsabssa-sha384-psszero-deterministic`) formats in [device-voting.md](./device-voting.md) carry identifiers the same way, ready for the first implementation.
+- Old elections keep verifying under their own identifiers, and a new election takes the suite current at activation.

@@ -48,6 +48,7 @@ final class ElectionDefinitions {
         fields.add(CanonicalJson.field("ballotHashPayloadSchema", ballotSchema));
         fields.add(CanonicalJson.field("voteHashPayloadSchema", voteSchema));
         fields.add(CanonicalJson.field("voteChainEntryHashPayloadSchema", entrySchema));
+        fields.add(CanonicalJson.field("algorithms", algorithms()));
         fields.add(CanonicalJson.field("operatorPublicKey", operatorKey));
         fields.add(CanonicalJson.field("importPublicKey", importKey));
         fields.add(CanonicalJson.field("viewingPublicKey", viewingKey));
@@ -57,6 +58,18 @@ final class ElectionDefinitions {
         fields.add(CanonicalJson.field("precinctDistricts", districts));
         fields.add(CanonicalJson.field("precinctLocalities", localityJson));
         fields.add(CanonicalJson.field("localityParents", parents));
+        return CanonicalJson.object(fields);
+    }
+
+    /**
+     * The algorithm identifiers this election uses, inside the operator-signed definition so none can be swapped.
+     */
+    static String algorithms() {
+        final var fields = new ArrayList<String>();
+        fields.add(CanonicalJson.field("signature", CanonicalJson.quote(Signatures.ID)));
+        fields.add(CanonicalJson.field("viewingBox", CanonicalJson.quote(ViewingBoxes.ID)));
+        fields.add(CanonicalJson.field("inPersonAccessHash", CanonicalJson.quote(Algorithms.SHA256)));
+        fields.add(CanonicalJson.field("mailAccessHash", CanonicalJson.quote(AccessCodes.MAIL_ACCESS_HASH)));
         return CanonicalJson.object(fields);
     }
 
@@ -76,7 +89,7 @@ final class ElectionDefinitions {
         );
         this.require(Signatures.isPublicKey(election.getOperatorPublicKey()), "operator public key");
         this.require(Signatures.isPublicKey(election.getImportPublicKey()), "import public key");
-        this.require(Signatures.isPublicKey(election.getViewingPublicKey()), "viewing public key");
+        this.require(ViewingBoxes.isPublicKey(election.getViewingPublicKey()), "viewing public key");
         this.validateRaces(repository, election.getId());
         this.validateDevices(repository, election);
         this.validateCoverage(repository, election.getId());

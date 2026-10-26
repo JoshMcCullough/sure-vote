@@ -471,7 +471,7 @@ class PostgresRepositoryTest {
         ballot.setTenantId(this.rows.tenantId);
         ballot.setElectionId(electionId);
         ballot.setVotingPrecinctId(this.rows.precinctId);
-        ballot.setVoterAccessHash(hash);
+        ballot.setVoterAccessHash(hash.isBlank() ? hash : ParentRows.accessHash(hash));
         ballot.setTimestamp(ParentRows.START);
         return ballot;
     }
@@ -690,7 +690,7 @@ class PostgresRepositoryTest {
     private void replaceChain(final VoteChain next) {
         next.setLength(2);
         next.setStatus(ChainStatus.CLOSED);
-        next.setSignature("sig");
+        next.setSignature(ParentRows.SIGNATURE);
         repository.replace(next);
     }
 

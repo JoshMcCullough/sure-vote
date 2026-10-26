@@ -117,8 +117,10 @@ class PostgresGuardTest {
     @Test
     void aChainClosesOnceWithASignature() throws SQLException {
         final var chain = this.activeChain(this.rows.race());
+        final var close = "update vote_chain set status = 'closed', signature = '" + ParentRows.SIGNATURE + "'"
+            + " where id = ?";
         this.refused("update vote_chain set status = 'closed' where id = ?", chain, "needs a hash and a signature");
-        this.run("update vote_chain set status = 'closed', signature = 'sig' where id = ?", chain);
+        this.run(close, chain);
         this.refused(
             "update vote_chain set status = 'active' where id = ?",
             chain,
@@ -134,7 +136,7 @@ class PostgresGuardTest {
         this.run(
             "insert into vote_chain_validation_result"
                 + " (id, tenant_id, vote_chain_id, validator_id, length, payload, hash, signature)"
-                + " values (?, ?, ?, ?, 1, '{}', 'ab', 'sig')",
+                + " values (?, ?, ?, ?, 1, '{}', 'ab', '" + ParentRows.SIGNATURE + "')",
             result,
             this.rows.tenantId,
             chain,
@@ -221,7 +223,8 @@ class PostgresGuardTest {
             + " values (?, ?, ?, ?, ?, ?)";
         final var at = Timestamp.from(ParentRows.START);
         final var tenant = this.rows.tenantId;
-        this.run(ballot, UUID.randomUUID(), tenant, this.rows.electionId, this.rows.precinctId, "shared", at);
+        final var shared = ParentRows.accessHash("shared");
+        this.run(ballot, UUID.randomUUID(), tenant, this.rows.electionId, this.rows.precinctId, shared, at);
         this.refusedInsert(
             ballot,
             "ballot_access_hash",
@@ -229,9 +232,31 @@ class PostgresGuardTest {
             this.rows.tenantId,
             other,
             this.rows.precinctId,
-            "shared",
+            shared,
             at
         );
+    }
+
+    @Test
+    void keysSignaturesAndAccessHashesMustNameARegisteredAlgorithm() throws SQLException {
+        final var ballot = "insert into ballot"
+            + " (id, tenant_id, election_id, voting_precinct_id, voter_access_hash, timestamp)"
+            + " values (?, ?, ?, ?, ?, ?)";
+        final var validator = "insert into vote_chain_validator (id, name, public_key) values (?, 'Witness', ?)";
+        final var at = Timestamp.from(ParentRows.START);
+        final var bare = "ab".repeat(32);
+        final var tenant = this.rows.tenantId;
+        final var election = this.rows.electionId;
+        final var precinct = this.rows.precinctId;
+        final var point = "04" + "ab".repeat(64);
+        this.refusedInsert(ballot, "ballot_voter_access_hash_typed", UUID.randomUUID(), tenant, election, precinct,
+            bare, at);
+        this.refusedInsert(ballot, "ballot_voter_access_hash_typed", UUID.randomUUID(), tenant, election, precinct,
+            "argon2id-v13:m=4096,t=3,p=1:" + bare, at);
+        this.refusedInsert(validator, "vote_chain_validator_public_key_typed", UUID.randomUUID(), point);
+        this.refusedInsert(validator, "vote_chain_validator_public_key_typed", UUID.randomUUID(),
+            "ecdsa-p256+ml-dsa-65:" + point);
+        this.run(ballot, UUID.randomUUID(), tenant, election, precinct, "argon2id-v13:m=65536,t=3,p=1:" + bare, at);
     }
 
     @Test
@@ -247,7 +272,7 @@ class PostgresGuardTest {
             this.rows.tenantId,
             this.rows.electionId,
             precinct,
-            "unassigned"
+            ParentRows.accessHash("unassigned")
         );
         this.run(
             "update election_voting_precinct_assignment set assignment_status = 'historical' where election_id = ?",

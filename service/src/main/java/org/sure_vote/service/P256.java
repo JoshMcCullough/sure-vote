@@ -54,6 +54,18 @@ final class P256 {
         }
     }
 
+    /**
+     * True for an uncompressed point on the curve, as 130 lowercase hex characters.
+     */
+    static boolean isPoint(final String hex) {
+        if (!Digests.isLowerHex(hex, 2 * POINT_BYTES)) {
+            return false;
+        }
+        else {
+            return decode(Digests.unhex(hex)) != null;
+        }
+    }
+
     static byte[] scalarBytes(final BigInteger value) {
         final var out = new byte[SCALAR_BYTES];
         copyFixed(value, out, 0);

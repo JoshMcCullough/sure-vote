@@ -278,12 +278,16 @@ u      = random scalar in [1, n-1]
 C1     = u·G                                              (65 bytes, uncompressed SEC1)
 Z      = x(u·Y)                                           (32 bytes)
 okm    = HKDF-SHA256(salt = "", ikm = Z,
-                     info = "SureVote escrow v1" || E || K || C1 || Y, L = 44)
+                     info = "threshold-elgamal-p256-hkdf-sha256-aes256gcm" || 0x00
+                            || E || K || C1 || Y, L = 44)
 key    = okm[0..32],  nonce = okm[32..44]
 aad    = SHA-256(blinded)
 C2     = AES-256-GCM(key, nonce, plaintext = m || r, aad)
 escrow = C1 || C2                                         (C2 carries the 16-byte tag)
+stored = "threshold-elgamal-p256-hkdf-sha256-aes256gcm:" || hex(escrow)
 ```
+
+The identifier is in the HKDF info as ASCII followed by one zero byte, so a ciphertext relabelled as another suite does not open. The opening refuses any other identifier, including the reserved hybrid `threshold-elgamal-p256+ml-kem-768-hkdf-sha256-aes256gcm` until it is defined.
 
 `E` and `K` are the election id and style key id, as in [Deriving the token](#deriving-the-token). The `aad` binds the ciphertext to its issuance's `blinded`, so a ciphertext cannot be moved to another issuance.
 
@@ -406,10 +410,17 @@ A validator checks every `s` under its key, that no `tokenId` repeats, that per 
 
 ## Data model changes (proposed, not built)
 
+Every key, signature and ciphertext below is typed as `<identifier>:<hex>` with an identifier from [verification.md](./verification.md#algorithm-identifiers), and verifiers refuse any other identifier:
+
+- RSA style keys are `rsabssa-sha384-psszero-deterministic:` then hex of the DER `SubjectPublicKeyInfo`; blind signatures and unblinded token signatures `s` carry the same identifier, then the 384 bytes in hex. The identifier names the RFC 9474 variant, so a token cannot be checked under the salted `PSS` variant.
+- `Election.escrowPublicKey` and each public share `Y_i` are `threshold-elgamal-p256-hkdf-sha256-aes256gcm:04…`; escrow ciphertexts are as in [Escrow](#escrow).
+- `Election.deviceCheckInPublicKey`, operator, official and trustee signatures (`DeviceKeyRevocation`, `EscrowOpening`, `EscrowShareDestruction`) are `ecdsa-p256-sha256`, signed over the `{"alg","hash"}` statement in verification.md, where `hash` is SHA-256 of the row's canonical payload.
+- These keys sit in the signed definition, so the operator signature covers their identifiers.
+
 - `ElectionDeviceKey`: `electionId`, `ballotStyleKey` (the precinct, or merged precinct group, and party it covers), `keyId`, `publicKey`, `small` (Boolean), listed in the signed definition.
 - The [settings](#settings): fields on `Election`, `ElectionDistrictSetting` (`election`, `votingDistrict`, `deviceTokenLeadDays`), `ElectionVotingPrecinctAssignment` (`deviceTokenLeadDays`, `deviceMergeWithPrecinctId`), `Tenant.deviceReissueLimitPerDay`, `Tenant.deviceSharedRecoveryAllowed`, and the optional `TenantDeviceSetting` defaults.
-- `Election.escrowPublicKey` (P-256, uncompressed SEC1) and `ElectionEscrowTrustee` (`election`, `tenantOfficial`, share index, public share `Y_i`, Feldman commitments) and the ceremony log's SHA-256, in the signed definition; `EscrowShareDestruction` (trustee, signature), published at close.
-- `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey`, `revokedAt`, operator signature (ECDSA P-256). Public, insert-only, appended to the ledger.
+- `Election.escrowPublicKey` (P-256, uncompressed SEC1, typed `threshold-elgamal-p256-hkdf-sha256-aes256gcm:`) and `ElectionEscrowTrustee` (`election`, `tenantOfficial`, share index, public share `Y_i`, Feldman commitments) and the ceremony log's SHA-256, in the signed definition; `EscrowShareDestruction` (trustee, signature), published at close.
+- `DeviceKeyRevocation`: `electionId`, `revokedKeyId`, new `ElectionDeviceKey` (its typed public key), `revokedAt`, operator signature (`ecdsa-p256-sha256`). Public, insert-only, appended to the ledger.
 - `BallotIssuance.channel`: `in-person`, `mail`, `device`. A device row also has the style key id, `blindedMessage`, `blindSignature`, and `escrowCiphertext`, and no recording place.
 - `BallotIssuance.status` gains `style-changed`.
 - `CheckInChallenge`: `electionId`, check-in device, poll-book entry, challenge, expiry, used. Private, issuer only. `Election.deviceCheckInPublicKey` in the signed definition.

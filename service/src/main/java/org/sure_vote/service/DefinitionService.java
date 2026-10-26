@@ -144,7 +144,7 @@ final class DefinitionService {
         this.stores.require(window, "voting window is invalid");
         this.stores.require(Signatures.isPublicKey(election.getOperatorPublicKey()), "operator public key");
         this.stores.require(Signatures.isPublicKey(election.getImportPublicKey()), "import public key");
-        this.stores.require(Signatures.isPublicKey(election.getViewingPublicKey()), "viewing public key");
+        this.stores.require(ViewingBoxes.isPublicKey(election.getViewingPublicKey()), "viewing public key");
         election.setStatus(ElectionStatus.UPCOMING);
         election.setHashAlgorithm("SHA-256");
         election.setBallotHashPayloadSchema("canonical-json-v1");
@@ -289,7 +289,7 @@ final class DefinitionService {
         final var person = this.stores.require(Person.class, personId);
         this.stores.require(actor != null, "actor is required");
         this.stores.requireActiveTenant(person.getTenantId());
-        this.stores.require(Signatures.isPublicKey(viewingPublicKey), "viewing public key");
+        this.stores.require(ViewingBoxes.isPublicKey(viewingPublicKey), "viewing public key");
         this.stores.require(person.getViewingPassphrase() == null, "viewing passphrase is already sealed");
         return this.storePassphrase(person, plaintext, viewingPublicKey, actor);
     }
@@ -459,8 +459,7 @@ final class DefinitionService {
         final String viewingPublicKey,
         final UUID actor
     ) {
-        final var sealed = ViewingBoxes.seal(password, Digests.unhex(viewingPublicKey));
-        final var stored = Digests.hex(sealed);
+        final var stored = ViewingBoxes.seal(password, viewingPublicKey);
         final var next = Copies.person(person);
         final var version = this.stores.nextVersion(person.getVersion());
         next.setViewingPassphrase(stored);

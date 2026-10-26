@@ -204,7 +204,7 @@ class PostgresRulesTest {
             this.rows.tenantId,
             this.rows.electionId,
             this.rows.precinctId,
-            hash,
+            ParentRows.accessHash(hash),
             timestamp,
         };
     }
